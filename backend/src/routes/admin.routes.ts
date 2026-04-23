@@ -279,9 +279,9 @@ router.delete('/modules/:id', async (req: AuthRequest, res: Response) => {
 
 router.post('/lessons', async (req: AuthRequest, res: Response) => {
   try {
-    const { moduleId, title, description, videoUrl, duration, sortOrder, tools } = req.body;
+    const { moduleId, title, description, videoUrl, duration, sortOrder, tools, content, materials } = req.body;
     const lesson = await prisma.lesson.create({
-      data: { moduleId, title, description, videoUrl, duration, sortOrder: sortOrder || 0, tools },
+      data: { moduleId, title, description, videoUrl, duration, sortOrder: sortOrder || 0, tools, content, materials },
     });
     res.json({ lesson });
   } catch (error) {
@@ -291,10 +291,10 @@ router.post('/lessons', async (req: AuthRequest, res: Response) => {
 
 router.patch('/lessons/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, videoUrl, duration, sortOrder, tools } = req.body;
+    const { title, description, videoUrl, duration, sortOrder, tools, content, materials } = req.body;
     const lesson = await prisma.lesson.update({
       where: { id: req.params.id },
-      data: { title, description, videoUrl, duration, sortOrder, tools },
+      data: { title, description, videoUrl, duration, sortOrder, tools, content, materials },
     });
     res.json({ lesson });
   } catch (error) {
@@ -358,11 +358,11 @@ router.get('/landing-config', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/landing-config', async (req: AuthRequest, res: Response) => {
   try {
-    const { vslEmbedUrl, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas } = req.body;
+    const { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections } = req.body;
     const config = await prisma.landingConfig.upsert({
       where: { id: 'singleton' },
-      update: { vslEmbedUrl, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas },
-      create: { id: 'singleton', vslEmbedUrl, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas },
+      update: { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections },
+      create: { id: 'singleton', vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections },
     });
     res.json({ config });
   } catch (error) {

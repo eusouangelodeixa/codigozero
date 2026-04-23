@@ -10,6 +10,8 @@ interface Lesson {
   videoUrl: string;
   duration?: number;
   tools?: any;
+  content?: string;
+  materials?: { name: string; url: string; type: string }[];
   completed: boolean;
 }
 
@@ -61,6 +63,11 @@ export default function ForjaPage() {
   };
 
   const formatDuration = (s?: number) => s ? `${Math.floor(s / 60)} min` : "";
+
+  const materialIcon = (type: string) => {
+    const icons: Record<string, string> = { link: "🔗", pdf: "📄", tool: "🛠️", template: "📋", video: "🎬" };
+    return icons[type] || "📎";
+  };
 
   return (
     <div className={styles.page}>
@@ -122,6 +129,39 @@ export default function ForjaPage() {
                         </svg>
                       </a>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Materials */}
+              {activeLesson.materials && activeLesson.materials.length > 0 && (
+                <div className={`${styles.toolsSection} ${theaterMode ? styles.theatreDimmed : ""}`}>
+                  <h3 className={styles.toolsTitle}>📎 Materiais da Aula</h3>
+                  <div className={styles.toolsList}>
+                    {activeLesson.materials.map((mat, i) => (
+                      <a key={i} href={mat.url} target="_blank" rel="noopener noreferrer" className={styles.toolLink}>
+                        <span className={styles.toolName}>{materialIcon(mat.type)} {mat.name}</span>
+                        <span className={styles.toolDesc}>{mat.type.charAt(0).toUpperCase() + mat.type.slice(1)}</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                          <polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Lesson Content (Markdown-like) */}
+              {activeLesson.content && (
+                <div className={`${styles.toolsSection} ${theaterMode ? styles.theatreDimmed : ""}`}
+                  style={{ borderTop: "1px solid rgba(45,212,191,0.08)", paddingTop: 20 }}>
+                  <h3 className={styles.toolsTitle}>📝 Conteúdo da Aula</h3>
+                  <div style={{
+                    color: "#ccc", fontSize: 14, lineHeight: 1.7,
+                    whiteSpace: "pre-wrap", padding: "12px 0",
+                  }}>
+                    {activeLesson.content}
                   </div>
                 </div>
               )}

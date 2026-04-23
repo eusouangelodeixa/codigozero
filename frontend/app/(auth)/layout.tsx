@@ -17,6 +17,7 @@ interface User {
   id: string;
   name: string;
   email: string;
+  role?: string;
   subscriptionStatus: string;
 }
 
@@ -123,6 +124,38 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <span className={styles.userPlan}>Ativo</span>
             </div>
           </div>
+
+          {/* Profile & Admin links */}
+          <div style={{ borderTop: '1px solid rgba(45,212,191,0.08)', padding: '8px 0' }}>
+            <a
+              href="/perfil"
+              className={`${styles.navItem} ${pathname === '/perfil' ? styles.navItemActive : ''}`}
+              onClick={(e) => { e.preventDefault(); router.push('/perfil'); }}
+            >
+              <span className={styles.navIcon}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
+                </svg>
+              </span>
+              <span className={styles.navLabel}>Meu Perfil</span>
+            </a>
+            {user?.role === 'admin' && (
+              <a
+                href="/admin"
+                className={styles.navItem}
+                onClick={(e) => { e.preventDefault(); router.push('/admin'); }}
+                style={{ color: '#2DD4BF' }}
+              >
+                <span className={styles.navIcon}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </span>
+                <span className={styles.navLabel}>Admin Panel</span>
+              </a>
+            )}
+          </div>
+
           <button onClick={logout} className={styles.logoutBtn} title="Sair">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />

@@ -38,6 +38,8 @@ router.get('/modules', authMiddleware, subscriptionMiddleware, async (req: AuthR
         videoUrl: lesson.videoUrl,
         duration: lesson.duration,
         tools: lesson.tools,
+        content: lesson.content,
+        materials: lesson.materials,
         completed: lesson.progress.some(p => p.completed),
         completedAt: lesson.progress.find(p => p.completed)?.completedAt || null,
       })),

@@ -74,6 +74,8 @@ model Lesson {
   duration    Int?     // seconds
   sortOrder   Int      @default(0)
   tools       Json?    // recommended tools
+  content     String?  // lesson text content (markdown)
+  materials   Json?    // [{name, url, type}] — links, PDFs, resources
   createdAt   DateTime @default(now())
 
   progress LessonProgress[]
@@ -118,13 +120,15 @@ model SystemConfig {
 }
 
 model LandingConfig {
-  id           String  @id @default("singleton")
-  vslEmbedUrl  String?
-  heroTitle    String?
-  heroSubtitle String?
-  heroDesc     String?
-  ctaText      String?
-  priceAmount  Int     @default(797)
-  maxVagas     Int     @default(50)
-  updatedAt    DateTime @updatedAt
+  id            String  @id @default("singleton")
+  vslEmbedUrl   String? // legacy — simple URL
+  vslEmbedHtml  String? // raw iframe HTML (Kilax, YouTube, etc)
+  heroTitle     String?
+  heroSubtitle  String?
+  heroDesc      String?
+  ctaText       String?
+  priceAmount   Int     @default(797)
+  maxVagas      Int     @default(50)
+  sections      Json?   // full page sections as JSON
+  updatedAt     DateTime @updatedAt
 }

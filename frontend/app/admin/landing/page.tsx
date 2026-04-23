@@ -150,6 +150,28 @@ export default function AdminLanding() {
     </div>
   );
 
+  const revertToDefaults = async () => {
+    if (!confirm("⚠️ Reverter TODOS os textos para os valores originais?\n\nIsso vai apagar todas as customizações de texto.\nO embed da VSL será mantido.\n\nContinuar?")) return;
+    setSaving(true);
+    await fetch(`${API}/api/admin/landing-config`, {
+      method: "PATCH", headers: hdr(),
+      body: JSON.stringify({
+        vslEmbedHtml: cfg.vslEmbedHtml || null,
+        vslEmbedUrl: cfg.vslEmbedUrl || null,
+        heroTitle: null,
+        heroSubtitle: null,
+        heroDesc: null,
+        ctaText: null,
+        priceAmount: 797,
+        maxVagas: 50,
+        sections: null,
+      }),
+    });
+    setSec({ ...DEFAULTS });
+    setSaving(false);
+    showToast("Textos revertidos para os valores originais ✓");
+  };
+
   return (
     <>
       <div className={styles.pageHeader}>
@@ -389,6 +411,17 @@ export default function AdminLanding() {
         <a href="/" target="_blank" className={styles.btnSecondary} style={{ textDecoration: "none", textAlign: "center" }}>
           Ver Landing Page →
         </a>
+        <button
+          onClick={revertToDefaults}
+          disabled={saving}
+          style={{
+            padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+            background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
+            color: "#ef4444", cursor: "pointer",
+          }}
+        >
+          🔄 Reverter para Padrão
+        </button>
       </div>
 
       {toast && <div className={styles.toast}>{toast}</div>}

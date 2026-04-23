@@ -10,6 +10,7 @@ import forjaRoutes from './routes/forja.routes';
 import qgRoutes from './routes/qg.routes';
 import webhookRoutes from './routes/webhook.routes';
 import landingRoutes from './routes/landing.routes';
+import adminRoutes from './routes/admin.routes';
 import { startCronJobs } from './jobs/cron';
 
 const app = express();
@@ -33,6 +34,7 @@ app.use('/api/cofre', cofreRoutes);
 app.use('/api/forja', forjaRoutes);
 app.use('/api/qg', qgRoutes);
 app.use('/api/landing', landingRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // ── Health Check ──

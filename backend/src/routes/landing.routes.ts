@@ -100,4 +100,17 @@ router.post('/lead', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/landing/config
+ * Public endpoint — returns landing page config (texts, VSL URL, etc.)
+ */
+router.get('/config', async (_req: Request, res: Response) => {
+  try {
+    const config = await prisma.landingConfig.findFirst({ where: { id: 'singleton' } });
+    res.json({ config: config || {} });
+  } catch (error) {
+    res.json({ config: {} });
+  }
+});
+
 export default router;

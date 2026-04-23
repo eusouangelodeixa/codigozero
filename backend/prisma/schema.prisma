@@ -13,6 +13,7 @@ model User {
   email              String           @unique
   phone              String           @unique
   passwordHash       String
+  role               String           @default("member") // member, admin
   isActive           Boolean          @default(true)
   subscriptionStatus String           @default("active") // active, grace_period, overdue, canceled
   subscriptionEnd    DateTime?
@@ -114,4 +115,16 @@ model SystemConfig {
   communityLink    String?
   mentoriaSchedule String? // next mentoria ISO datetime
   mentoriaLink     String?
+}
+
+model LandingConfig {
+  id           String  @id @default("singleton")
+  vslEmbedUrl  String?
+  heroTitle    String?
+  heroSubtitle String?
+  heroDesc     String?
+  ctaText      String?
+  priceAmount  Int     @default(797)
+  maxVagas     Int     @default(50)
+  updatedAt    DateTime @updatedAt
 }

@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
     id: string;
     email: string;
     name: string;
+    role: string;
     subscriptionStatus: string;
   };
 }
@@ -30,6 +31,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
         id: true,
         email: true,
         name: true,
+        role: true,
         subscriptionStatus: true,
         isActive: true,
       },
@@ -43,6 +45,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       id: user.id,
       email: user.email,
       name: user.name,
+      role: user.role,
       subscriptionStatus: user.subscriptionStatus,
     };
 

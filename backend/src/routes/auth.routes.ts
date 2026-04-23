@@ -45,6 +45,7 @@ router.post('/login', async (req: Request, res: Response) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        role: user.role,
         subscriptionStatus: user.subscriptionStatus,
       },
     });
@@ -64,6 +65,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         name: true,
         email: true,
         phone: true,
+        role: true,
         subscriptionStatus: true,
         subscriptionEnd: true,
         dailySearchCount: true,

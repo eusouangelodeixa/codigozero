@@ -13,19 +13,42 @@ export default function LandingPage() {
   const [checkoutUrl, setCheckoutUrl] = useState("#preco");
 
   // Check localStorage on mount — if lead exists, skip gate entirely
+  // Version flag ensures old cached URLs (without plan_id) get refreshed
+  const LEAD_VERSION = "v2";
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem("cz_lead");
       if (saved) {
         const lead = JSON.parse(saved);
         if (lead.name && lead.email) {
-          setCheckoutUrl(lead.checkoutUrl || "#preco");
-          setGateOpen(false); // returning user → go straight to landing
+          // If old version or missing checkoutUrl, re-submit to get fresh URL
+          if (lead._v !== LEAD_VERSION || !lead.checkoutUrl) {
+            // Re-fetch checkout with plan_id
+            fetch(`${API_URL}/api/landing/lead`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: lead.name, email: lead.email, phone: lead.phone, whatsapp: lead.whatsapp }),
+            })
+              .then(r => r.json())
+              .then(data => {
+                if (data.success && data.checkoutUrl) {
+                  lead.checkoutUrl = data.checkoutUrl;
+                  lead._v = LEAD_VERSION;
+                  localStorage.setItem("cz_lead", JSON.stringify(lead));
+                  setCheckoutUrl(data.checkoutUrl);
+                }
+              })
+              .catch(() => {});
+          } else {
+            setCheckoutUrl(lead.checkoutUrl);
+          }
+          setGateOpen(false);
           return;
         }
       }
     } catch {}
-    setGateOpen(true); // no saved lead → show gate
+    setGateOpen(true);
   }, []);
 
   const handleGateSubmit = async (e: React.FormEvent) => {
@@ -34,7 +57,7 @@ export default function LandingPage() {
     setSubmitting(true);
 
     // ALWAYS save to localStorage first so the user never has to fill in again
-    const leadRecord: Record<string, string> = { ...formData, savedAt: new Date().toISOString() };
+    const leadRecord: Record<string, string> = { ...formData, savedAt: new Date().toISOString(), _v: LEAD_VERSION };
     localStorage.setItem("cz_lead", JSON.stringify(leadRecord));
 
     try {
@@ -148,7 +171,7 @@ export default function LandingPage() {
                 <span className={styles.navVagasDot} />
                 Vagas Abertas
               </span>
-              <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.navCta}>Garantir Vaga</a>
+              <button onClick={() => scrollTo("preco")} className={styles.navCta}>Garantir Vaga</button>
             </div>
           </div>
         </nav>
@@ -178,9 +201,9 @@ export default function LandingPage() {
               para você criar micronegócios lucrativos em Moçambique.
             </p>
 
-            <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.ctaPrimary}>
+            <button onClick={() => scrollTo("preco")} className={styles.ctaPrimary}>
               Quero Garantir 1 das 50 Vagas Agora
-            </a>
+            </button>
             <p className={styles.heroTrust}>
               🔒 Plataforma validada com mais de 2 Milhões de MT já processados.
             </p>

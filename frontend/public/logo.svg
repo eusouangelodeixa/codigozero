@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- Circle -->
+  <circle cx="60" cy="60" r="50" stroke="#2DD4BF" stroke-width="5" fill="none"/>
+  <!-- Diagonal slash -->
+  <line x1="30" y1="95" x2="90" y2="25" stroke="#2DD4BF" stroke-width="5" stroke-linecap="round"/>
+  <!-- Code slashes // on left -->
+  <text x="28" y="72" font-family="SF Mono, Fira Code, monospace" font-size="32" font-weight="700" fill="#2DD4BF">/</text>
+  <text x="40" y="72" font-family="SF Mono, Fira Code, monospace" font-size="32" font-weight="700" fill="#2DD4BF">/</text>
+  <!-- Curly brace { on right -->
+  <text x="68" y="75" font-family="SF Mono, Fira Code, monospace" font-size="38" font-weight="700" fill="#2DD4BF">{</text>
+</svg>

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Logo } from "@/components/Logo";
 import styles from "./login.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -41,6 +42,9 @@ export default function LoginPage() {
     <div className={styles.container}>
       <div className={styles.card}>
         <div className={styles.brand}>
+          <div className={styles.logoIcon}>
+            <Logo size={48} />
+          </div>
           <h1 className={styles.title}>Código Zero</h1>
           <p className={styles.subtitle}>Acesse sua área de membros</p>
         </div>

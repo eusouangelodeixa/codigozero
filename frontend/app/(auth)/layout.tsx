@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { Logo } from "@/components/Logo";
 import styles from "./auth.module.css";
 
 const navItems = [
@@ -87,6 +88,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <aside className={`${styles.sidebar} ${mobileMenuOpen ? styles.sidebarOpen : ""}`}>
         <div className={styles.sidebarHeader}>
           <div className={styles.sidebarLogo}>
+            <Logo size={28} />
             <span className={styles.sidebarBrand}>Código Zero</span>
           </div>
         </div>

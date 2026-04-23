@@ -9,14 +9,14 @@ export default function LandingPage() {
   const [gateOpen, setGateOpen] = useState(true);
   const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [checkoutUrl, setCheckoutUrl] = useState("#");
+  const [checkoutUrl, setCheckoutUrl] = useState("#preco");
 
   useEffect(() => {
     const saved = localStorage.getItem("cz_lead");
     if (saved) {
       try {
         const lead = JSON.parse(saved);
-        setCheckoutUrl(lead.checkoutUrl || "#");
+        setCheckoutUrl(lead.checkoutUrl || "#preco");
         setGateOpen(false);
       } catch {}
     }
@@ -26,7 +26,6 @@ export default function LandingPage() {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
     setSubmitting(true);
-
     try {
       const res = await fetch(`${API_URL}/api/landing/lead`, {
         method: "POST",
@@ -36,18 +35,13 @@ export default function LandingPage() {
       const data = await res.json();
       if (data.success) {
         localStorage.setItem("cz_lead", JSON.stringify({
-          leadId: data.leadId,
-          checkoutUrl: data.checkoutUrl,
-          ...formData,
+          leadId: data.leadId, checkoutUrl: data.checkoutUrl, ...formData,
         }));
-        setCheckoutUrl(data.checkoutUrl || "#");
+        setCheckoutUrl(data.checkoutUrl || "#preco");
       }
       setGateOpen(false);
-    } catch {
-      setGateOpen(false);
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setGateOpen(false); }
+    finally { setSubmitting(false); }
   };
 
   const scrollTo = (id: string) => {
@@ -56,24 +50,24 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* ═══ GATE FORM ═══ */}
+      {/* ═══════════ GATE FORM ═══════════ */}
       {gateOpen && (
         <div className={styles.gate}>
           <div className={styles.gateInner}>
             <div className={styles.gateLogo}><Logo size={48} /></div>
             <h1 className={styles.gateTitle}>Código Zero</h1>
             <p className={styles.gateDesc}>
-              Preencha seus dados para acessar a apresentação e garantir sua vaga.
+              Preencha seus dados para acessar a apresentação e garantir sua vaga na Turma 1.
             </p>
             <form onSubmit={handleGateSubmit} className={styles.gateForm}>
               <div>
-                <label className={styles.gateLabel}>Nome completo</label>
-                <input type="text" required placeholder="Seu nome"
+                <label className={styles.gateLabel}>Nome completo *</label>
+                <input type="text" required placeholder="Seu nome completo"
                   className={styles.gateInput} value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
               </div>
               <div>
-                <label className={styles.gateLabel}>E-mail</label>
+                <label className={styles.gateLabel}>E-mail *</label>
                 <input type="email" required placeholder="seu@email.com"
                   className={styles.gateInput} value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
@@ -96,15 +90,16 @@ export default function LandingPage() {
                 ) : "Acessar Apresentação →"}
               </button>
               <p className={styles.gateFooter}>
-                Seus dados estão seguros. Não enviamos spam.
+                🔒 Seus dados estão seguros e não serão compartilhados.
               </p>
             </form>
           </div>
         </div>
       )}
 
-      {/* ═══ LANDING PAGE ═══ */}
+      {/* ═══════════ LANDING PAGE ═══════════ */}
       <div className={styles.landing}>
+
         {/* ── NAV ── */}
         <nav className={styles.nav}>
           <div className={styles.navInner}>
@@ -117,6 +112,8 @@ export default function LandingPage() {
               <button onClick={() => scrollTo("solucao")} className={styles.navLink}>A Solução</button>
               <button onClick={() => scrollTo("conteudo")} className={styles.navLink}>Conteúdo</button>
               <button onClick={() => scrollTo("preco")} className={styles.navLink}>Preço</button>
+            </div>
+            <div className={styles.navRight}>
               <span className={styles.navVagas}>
                 <span className={styles.navVagasDot} />
                 Vagas Abertas
@@ -126,50 +123,50 @@ export default function LandingPage() {
           </div>
         </nav>
 
-        {/* ── HERO ── */}
+        {/* ══════════════════════════════════════
+            HERO SECTION
+        ══════════════════════════════════════ */}
         <section className={styles.hero}>
           <div className={styles.heroContent}>
-            <span className={styles.heroBadge}>
-              <span className={styles.heroBadgeDot} />
-              Código Zero · Turma 1
-            </span>
+            <div className={styles.heroTags}>
+              <span className={styles.heroTag}>
+                <span className={styles.heroTagDot} /> Vagas Abertas
+              </span>
+              <span className={styles.heroTag}>⚡ Turma 1</span>
+              <span className={styles.heroTag}>🛡️ Risco Zero</span>
+            </div>
+
             <h1 className={styles.heroTitle}>
-              Ganhe 50 mil MT/mês com{" "}
+              Como gerar os seus primeiros 50.000 MT/mês com{" "}
               <span className={styles.heroHighlight}>Inteligência Artificial</span>
             </h1>
-            <p className={styles.heroDesc}>
-              Crie e venda automações e plataformas de IA sem escrever uma única linha de código.
-              O ecossistema completo para montar seu micronegócio digital em Moçambique.
+            <p className={styles.heroSubtitle}>
+              Sem digitar uma única linha de código
             </p>
-            <div className={styles.heroCtas}>
-              <a href={checkoutUrl} className={styles.ctaPrimary}>Garantir Minha Vaga · 797 MT/mês</a>
-              <button onClick={() => scrollTo("conteudo")} className={styles.ctaSecondary}>Ver Conteúdo</button>
-            </div>
-            <div className={styles.heroStats}>
-              <div className={styles.heroStat}>
-                <span className={styles.heroStatValue}>2M+ MT</span>
-                <span className={styles.heroStatLabel}>Processados</span>
-              </div>
-              <div className={styles.heroStat}>
-                <span className={styles.heroStatValue}>50</span>
-                <span className={styles.heroStatLabel}>Vagas</span>
-              </div>
-              <div className={styles.heroStat}>
-                <span className={styles.heroStatValue}>30 dias</span>
-                <span className={styles.heroStatLabel}>Garantia</span>
-              </div>
-            </div>
+            <p className={styles.heroDesc}>
+              O ecossistema completo que te entrega a ferramenta, os clientes e o conhecimento 
+              para você criar micronegócios lucrativos em Moçambique.
+            </p>
+
+            <a href={checkoutUrl} className={styles.ctaPrimary}>
+              Quero Garantir 1 das 50 Vagas Agora
+            </a>
+            <p className={styles.heroTrust}>
+              🔒 Plataforma validada com mais de 2 Milhões de MT já processados.
+            </p>
           </div>
 
+          {/* VSL Video — placeholder pronto para embed Kilax */}
           <div className={styles.heroMedia}>
             <div className={styles.vslWrapper}>
               <div className={styles.vslBar}>
                 <span className={`${styles.vslDot} ${styles.vslDotR}`} />
                 <span className={`${styles.vslDot} ${styles.vslDotY}`} />
                 <span className={`${styles.vslDot} ${styles.vslDotG}`} />
-                <span className={styles.vslBarTitle}>Apresentação</span>
+                <span className={styles.vslBarTitle}>Código Zero — Apresentação</span>
               </div>
-              <div className={styles.vslPlaceholder}>
+              {/* Substituir por embed Kilax: <iframe src="..." /> */}
+              <div className={styles.vslPlaceholder} onClick={() => scrollTo("preco")}>
                 <div className={styles.vslPlayBtn}>
                   <svg width="28" height="28" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                 </div>
@@ -180,127 +177,213 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── O PROBLEMA ── */}
+        {/* ══════════════════════════════════════
+            A DOR E O VEÍCULO ANTIGO
+        ══════════════════════════════════════ */}
         <section id="problema" className={styles.section}>
           <span className={styles.sectionLabel}>O Problema</span>
           <h2 className={styles.sectionTitle}>
-            Você quer fazer renda extra, <span className={styles.sectionTitleHighlight}>mas trava na execução</span>
+            O mercado digital antigo exige muito de você.{" "}
+            <span className={styles.sectionTitleHighlight}>O jogo mudou.</span>
           </h2>
           <p className={styles.sectionDesc}>
-            Já tentou vender e-book e não funcionou. Acha que precisa de um computador de última geração, 
-            ou que programar leva anos de estudo. O mercado antigo exigia tudo isso. Mas o jogo mudou.
+            Você sabe que a internet é o caminho, mas provavelmente já travou na execução:
           </p>
 
-          <div className={styles.problemGrid}>
-            {/* Card 1: Cenário Atual */}
-            <div className={styles.problemCard}>
-              <span className={styles.problemCardLabel}>Cenário Atual</span>
-              <h3 className={styles.problemCardTitle}>Você tem a ideia, mas não sabe executar</h3>
-              <ul className={styles.problemList}>
-                {[
-                  "Não sabe prospectar clientes de forma escalável",
-                  "Não sabe criar automações que vendem",
-                  "Ficou preso em cursinhos que não levam a nada",
-                  "Não tem capital para investir em ferramentas caras",
-                  "Não sabe por onde começar no digital",
-                  "Vergonha de abordar empresas pelo WhatsApp",
-                ].map((item, i) => (
-                  <li key={i} className={styles.problemListItem}>
-                    <span className={styles.problemX}>✕</span> {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className={styles.painGrid}>
+            {[
+              "Tentou vender e-books ou ser afiliado, e ninguém comprou.",
+              "Acha que precisa de um computador de última geração.",
+              "Pensa que aprender a programar vai levar anos.",
+              "Tem vergonha de prospectar clientes e receber \"nãos\".",
+              "Fica preso em cursinhos teóricos que não te dão as ferramentas para trabalhar.",
+            ].map((item, i) => (
+              <div key={i} className={styles.painItem}>
+                <span className={styles.painX}>✕</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
 
-            {/* Card 2: O que você aprende */}
-            <div className={styles.problemCard}>
-              <span className={styles.problemCardLabel}>O Ecossistema</span>
-              <h3 className={styles.problemCardTitle}>O que o Código Zero te entrega</h3>
-              <ul className={styles.problemList}>
-                {[
-                  "Scraper que encontra leads automaticamente",
-                  "Scripts de vendas validados para WhatsApp",
-                  "Aulas passo a passo para criar SaaS e LPs",
-                  "Comunidade ativa no Discord",
-                  "Mentorias ao vivo semanais",
-                  "Zero código: tudo com ferramentas visuais",
-                  "Prompts profissionais prontos para usar",
-                ].map((item, i) => (
-                  <li key={i} className={styles.problemListItem}>
-                    <span className={styles.problemCheck}>✓</span> {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className={styles.painConclusion}>
+            <p className={styles.painConclusionText}>
+              O seu problema <strong>não é falta de vontade.</strong> É falta da tecnologia certa.
+            </p>
+            <p className={styles.painConclusionSub}>
+              Hoje, donos de negócios não querem saber se você sabe programar. 
+              Eles querem <strong>soluções</strong>. E nós construímos a máquina para você entregar isso.
+            </p>
+          </div>
+        </section>
 
-            {/* Card 3: Accent (CTA) */}
-            <div className={`${styles.problemCard} ${styles.problemCardAccent}`}>
-              <span className={styles.problemCardLabel}>A Proposta</span>
-              <h3 className={styles.problemCardTitle}>Código Zero</h3>
-              <p className={styles.problemCardText}>
-                O ecossistema completo para você criar micronegócios de IA sem escrever código.
-                Das ferramentas ao conhecimento, do primeiro lead ao primeiro contrato.
+        {/* ══════════════════════════════════════
+            A SOLUÇÃO E A VITÓRIA RÁPIDA
+        ══════════════════════════════════════ */}
+        <section id="solucao" className={styles.section}>
+          <span className={styles.sectionLabel}>A Solução</span>
+          <h2 className={styles.sectionTitle}>
+            Apresentando: O Ecossistema{" "}
+            <span className={styles.sectionTitleHighlight}>Código Zero</span>
+          </h2>
+          <p className={styles.sectionDesc}>
+            Muito mais que aulas. Um ambiente de tecnologia que trabalha por você, 
+            do primeiro lead ao contrato assinado.
+          </p>
+
+          <div className={styles.solutionGrid}>
+            <div className={styles.solutionCard}>
+              <div className={styles.solutionIcon}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 12L12 3" /><path d="M12 12L19.5 16.5" /><circle cx="12" cy="12" r="3" />
+                </svg>
+              </div>
+              <h3 className={styles.solutionTitle}>Prospecção no Piloto Automático</h3>
+              <p className={styles.solutionText}>
+                Nosso Scraper varre a internet e te entrega o contato de empresas prontas para comprar. 
+                Sem pesquisa manual, sem perda de tempo.
               </p>
-              <a href={checkoutUrl} className={styles.problemCardBtn}>
-                ⚡ Do zero ao deploy
-              </a>
+            </div>
+
+            <div className={styles.solutionCard}>
+              <div className={styles.solutionIcon}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M3 9h18" />
+                </svg>
+              </div>
+              <h3 className={styles.solutionTitle}>O Que Falar — Scripts Validados</h3>
+              <p className={styles.solutionText}>
+                Acesso imediato ao nosso banco com mensagens de WhatsApp de alta conversão. 
+                É só copiar, colar e enviar.
+              </p>
+            </div>
+
+            <div className={styles.solutionCard}>
+              <div className={styles.solutionIcon}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </div>
+              <h3 className={styles.solutionTitle}>O Que Entregar — Zero Código</h3>
+              <p className={styles.solutionText}>
+                Aulas práticas mostrando como criar SaaS, landing pages e automações 
+                em minutos usando IAs visuais.
+              </p>
+            </div>
+
+            <div className={styles.solutionCard}>
+              <div className={styles.solutionIcon}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" />
+                </svg>
+              </div>
+              <h3 className={styles.solutionTitle}>O Acompanhamento</h3>
+              <p className={styles.solutionText}>
+                Mentorias semanais ao vivo e uma comunidade no Discord 
+                para você nunca travar.
+              </p>
             </div>
           </div>
         </section>
 
-        {/* ── EMPILHAMENTO DE VALOR ── */}
+        {/* ══════════════════════════════════════
+            EMPILHAMENTO DE VALOR
+        ══════════════════════════════════════ */}
         <section id="conteudo" className={styles.section}>
           <span className={styles.sectionLabel}>O que está incluído</span>
           <h2 className={styles.sectionTitle}>
-            Tudo que você precisa, <span className={styles.sectionTitleHighlight}>num único lugar</span>
+            Tudo o que você precisa em{" "}
+            <span className={styles.sectionTitleHighlight}>uma única infraestrutura.</span>
           </h2>
           <p className={styles.sectionDesc}>
-            Se eu cobrasse cada componente separadamente, o valor total passaria de 20.000 MT.
-            Mas você não vai pagar isso.
+            Se você fosse assinar essas ferramentas e consultorias separadamente, 
+            este seria o custo:
           </p>
 
           <div className={styles.stackGrid}>
             {[
-              { name: "Scraper de Leads Ilimitado", value: "5.000 MT/mês" },
-              { name: "Banco de Scripts de Vendas", value: "3.000 MT" },
-              { name: "Aulas Passo a Passo (4 Módulos)", value: "7.000 MT" },
-              { name: "Mentorias ao Vivo Semanais", value: "10.000 MT/mês" },
-              { name: "Comunidade Exclusiva no Discord", value: "2.000 MT" },
-              { name: "Prompts Profissionais de Copy", value: "1.500 MT" },
+              { name: "Acesso ao Scraper de Leads Ilimitado", value: "5.000 MT/mês" },
+              { name: "Banco de Scripts e Prompts Profissionais", value: "4.500 MT" },
+              { name: "Treinamento Prático: Do Zero ao Deploy (4 Módulos)", value: "7.000 MT" },
+              { name: "Mentorias ao Vivo Semanais Direto da Trincheira", value: "10.000 MT/mês" },
+              { name: "Acesso à Comunidade Fechada (Networking)", value: "2.000 MT" },
             ].map((item, i) => (
               <div key={i} className={styles.stackItem}>
+                <div className={styles.stackCheck}>✓</div>
                 <span className={styles.stackName}>{item.name}</span>
                 <span className={styles.stackValue}>{item.value}</span>
               </div>
             ))}
+            <div className={styles.stackTotal}>
+              <span>Valor Total do Ecossistema</span>
+              <span className={styles.stackTotalValue}>28.500 MT</span>
+            </div>
+            <p className={styles.stackPunchline}>Mas você não vai pagar isso hoje.</p>
           </div>
         </section>
 
-        {/* ── PREÇO ── */}
+        {/* ══════════════════════════════════════
+            ESCASSEZ + PREÇO
+        ══════════════════════════════════════ */}
         <section id="preco" className={styles.pricingSection}>
-          <span className={styles.sectionLabel}>Preço</span>
-          <h2 className={styles.sectionTitle} style={{ margin: "0 auto", textAlign: "center", marginBottom: 12 }}>
-            Investimento acessível, <span className={styles.sectionTitleHighlight}>retorno real</span>
-          </h2>
-          <p className={styles.sectionDesc} style={{ margin: "0 auto", textAlign: "center", marginBottom: 48 }}>
-            Um valor simbólico para separar os curiosos de quem realmente vai executar.
-          </p>
+          {/* Escassez */}
+          <div className={styles.scarcityBlock}>
+            <span className={styles.sectionLabel}>Escassez Real</span>
+            <h3 className={styles.scarcityTitle}>Por que apenas 50 vagas para a Turma 1?</h3>
+            <p className={styles.scarcityText}>
+              Nós levamos tecnologia a sério. O nosso Scraper de leads exige alta capacidade 
+              de processamento dos nossos servidores para rodar rápido para todos. Para garantir 
+              que o sistema não fique lento, a trava de segurança bloqueará novos cadastros 
+              assim que 50 pagamentos forem confirmados.
+            </p>
+          </div>
 
+          {/* Pricing Card */}
           <div className={styles.pricingCard}>
+            <p className={styles.priceFrom}>
+              De <span className={styles.priceOld}>28.500 MT</span> por apenas:
+            </p>
             <div className={styles.priceBig}>
               797 <span className={styles.priceAccent}>MT/mês</span>
             </div>
-            <p className={styles.priceSub}>Acesso completo a todo o ecossistema Código Zero</p>
-            <a href={checkoutUrl} className={styles.priceCta}>Garantir Minha Vaga Agora</a>
-            <div className={styles.guarantee}>
-              <svg className={styles.guaranteeIcon} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <p className={styles.priceSub}>
+              Você está a apenas 1 cliente de 3.000 MT de empatar meses da sua assinatura
+            </p>
+            <a href={checkoutUrl} className={styles.priceCta}>
+              Garantir Minha Vaga (797 MT)
+            </a>
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════
+            GARANTIA
+        ══════════════════════════════════════ */}
+        <section className={styles.guaranteeSection}>
+          <div className={styles.guaranteeCard}>
+            <div className={styles.guaranteeShield}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               </svg>
-              <span>
-                <span className={styles.guaranteeBold}>30 dias de garantia</span> — se não fechar 
-                pelo menos 1 contrato de 3.000 MT, devolvemos o dobro + 1h de consultoria grátis.
-              </span>
             </div>
+            <span className={styles.guaranteeLabel}>Garantia Condicional</span>
+            <h2 className={styles.guaranteeTitle}>Risco Zero Absoluto</h2>
+            <p className={styles.guaranteeText}>
+              Eu confio tanto na tecnologia que construí que vou colocar todo o risco nas minhas costas.
+            </p>
+            <p className={styles.guaranteeText}>
+              Entre no Código Zero. Use o nosso Scraper de Leads e envie os scripts validados 
+              do nosso banco por <strong>30 dias</strong>.
+            </p>
+            <p className={styles.guaranteeHighlight}>
+              Se você fizer isso e não fechar pelo menos <strong>1 contrato de 3.000 MT</strong>, 
+              eu não apenas devolvo <strong>100% do seu dinheiro em dobro</strong>, como também te dou{" "}
+              <strong>1 hora de consultoria individual</strong> totalmente de graça para consertarmos o seu negócio.
+            </p>
+            <p className={styles.guaranteeConclusion}>
+              O único risco que você corre é ficar de fora.
+            </p>
+            <a href={checkoutUrl} className={styles.guaranteeCta}>
+              Aceitar o Desafio e Entrar no Código Zero
+            </a>
           </div>
         </section>
 
@@ -320,9 +403,10 @@ export default function LandingPage() {
             <div>
               <h4 className={styles.footerColTitle}>Links</h4>
               <div className={styles.footerLinks}>
-                <a href="#problema" className={styles.footerLink}>O Problema</a>
-                <a href="#conteudo" className={styles.footerLink}>Conteúdo</a>
-                <a href="#preco" className={styles.footerLink}>Preço</a>
+                <button onClick={() => scrollTo("problema")} className={styles.footerLink}>O Problema</button>
+                <button onClick={() => scrollTo("solucao")} className={styles.footerLink}>A Solução</button>
+                <button onClick={() => scrollTo("conteudo")} className={styles.footerLink}>Conteúdo</button>
+                <button onClick={() => scrollTo("preco")} className={styles.footerLink}>Preço</button>
                 <a href="/login" className={styles.footerLink}>Área de Membros</a>
               </div>
             </div>

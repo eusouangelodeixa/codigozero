@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api";
+import { CofreIcon, ForjaIcon, QGIcon } from "@/components/Icons";
 import styles from "./dashboard.module.css";
 
 interface Metrics {
@@ -104,16 +105,16 @@ export default function DashboardPage() {
       {/* Quick Links */}
       <div className={styles.quickLinks}>
         {[
-          { href: "/cofre", emoji: "💎", title: "O Cofre", desc: "Scripts prontos para vender" },
-          { href: "/forja", emoji: "⚡", title: "A Forja", desc: "Domine o negócio de IA" },
-          { href: "/qg", emoji: "🏰", title: "O QG", desc: "Comunidade e mentorias" },
+          { href: "/cofre", icon: <CofreIcon size={20} />, title: "O Cofre", desc: "Scripts prontos para vender" },
+          { href: "/forja", icon: <ForjaIcon size={20} />, title: "A Forja", desc: "Domine o negócio de IA" },
+          { href: "/qg", icon: <QGIcon size={20} />, title: "O QG", desc: "Comunidade e mentorias" },
         ].map((item) => (
           <button
             key={item.href}
             onClick={() => router.push(item.href)}
             className={styles.quickLink}
           >
-            <span className={styles.qlIcon}>{item.emoji}</span>
+            <span className={styles.qlIcon}>{item.icon}</span>
             <span className={styles.qlText}>
               <strong>{item.title}</strong>
               <small>{item.desc}</small>

@@ -1,15 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { DashboardIcon, RadarIcon, CofreIcon, ForjaIcon, QGIcon } from "@/components/Icons";
 import styles from "./auth.module.css";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", emoji: "📊" },
-  { href: "/radar", label: "O Radar", emoji: "📡" },
-  { href: "/cofre", label: "O Cofre", emoji: "💎" },
-  { href: "/forja", label: "A Forja", emoji: "⚡" },
-  { href: "/qg", label: "O QG", emoji: "🏰" },
+const navItems: { href: string; label: string; icon: (props: { size?: number; className?: string }) => ReactNode }[] = [
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
+  { href: "/radar", label: "O Radar", icon: RadarIcon },
+  { href: "/cofre", label: "O Cofre", icon: CofreIcon },
+  { href: "/forja", label: "A Forja", icon: ForjaIcon },
+  { href: "/qg", label: "O QG", icon: QGIcon },
 ];
 
 interface User {
@@ -106,7 +107,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                 router.push(item.href);
               }}
             >
-              <span className={styles.navIcon}>{item.emoji}</span>
+              <span className={styles.navIcon}><item.icon size={18} /></span>
               <span className={styles.navLabel}>{item.label}</span>
             </a>
           ))}

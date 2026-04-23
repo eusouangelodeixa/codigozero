@@ -6,26 +6,37 @@ import styles from "./landing.module.css";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function LandingPage() {
-  const [gateOpen, setGateOpen] = useState(true);
+  // Start as null = "loading/checking", true = show gate, false = hide gate
+  const [gateOpen, setGateOpen] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "" });
   const [submitting, setSubmitting] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("#preco");
 
+  // Check localStorage on mount — if lead exists, skip gate entirely
   useEffect(() => {
-    const saved = localStorage.getItem("cz_lead");
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem("cz_lead");
+      if (saved) {
         const lead = JSON.parse(saved);
-        setCheckoutUrl(lead.checkoutUrl || "#preco");
-        setGateOpen(false);
-      } catch {}
-    }
+        if (lead.name && lead.email) {
+          setCheckoutUrl(lead.checkoutUrl || "#preco");
+          setGateOpen(false); // returning user → go straight to landing
+          return;
+        }
+      }
+    } catch {}
+    setGateOpen(true); // no saved lead → show gate
   }, []);
 
   const handleGateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
     setSubmitting(true);
+
+    // ALWAYS save to localStorage first so the user never has to fill in again
+    const leadRecord: Record<string, string> = { ...formData, savedAt: new Date().toISOString() };
+    localStorage.setItem("cz_lead", JSON.stringify(leadRecord));
+
     try {
       const res = await fetch(`${API_URL}/api/landing/lead`, {
         method: "POST",
@@ -33,15 +44,18 @@ export default function LandingPage() {
         body: JSON.stringify(formData),
       });
       const data = await res.json();
-      if (data.success) {
-        localStorage.setItem("cz_lead", JSON.stringify({
-          leadId: data.leadId, checkoutUrl: data.checkoutUrl, ...formData,
-        }));
-        setCheckoutUrl(data.checkoutUrl || "#preco");
+      if (data.success && data.checkoutUrl) {
+        leadRecord.leadId = data.leadId;
+        leadRecord.checkoutUrl = data.checkoutUrl;
+        localStorage.setItem("cz_lead", JSON.stringify(leadRecord));
+        setCheckoutUrl(data.checkoutUrl);
       }
+    } catch (err) {
+      console.warn("[Landing] API call failed, lead saved locally:", err);
+    } finally {
+      setSubmitting(false);
       setGateOpen(false);
-    } catch { setGateOpen(false); }
-    finally { setSubmitting(false); }
+    }
   };
 
   const scrollTo = (id: string) => {
@@ -49,18 +63,25 @@ export default function LandingPage() {
   };
 
   const handleCheckoutClick = (e: React.MouseEvent) => {
-    // If no valid checkout URL from Lojou, scroll to pricing section
     if (!checkoutUrl || checkoutUrl === "#preco" || checkoutUrl === "#") {
       e.preventDefault();
       scrollTo("preco");
     }
-    // Otherwise, the <a href> will navigate to the Lojou checkout URL
   };
 
   return (
     <>
+      {/* While checking localStorage, show nothing (prevents flash) */}
+      {gateOpen === null && (
+        <div className={styles.gate}>
+          <div className={styles.gateInner}>
+            <div className={styles.gateLogo}><Logo size={48} /></div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════ GATE FORM ═══════════ */}
-      {gateOpen && (
+      {gateOpen === true && (
         <div className={styles.gate}>
           <div className={styles.gateInner}>
             <div className={styles.gateLogo}><Logo size={48} /></div>

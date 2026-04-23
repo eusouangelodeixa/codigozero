@@ -8,6 +8,10 @@ const prisma = new PrismaClient();
 const LOJOU_API = `${env.LOJOU_API_URL}/v1`;
 const LOJOU_KEY = env.LOJOU_API_KEY;
 
+// Código Zero product on Lojou
+const PRODUCT_PID = process.env.LOJOU_PRODUCT_PID || 'uoEHz';
+const PRODUCT_PRICE = 797;
+
 /**
  * POST /api/landing/lead
  * Capture lead data from landing page gate form.
@@ -36,41 +40,34 @@ router.post('/lead', async (req: Request, res: Response) => {
 
     // Create Lojou order to get checkout_url
     let checkoutUrl = '';
-    try {
-      // First, get the product (or use LOJOU_PRODUCT_ID env var)
-      const productId = process.env.LOJOU_PRODUCT_ID;
-
-      if (productId && LOJOU_KEY) {
-        const orderPayload: any = {
-          product_id: productId,
-          customer: {
-            name,
-            email,
-            phone: whatsapp || phone,
-          },
-        };
-
+    if (LOJOU_KEY) {
+      try {
         const orderRes = await fetch(`${LOJOU_API}/orders`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${LOJOU_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(orderPayload),
+          body: JSON.stringify({
+            product_pid: PRODUCT_PID,
+            amount: PRODUCT_PRICE,
+            customer: {
+              name,
+              email,
+              mobile_number: whatsapp || phone || '',
+            },
+          }),
         });
 
         const orderData = await orderRes.json();
         console.log('[Landing] Lojou order response:', JSON.stringify(orderData));
-        
-        checkoutUrl = orderData?.data?.checkout_url 
-          || orderData?.checkout_url 
-          || orderData?.order?.checkout_url 
-          || '';
-      } else {
-        console.log('[Landing] LOJOU_PRODUCT_ID or LOJOU_API_KEY not set, skipping order creation');
+
+        if (orderData.checkout_url) {
+          checkoutUrl = orderData.checkout_url;
+        }
+      } catch (e) {
+        console.error('[Landing] Lojou order creation failed:', e);
       }
-    } catch (e) {
-      console.error('[Landing] Lojou order creation failed:', e);
     }
 
     res.json({

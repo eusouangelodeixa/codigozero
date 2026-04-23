@@ -157,7 +157,8 @@
 
 /* VSL — macOS window, below hero text */
 .heroMedia {
-  max-width: 800px; animation: slideUp 0.6s 0.15s ease forwards; opacity: 0;
+  max-width: 800px; margin: 0 auto; width: 100%; position: relative; z-index: 10;
+  animation: slideUp 0.6s 0.15s ease forwards; opacity: 0;
 }
 .vslWrapper {
   background: var(--bg-surface); border: 1px solid var(--border-default);

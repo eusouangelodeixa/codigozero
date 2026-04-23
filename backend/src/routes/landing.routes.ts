@@ -5,13 +5,13 @@ import { env } from '../config/env';
 const router = Router();
 const prisma = new PrismaClient();
 
-const LOJOU_API = 'https://api.lojou.app/v1';
+const LOJOU_API = `${env.LOJOU_API_URL}/v1`;
 const LOJOU_KEY = env.LOJOU_API_KEY;
 
 /**
  * POST /api/landing/lead
  * Capture lead data from landing page gate form.
- * Creates a Lojou order (checkout) and returns checkout_url.
+ * Creates a Lojou order and returns checkout_url.
  */
 router.post('/lead', async (req: Request, res: Response) => {
   try {
@@ -29,36 +29,48 @@ router.post('/lead', async (req: Request, res: Response) => {
         email,
         name,
         phone: whatsapp || phone,
-        password: '', // Will be set after payment via webhook
+        password: '',
         subscriptionStatus: 'lead',
       },
     });
 
     // Create Lojou order to get checkout_url
-    let checkoutUrl = '#';
+    let checkoutUrl = '';
     try {
-      const orderRes = await fetch(`${LOJOU_API}/orders`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOJOU_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // First, get the product (or use LOJOU_PRODUCT_ID env var)
+      const productId = process.env.LOJOU_PRODUCT_ID;
+
+      if (productId && LOJOU_KEY) {
+        const orderPayload: any = {
+          product_id: productId,
           customer: {
             name,
             email,
             phone: whatsapp || phone,
           },
-        }),
-      });
+        };
 
-      if (orderRes.ok) {
+        const orderRes = await fetch(`${LOJOU_API}/orders`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOJOU_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderPayload),
+        });
+
         const orderData = await orderRes.json();
-        checkoutUrl = orderData.data?.checkout_url || orderData.checkout_url || '#';
+        console.log('[Landing] Lojou order response:', JSON.stringify(orderData));
+        
+        checkoutUrl = orderData?.data?.checkout_url 
+          || orderData?.checkout_url 
+          || orderData?.order?.checkout_url 
+          || '';
+      } else {
+        console.log('[Landing] LOJOU_PRODUCT_ID or LOJOU_API_KEY not set, skipping order creation');
       }
     } catch (e) {
       console.error('[Landing] Lojou order creation failed:', e);
-      // Fallback: continue without checkout URL — user can still see the page
     }
 
     res.json({

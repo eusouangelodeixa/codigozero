@@ -48,6 +48,15 @@ export default function LandingPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleCheckoutClick = (e: React.MouseEvent) => {
+    // If no valid checkout URL from Lojou, scroll to pricing section
+    if (!checkoutUrl || checkoutUrl === "#preco" || checkoutUrl === "#") {
+      e.preventDefault();
+      scrollTo("preco");
+    }
+    // Otherwise, the <a href> will navigate to the Lojou checkout URL
+  };
+
   return (
     <>
       {/* ═══════════ GATE FORM ═══════════ */}
@@ -118,13 +127,13 @@ export default function LandingPage() {
                 <span className={styles.navVagasDot} />
                 Vagas Abertas
               </span>
-              <a href={checkoutUrl} className={styles.navCta}>Garantir Vaga</a>
+              <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.navCta}>Garantir Vaga</a>
             </div>
           </div>
         </nav>
 
         {/* ══════════════════════════════════════
-            HERO SECTION
+            HERO SECTION — Single column: text → CTA → stats → VSL
         ══════════════════════════════════════ */}
         <section className={styles.hero}>
           <div className={styles.heroContent}>
@@ -148,15 +157,30 @@ export default function LandingPage() {
               para você criar micronegócios lucrativos em Moçambique.
             </p>
 
-            <a href={checkoutUrl} className={styles.ctaPrimary}>
+            <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.ctaPrimary}>
               Quero Garantir 1 das 50 Vagas Agora
             </a>
             <p className={styles.heroTrust}>
               🔒 Plataforma validada com mais de 2 Milhões de MT já processados.
             </p>
+
+            <div className={styles.heroStats}>
+              <div className={styles.heroStat}>
+                <span className={styles.heroStatValue}>2M+ MT</span>
+                <span className={styles.heroStatLabel}>Processados</span>
+              </div>
+              <div className={styles.heroStat}>
+                <span className={styles.heroStatValue}>50</span>
+                <span className={styles.heroStatLabel}>Vagas</span>
+              </div>
+              <div className={styles.heroStat}>
+                <span className={styles.heroStatValue}>30 dias</span>
+                <span className={styles.heroStatLabel}>Garantia</span>
+              </div>
+            </div>
           </div>
 
-          {/* VSL Video — placeholder pronto para embed Kilax */}
+          {/* VSL Video — below text content */}
           <div className={styles.heroMedia}>
             <div className={styles.vslWrapper}>
               <div className={styles.vslBar}>
@@ -165,8 +189,8 @@ export default function LandingPage() {
                 <span className={`${styles.vslDot} ${styles.vslDotG}`} />
                 <span className={styles.vslBarTitle}>Código Zero — Apresentação</span>
               </div>
-              {/* Substituir por embed Kilax: <iframe src="..." /> */}
-              <div className={styles.vslPlaceholder} onClick={() => scrollTo("preco")}>
+              {/* Replace with Kilax embed: <iframe src="..." style={{width:'100%',aspectRatio:'16/9',border:'none'}} /> */}
+              <div className={styles.vslPlaceholder}>
                 <div className={styles.vslPlayBtn}>
                   <svg width="28" height="28" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                 </div>
@@ -348,7 +372,7 @@ export default function LandingPage() {
             <p className={styles.priceSub}>
               Você está a apenas 1 cliente de 3.000 MT de empatar meses da sua assinatura
             </p>
-            <a href={checkoutUrl} className={styles.priceCta}>
+            <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.priceCta}>
               Garantir Minha Vaga (797 MT)
             </a>
           </div>
@@ -381,7 +405,7 @@ export default function LandingPage() {
             <p className={styles.guaranteeConclusion}>
               O único risco que você corre é ficar de fora.
             </p>
-            <a href={checkoutUrl} className={styles.guaranteeCta}>
+            <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.guaranteeCta}>
               Aceitar o Desafio e Entrar no Código Zero
             </a>
           </div>

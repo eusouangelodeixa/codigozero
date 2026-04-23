@@ -270,7 +270,7 @@ export default function LandingPage() {
               </div>
               {cfg.vslEmbedHtml ? (
                 <div
-                  style={{ width: "100%", position: "relative" }}
+                  className={styles.vslEmbed}
                   dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }}
                 />
               ) : (

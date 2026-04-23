@@ -168,11 +168,13 @@
   display: block; width: 100%; aspect-ratio: 16/9; border: none;
 }
 .vslEmbed {
-  width: 100%; position: relative;
+  width: 100%; position: relative; padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+  height: 0; overflow: hidden;
 }
 .vslEmbed :global(iframe) {
-  display: block !important; width: 100% !important; aspect-ratio: 16/9; border: none !important;
-  min-height: 300px;
+  position: absolute; top: 0; left: 0;
+  width: 100% !important; height: 100% !important;
+  border: none !important;
 }
 .vslBar {
   display: flex; align-items: center; gap: var(--space-2);

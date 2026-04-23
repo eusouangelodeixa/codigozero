@@ -269,10 +269,8 @@ export default function LandingPage() {
                 <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
               {cfg.vslEmbedHtml ? (
-                <div
-                  className={styles.vslEmbed}
-                  dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }}
-                />
+                <div style={{ borderRadius: 12, overflow: "hidden", width: "100%" }}
+                  dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }} />
               ) : (
                 <div className={styles.vslPlaceholder}>
                   <div className={styles.vslPlayBtn}>

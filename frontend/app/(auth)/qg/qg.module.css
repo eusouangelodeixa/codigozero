@@ -1,31 +1,34 @@
 .page { animation: slideUp 0.3s ease forwards; }
 
 /* ── Section Header ── */
-.sectionHeader { margin-bottom: var(--space-8); }
+.sectionHeader { margin-bottom: var(--space-6); }
 .sectionLabel {
   font-size: var(--type-label); font-weight: 500; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: var(--space-2);
+  text-transform: uppercase; color: var(--accent); display: block; margin-bottom: var(--space-2);
 }
 .sectionTitle {
   font-size: var(--type-h1); font-weight: 700; color: var(--text-primary);
-  letter-spacing: -0.03em; margin-bottom: var(--space-1);
+  letter-spacing: -0.03em; margin-bottom: var(--space-2);
 }
-.sectionDescription { font-size: var(--type-body); color: var(--text-tertiary); }
+.sectionDescription { font-size: var(--type-body); color: var(--text-tertiary); max-width: 500px; }
 
-/* ── Community Card ── */
+/* ── Cards Layout ── */
+.cardsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gap); margin-bottom: var(--space-6); }
+
+/* ── Community ── */
 .communityCard {
   background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   border: 1px solid var(--border-default); border-radius: 12px;
-  padding: var(--card-padding-desktop); margin-bottom: var(--space-6);
-  transition: border-color 0.2s ease;
+  padding: var(--card-padding); transition: border-color 0.2s ease;
+  display: flex; flex-direction: column;
 }
 .communityCard:hover { border-color: var(--border-strong); }
 
-.communityHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
+.communityHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-5); }
 
 .discordIcon {
-  width: 48px; height: 48px; border-radius: 8px;
+  width: 44px; height: 44px; border-radius: 10px;
   background: #5865F2; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 
@@ -33,39 +36,37 @@
 .communityDesc { font-size: var(--type-small); color: var(--text-tertiary); margin-top: 2px; }
 
 .communityBtn {
-  display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-6);
-  background: var(--accent-primary); color: var(--accent-primary-fg);
+  display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5);
+  background: var(--cta-bg); color: var(--cta-fg);
   font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease, transform 0.1s ease;
-  min-height: 44px; font-size: var(--type-body);
+  min-height: 44px; font-size: var(--type-body); margin-top: auto; align-self: flex-start;
 }
 .communityBtn:hover { opacity: 0.9; }
 .communityBtn:active { transform: scale(0.98); }
 
-/* ── Mentoria Card ── */
+/* ── Mentoria ── */
 .mentoriaCard {
   background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
   border: 1px solid var(--border-default); border-radius: 12px;
-  padding: var(--card-padding-desktop); margin-bottom: var(--space-6);
+  padding: var(--card-padding); display: flex; flex-direction: column;
 }
 
-.mentoriaHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
-.mentoriaIcon { font-size: 1.5rem; }
+.mentoriaHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-5); }
+.mentoriaIcon { font-size: 1.25rem; }
 .mentoriaTitle { font-size: var(--type-h3); font-weight: 600; color: var(--text-primary); }
 .mentoriaDesc { font-size: var(--type-small); color: var(--text-tertiary); margin-top: 2px; }
 
-/* ── Countdown (spec 9) ── */
+/* ── Countdown ── */
 .countdownGrid {
-  display: flex; gap: var(--space-4); align-items: center;
-  justify-content: center; margin-bottom: var(--space-6);
+  display: flex; gap: var(--space-4); align-items: center; justify-content: center;
+  margin-bottom: var(--space-5); flex: 1; padding: var(--space-4) 0;
 }
 
-.countdownItem {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-}
+.countdownItem { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 
 .countdownValue {
-  font-size: var(--type-h2); font-weight: 700; color: var(--text-primary);
+  font-size: var(--type-h2); font-weight: 700; color: var(--accent);
   font-variant-numeric: tabular-nums; font-family: var(--font-mono); line-height: 1;
 }
 
@@ -76,30 +77,29 @@
 
 .countdownSep {
   font-size: var(--type-h2); color: var(--text-tertiary);
-  margin-bottom: 12px; font-weight: 300;
+  margin-bottom: 16px; font-weight: 300;
 }
 
 .mentoriaBtn {
   display: flex; align-items: center; justify-content: center;
   width: 100%; padding: var(--space-3) var(--space-6);
-  background: var(--accent-primary); color: var(--accent-primary-fg);
-  font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease, transform 0.1s ease;
-  min-height: 44px;
+  background: var(--cta-bg); color: var(--cta-fg);
+  font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease;
+  min-height: 44px; font-size: var(--type-body); margin-top: auto;
 }
 .mentoriaBtn:hover { opacity: 0.9; }
-.mentoriaBtn:active { transform: scale(0.98); }
 
-.noMentoria { text-align: center; padding: var(--space-6); color: var(--text-tertiary); font-size: var(--type-small); }
+.noMentoria { text-align: center; padding: var(--space-6); color: var(--text-tertiary); font-size: var(--type-small); flex: 1; display: flex; align-items: center; justify-content: center; }
 
-/* ── Stats (Scarcity) ── */
+/* ── Stats ── */
 .statsCard {
   background: var(--bg-glass); border: 1px solid var(--border-default); border-radius: 12px;
-  padding: var(--card-padding-desktop); display: flex; align-items: center; justify-content: center; gap: var(--space-8);
+  padding: var(--card-padding); display: flex; align-items: center; justify-content: center; gap: var(--space-10);
 }
 
-.statItem { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.statItem { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .statValue {
-  font-size: var(--type-h2); font-weight: 700; color: var(--text-primary);
+  font-size: var(--type-h2); font-weight: 700; color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 .statLabel {
@@ -108,11 +108,15 @@
 }
 .statDivider { width: 1px; height: 40px; background: var(--border-subtle); }
 
-/* ── Mobile ── */
+/* ── Responsive ── */
 @media (max-width: 768px) {
-  .sectionTitle { font-size: var(--type-h2); }
+  .cardsGrid { grid-template-columns: 1fr; }
+  .countdownGrid { gap: var(--space-3); }
+  .statsCard { gap: var(--space-6); }
+}
+
+@media (max-width: 480px) {
   .countdownValue { font-size: var(--type-h3); }
-  .countdownGrid { gap: var(--space-2); }
   .statsCard { flex-direction: column; gap: var(--space-4); }
   .statDivider { width: 60px; height: 1px; }
 }

@@ -1,196 +1,112 @@
 .page { animation: slideUp 0.3s ease forwards; }
 
-/* ── Section Header (3-layer pattern from roadmap) ── */
+/* ── Section Header ── */
 .sectionHeader { margin-bottom: var(--space-8); }
 .sectionLabel {
-  font-size: var(--type-label);
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  display: block;
-  margin-bottom: var(--space-2);
+  font-size: var(--type-label); font-weight: 500; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent); display: block; margin-bottom: var(--space-2);
 }
 .sectionTitle {
-  font-size: var(--type-h1);
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.03em;
-  margin-bottom: var(--space-1);
+  font-size: var(--type-h1); font-weight: 700; color: var(--text-primary);
+  letter-spacing: -0.03em; margin-bottom: var(--space-2);
 }
-.sectionDescription {
-  font-size: var(--type-body);
-  color: var(--text-tertiary);
-}
+.sectionDescription { font-size: var(--type-body); color: var(--text-tertiary); max-width: 600px; }
 
-/* ── Metrics Grid ── */
+/* ── Metrics ── */
 .metricsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: var(--grid-gap);
-  margin-bottom: var(--space-8);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: var(--grid-gap); margin-bottom: var(--space-6);
 }
 
 .metricCard {
-  background: var(--bg-glass);
-  backdrop-filter: blur(12px) saturate(1.2);
+  background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: var(--card-padding-desktop);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  border: 1px solid var(--border-default); border-radius: 12px;
+  padding: var(--card-padding); display: flex; flex-direction: column; gap: var(--space-2);
   transition: border-color 0.2s ease, background 0.2s ease;
 }
-
-.metricCard:hover {
-  background: var(--bg-glass-hover);
-  border-color: var(--border-strong);
-}
+.metricCard:hover { background: var(--bg-glass-hover); border-color: var(--border-strong); }
 
 .metricValue {
-  font-size: var(--type-h1);
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: var(--type-h1); font-weight: 700; color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
 .metricLabel {
-  font-size: var(--type-small);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: var(--type-label); color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.08em;
 }
 
-/* ── Progress Bar ── */
+/* ── Progress ── */
 .progressSection {
-  background: var(--bg-glass);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  padding: var(--card-padding-desktop);
-  margin-bottom: var(--space-8);
+  background: var(--bg-glass); border: 1px solid var(--border-default);
+  border-radius: 12px; padding: var(--card-padding); margin-bottom: var(--space-6);
 }
 
 .progressLabel {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-2);
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);
 }
-
-.progressLabel span {
-  font-size: var(--type-small);
-  color: var(--text-secondary);
-}
-
+.progressLabel span { font-size: var(--type-small); color: var(--text-secondary); }
 .progressLabel strong {
-  font-size: var(--type-small);
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: var(--type-small); font-weight: 600; color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
 .progressTrack {
-  height: 4px;
-  background: var(--border-subtle);
-  border-radius: 2px;
-  overflow: hidden;
+  height: 6px; background: var(--border-subtle); border-radius: 3px; overflow: hidden;
 }
-
 .progressFill {
-  height: 100%;
-  background: var(--text-primary);
-  border-radius: 2px;
+  height: 100%; background: var(--accent); border-radius: 3px;
   transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
 
-/* ── CTA Hero Button ── */
+/* ── CTA ── */
 .ctaButton {
-  width: 100%;
-  padding: 16px 32px;
-  background: var(--accent-primary);
-  color: var(--accent-primary-fg);
-  font-size: 1rem;
-  font-weight: 700;
-  border-radius: 10px;
-  letter-spacing: -0.01em;
-  transition: all 0.2s ease;
-  min-height: 56px;
-  margin-bottom: var(--space-8);
+  width: 100%; padding: 16px 32px;
+  background: var(--cta-bg); color: var(--cta-fg);
+  font-size: 1rem; font-weight: 700; border-radius: 10px;
+  letter-spacing: -0.01em; transition: all 0.2s ease;
+  min-height: 56px; margin-bottom: var(--space-6);
 }
-
 .ctaButton:hover {
-  box-shadow: 0 0 24px 4px var(--accent-glow);
-  transform: translateY(-1px);
+  box-shadow: 0 0 24px 4px var(--accent-glow); transform: translateY(-1px);
 }
-
-.ctaButton:active {
-  transform: scale(0.98);
-}
+.ctaButton:active { transform: scale(0.98); }
 
 /* ── Quick Links ── */
-.quickLinks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
+.quickLinks { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--grid-gap); }
 
 .quickLink {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: var(--bg-glass);
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  transition: border-color 0.15s ease, background 0.15s ease;
-  text-align: left;
-  width: 100%;
-  min-height: 44px;
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--card-padding); background: var(--bg-glass);
+  border: 1px solid var(--border-default); border-radius: 12px;
+  transition: border-color 0.2s ease, background 0.2s ease; text-align: left; width: 100%;
 }
-
-.quickLink:hover {
-  background: var(--bg-glass-hover);
-  border-color: var(--border-strong);
-}
+.quickLink:hover { background: var(--bg-glass-hover); border-color: var(--accent-border); }
 
 .qlIcon {
-  font-size: 1.25rem;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 1.5rem; width: 44px; height: 44px; border-radius: 10px;
+  background: var(--accent-dim); display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
 
-.qlText {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+.qlText { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.qlText strong { font-size: var(--type-body); font-weight: 600; color: var(--text-primary); }
+.qlText small { font-size: var(--type-small); color: var(--text-tertiary); }
+.quickLink svg { color: var(--text-tertiary); flex-shrink: 0; }
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .quickLinks { grid-template-columns: 1fr 1fr; }
 }
 
-.qlText strong {
-  font-size: var(--type-body);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.qlText small {
-  font-size: var(--type-small);
-  color: var(--text-tertiary);
-  margin-top: 2px;
-}
-
-.quickLink svg {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-/* ── Mobile ── */
 @media (max-width: 768px) {
-  .sectionTitle { font-size: var(--type-h2); }
   .metricsGrid { grid-template-columns: 1fr; }
-  .metricCard { padding: var(--card-padding-mobile); }
+  .quickLinks { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .metricCard { padding: var(--space-4); }
+  .ctaButton { min-height: 48px; font-size: var(--type-body); }
 }

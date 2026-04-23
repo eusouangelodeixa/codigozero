@@ -41,6 +41,7 @@ export default function QGPage() {
         <p className={styles.sectionDescription}>Comunidade, mentorias ao vivo e suporte direto.</p>
       </div>
 
+      <div className={styles.cardsGrid}>
       {/* Community */}
       <div className={styles.communityCard}>
         <div className={styles.communityHeader}>
@@ -102,6 +103,7 @@ export default function QGPage() {
         ) : (
           <div className={styles.noMentoria}><p>Nenhuma mentoria agendada. Fique atento ao Discord!</p></div>
         )}
+      </div>
       </div>
 
       {/* Stats */}

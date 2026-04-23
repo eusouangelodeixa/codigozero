@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+frontend/.next/
+backend/dist/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+backend/prisma/migrations/migration_lock.toml
+
+# Docker
+infrastructure/data/
+
+# Logs
+*.log
+npm-debug.log*

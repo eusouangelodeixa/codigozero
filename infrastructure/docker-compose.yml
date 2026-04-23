@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # ── Frontend (Next.js) ──
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../infrastructure/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:4000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ── Backend (Express.js) ──
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../infrastructure/Dockerfile.backend
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_URL=postgresql://czero:${DB_PASSWORD:-codigozero2026}@db:5432/codigozero
+      - REDIS_URL=redis://redis:6379
+      - LOJOU_API_KEY=${LOJOU_API_KEY}
+      - LOJOU_WEBHOOK_SECRET=${LOJOU_WEBHOOK_SECRET}
+      - JWT_SECRET=${JWT_SECRET:-cz-jwt-change-me}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - NODE_ENV=production
+      - MAX_DAILY_SEARCHES=10
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── PostgreSQL 16 (Isolated DB) ──
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: codigozero
+      POSTGRES_USER: czero
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-codigozero2026}
+    ports:
+      - "5434:5432"  # 5434 externally to avoid conflicts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U czero -d codigozero"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis (BullMQ) ──
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6381:6379"  # 6381 externally to avoid conflicts
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    name: codigozero_pgdata
+  redisdata:
+    name: codigozero_redisdata

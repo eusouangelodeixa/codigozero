@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String           @id @default(uuid())
+  name               String
+  email              String           @unique
+  phone              String           @unique
+  passwordHash       String
+  isActive           Boolean          @default(true)
+  subscriptionStatus String           @default("active") // active, grace_period, overdue, canceled
+  subscriptionEnd    DateTime?
+  lojouOrderId       String?
+  lojouCustomerId    String?
+  dailySearchCount   Int              @default(0)
+  lastSearchDate     DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  leads          Lead[]
+  lessonProgress LessonProgress[]
+}
+
+model Lead {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String
+  address   String?
+  category  String
+  location  String
+  rating    Float?
+  website   String?
+  source    String   @default("google_maps")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Script {
+  id        String   @id @default(uuid())
+  title     String
+  category  String   // primeira_abordagem, negociacao, prompts_copy, follow_up, fechamento
+  content   String
+  icon      String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Module {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  icon        String?
+  sortOrder   Int      @default(0)
+  lessons     Lesson[]
+}
+
+model Lesson {
+  id          String   @id @default(uuid())
+  moduleId    String
+  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  videoUrl    String
+  duration    Int?     // seconds
+  sortOrder   Int      @default(0)
+  tools       Json?    // recommended tools
+  createdAt   DateTime @default(now())
+
+  progress LessonProgress[]
+
+  @@index([moduleId])
+}
+
+model LessonProgress {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String
+  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  userEmail     String?
+  userPhone     String?
+  userName      String?
+  amount        Float
+  currency      String   @default("MZN")
+  status        String   // pending, approved, failed, refunded
+  paymentMethod String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+}
+
+model SystemConfig {
+  id               String  @id @default("singleton")
+  maxUsers         Int     @default(50)
+  currentUsers     Int     @default(0)
+  communityLink    String?
+  mentoriaSchedule String? // next mentoria ISO datetime
+  mentoriaLink     String?
+}

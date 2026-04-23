@@ -1,0 +1,118 @@
+.page { animation: slideUp 0.3s ease forwards; }
+
+/* ── Section Header ── */
+.sectionHeader { margin-bottom: var(--space-8); }
+.sectionLabel {
+  font-size: var(--type-label); font-weight: 500; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-secondary); display: block; margin-bottom: var(--space-2);
+}
+.sectionTitle {
+  font-size: var(--type-h1); font-weight: 700; color: var(--text-primary);
+  letter-spacing: -0.03em; margin-bottom: var(--space-1);
+}
+.sectionDescription { font-size: var(--type-body); color: var(--text-tertiary); }
+
+/* ── Community Card ── */
+.communityCard {
+  background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid var(--border-default); border-radius: 12px;
+  padding: var(--card-padding-desktop); margin-bottom: var(--space-6);
+  transition: border-color 0.2s ease;
+}
+.communityCard:hover { border-color: var(--border-strong); }
+
+.communityHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
+
+.discordIcon {
+  width: 48px; height: 48px; border-radius: 8px;
+  background: #5865F2; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+.communityTitle { font-size: var(--type-h3); font-weight: 600; color: var(--text-primary); }
+.communityDesc { font-size: var(--type-small); color: var(--text-tertiary); margin-top: 2px; }
+
+.communityBtn {
+  display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-6);
+  background: var(--accent-primary); color: var(--accent-primary-fg);
+  font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease, transform 0.1s ease;
+  min-height: 44px; font-size: var(--type-body);
+}
+.communityBtn:hover { opacity: 0.9; }
+.communityBtn:active { transform: scale(0.98); }
+
+/* ── Mentoria Card ── */
+.mentoriaCard {
+  background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  border: 1px solid var(--border-default); border-radius: 12px;
+  padding: var(--card-padding-desktop); margin-bottom: var(--space-6);
+}
+
+.mentoriaHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
+.mentoriaIcon { font-size: 1.5rem; }
+.mentoriaTitle { font-size: var(--type-h3); font-weight: 600; color: var(--text-primary); }
+.mentoriaDesc { font-size: var(--type-small); color: var(--text-tertiary); margin-top: 2px; }
+
+/* ── Countdown (spec 9) ── */
+.countdownGrid {
+  display: flex; gap: var(--space-4); align-items: center;
+  justify-content: center; margin-bottom: var(--space-6);
+}
+
+.countdownItem {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+
+.countdownValue {
+  font-size: var(--type-h2); font-weight: 700; color: var(--text-primary);
+  font-variant-numeric: tabular-nums; font-family: var(--font-mono); line-height: 1;
+}
+
+.countdownLabel {
+  font-size: var(--type-label); color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+.countdownSep {
+  font-size: var(--type-h2); color: var(--text-tertiary);
+  margin-bottom: 12px; font-weight: 300;
+}
+
+.mentoriaBtn {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: var(--space-3) var(--space-6);
+  background: var(--accent-primary); color: var(--accent-primary-fg);
+  font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease, transform 0.1s ease;
+  min-height: 44px;
+}
+.mentoriaBtn:hover { opacity: 0.9; }
+.mentoriaBtn:active { transform: scale(0.98); }
+
+.noMentoria { text-align: center; padding: var(--space-6); color: var(--text-tertiary); font-size: var(--type-small); }
+
+/* ── Stats (Scarcity) ── */
+.statsCard {
+  background: var(--bg-glass); border: 1px solid var(--border-default); border-radius: 12px;
+  padding: var(--card-padding-desktop); display: flex; align-items: center; justify-content: center; gap: var(--space-8);
+}
+
+.statItem { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.statValue {
+  font-size: var(--type-h2); font-weight: 700; color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.statLabel {
+  font-size: var(--type-label); color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.statDivider { width: 1px; height: 40px; background: var(--border-subtle); }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  .sectionTitle { font-size: var(--type-h2); }
+  .countdownValue { font-size: var(--type-h3); }
+  .countdownGrid { gap: var(--space-2); }
+  .statsCard { flex-direction: column; gap: var(--space-4); }
+  .statDivider { width: 60px; height: 1px; }
+}

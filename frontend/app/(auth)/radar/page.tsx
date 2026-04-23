@@ -45,7 +45,7 @@ export default function RadarPage() {
     <div className={styles.page}>
       {/* Section Header */}
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}>O Radar</span>
+        <span className={styles.sectionLabel}>Radar</span>
         <h1 className={styles.sectionTitle}>Encontre seus leads em segundos</h1>
         <p className={styles.sectionDescription}>
           Informe o nicho e a localização. O sistema faz o resto.

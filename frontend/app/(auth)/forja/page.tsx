@@ -73,9 +73,9 @@ export default function ForjaPage() {
       )}
 
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}>A Forja</span>
+        <span className={styles.sectionLabel}>Aulas</span>
         <h1 className={styles.sectionTitle}>Domine o negócio de IA</h1>
-        <p className={styles.sectionDescription}>Assista as aulas e complete os módulos para desbloquear todo o potencial.</p>
+        <p className={styles.sectionDescription}>Assista as aulas e complete os módulos para avançar.</p>
       </div>
 
       <div className={styles.layout}>

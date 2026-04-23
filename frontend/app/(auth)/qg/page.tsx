@@ -36,8 +36,8 @@ export default function QGPage() {
   return (
     <div className={styles.page}>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}>O QG</span>
-        <h1 className={styles.sectionTitle}>Central de comando</h1>
+        <span className={styles.sectionLabel}>Comunidade</span>
+        <h1 className={styles.sectionTitle}>Sua rede de apoio</h1>
         <p className={styles.sectionDescription}>Comunidade, mentorias ao vivo e suporte direto.</p>
       </div>
 

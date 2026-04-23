@@ -7,10 +7,10 @@ import styles from "./auth.module.css";
 
 const navItems: { href: string; label: string; icon: (props: { size?: number; className?: string }) => ReactNode }[] = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
-  { href: "/radar", label: "O Radar", icon: RadarIcon },
-  { href: "/cofre", label: "O Cofre", icon: CofreIcon },
-  { href: "/forja", label: "A Forja", icon: ForjaIcon },
-  { href: "/qg", label: "O QG", icon: QGIcon },
+  { href: "/radar", label: "Radar", icon: RadarIcon },
+  { href: "/cofre", label: "Scripts", icon: CofreIcon },
+  { href: "/forja", label: "Aulas", icon: ForjaIcon },
+  { href: "/qg", label: "Comunidade", icon: QGIcon },
 ];
 
 interface User {

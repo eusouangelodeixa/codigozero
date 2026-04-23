@@ -47,7 +47,7 @@ export default function CofrePage() {
   return (
     <div className={styles.page}>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}>O Cofre</span>
+        <span className={styles.sectionLabel}>Scripts</span>
         <h1 className={styles.sectionTitle}>Scripts prontos para vender</h1>
         <p className={styles.sectionDescription}>Copie, adapte e feche seus primeiros clientes.</p>
       </div>

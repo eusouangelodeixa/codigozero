@@ -105,9 +105,9 @@ export default function DashboardPage() {
       {/* Quick Links */}
       <div className={styles.quickLinks}>
         {[
-          { href: "/cofre", icon: <CofreIcon size={20} />, title: "O Cofre", desc: "Scripts prontos para vender" },
-          { href: "/forja", icon: <ForjaIcon size={20} />, title: "A Forja", desc: "Domine o negócio de IA" },
-          { href: "/qg", icon: <QGIcon size={20} />, title: "O QG", desc: "Comunidade e mentorias" },
+          { href: "/cofre", icon: <CofreIcon size={20} />, title: "Scripts", desc: "Scripts prontos para vender" },
+          { href: "/forja", icon: <ForjaIcon size={20} />, title: "Aulas", desc: "Domine o negócio de IA" },
+          { href: "/qg", icon: <QGIcon size={20} />, title: "Comunidade", desc: "Discord e mentorias ao vivo" },
         ].map((item) => (
           <button
             key={item.href}

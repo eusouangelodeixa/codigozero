@@ -9,14 +9,15 @@ const prisma = new PrismaClient();
 const LOJOU_API = `${env.LOJOU_API_URL}/v1`;
 const LOJOU_KEY = env.LOJOU_API_KEY;
 
-// Código Zero product on Lojou
+// Código Zero product + plan on Lojou
 const PRODUCT_PID = process.env.LOJOU_PRODUCT_PID || 'uoEHz';
+const PLAN_ID = process.env.LOJOU_PLAN_ID || 'tbo8f';
 const PRODUCT_PRICE = 797;
 
 /**
  * POST /api/landing/lead
  * Capture lead data from landing page gate form.
- * Creates a Lojou order and returns checkout_url.
+ * Creates a Lojou subscription order and returns checkout_url.
  */
 router.post('/lead', async (req: Request, res: Response) => {
   try {
@@ -32,15 +33,13 @@ router.post('/lead', async (req: Request, res: Response) => {
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (user) {
-      // Update existing user
       user = await prisma.user.update({
         where: { id: user.id },
         data: { name },
       });
     } else {
-      // Check if phone already exists to avoid unique constraint error
       const phoneExists = await prisma.user.findUnique({ where: { phone: contactPhone } });
-      
+
       user = await prisma.user.create({
         data: {
           email,
@@ -52,7 +51,7 @@ router.post('/lead', async (req: Request, res: Response) => {
       });
     }
 
-    // Create Lojou order to get checkout_url
+    // Create Lojou order with plan_id for recurring checkout
     let checkoutUrl = '';
     if (LOJOU_KEY) {
       try {
@@ -64,6 +63,7 @@ router.post('/lead', async (req: Request, res: Response) => {
           },
           body: JSON.stringify({
             product_pid: PRODUCT_PID,
+            plan_id: PLAN_ID,
             amount: PRODUCT_PRICE,
             customer: {
               name,
@@ -74,19 +74,18 @@ router.post('/lead', async (req: Request, res: Response) => {
         });
 
         const orderData = await orderRes.json();
-        console.log('[Landing] Lojou response:', orderData.checkout_url ? 'OK' : JSON.stringify(orderData));
+        console.log('[Landing] Lojou:', orderData.checkout_url ? '✅ checkout OK' : JSON.stringify(orderData));
 
         if (orderData.checkout_url) {
           checkoutUrl = orderData.checkout_url;
 
-          // Save the order reference
           await prisma.user.update({
             where: { id: user.id },
             data: { lojouOrderId: orderData.order_number },
           });
         }
       } catch (e) {
-        console.error('[Landing] Lojou order creation failed:', e);
+        console.error('[Landing] Lojou error:', e);
       }
     }
 

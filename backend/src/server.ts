@@ -12,6 +12,7 @@ import webhookRoutes from './routes/webhook.routes';
 import landingRoutes from './routes/landing.routes';
 import adminRoutes from './routes/admin.routes';
 import { startCronJobs } from './jobs/cron';
+import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
 const app = express();
 

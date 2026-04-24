@@ -51,12 +51,10 @@ export const apiClient = {
   getMetrics: () => api('/api/dashboard/metrics'),
 
   // Radar
-  startSearch: (query: string, location: string) =>
-    api('/api/radar/search', { method: 'POST', body: JSON.stringify({ query, location }) }),
+  startSearch: (query: string, city: string) =>
+    api('/api/radar/start', { method: 'POST', body: JSON.stringify({ query, city }) }),
 
-  getSearchStatus: (jobId: string) => api(`/api/radar/status/${jobId}`),
-
-  getLeads: () => api('/api/radar/leads'),
+  getSearchHistory: () => api('/api/radar/history'),
 
   // Cofre
   getScripts: () => api('/api/cofre/scripts'),

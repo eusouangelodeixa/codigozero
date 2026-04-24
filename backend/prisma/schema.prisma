@@ -45,14 +45,26 @@ model Lead {
   @@index([userId])
 }
 
-model Script {
+model ScriptFolder {
   id        String   @id @default(uuid())
-  title     String
-  category  String   // primeira_abordagem, negociacao, prompts_copy, follow_up, fechamento
-  content   String
+  name      String
   icon      String?
   sortOrder Int      @default(0)
+  scripts   Script[]
   createdAt DateTime @default(now())
+}
+
+model Script {
+  id        String       @id @default(uuid())
+  title     String
+  content   String
+  icon      String?
+  sortOrder Int          @default(0)
+  folderId  String
+  folder    ScriptFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@index([folderId])
 }
 
 model Module {

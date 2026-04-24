@@ -180,9 +180,55 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 // SCRIPTS (CRUD)
 // ═══════════════════════════════════════
 
+router.get('/script-folders', async (_req: AuthRequest, res: Response) => {
+  try {
+    const folders = await prisma.scriptFolder.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: { scripts: { orderBy: { sortOrder: 'asc' } } }
+    });
+    res.json({ folders });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao carregar pastas de scripts' });
+  }
+});
+
+router.post('/script-folders', async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, icon, sortOrder } = req.body;
+    const folder = await prisma.scriptFolder.create({
+      data: { name, icon, sortOrder: sortOrder || 0 },
+    });
+    res.json({ folder });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao criar pasta de scripts' });
+  }
+});
+
+router.patch('/script-folders/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, icon, sortOrder } = req.body;
+    const folder = await prisma.scriptFolder.update({
+      where: { id: req.params.id },
+      data: { name, icon, sortOrder },
+    });
+    res.json({ folder });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao atualizar pasta de scripts' });
+  }
+});
+
+router.delete('/script-folders/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    await prisma.scriptFolder.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao remover pasta de scripts' });
+  }
+});
+
 router.get('/scripts', async (_req: AuthRequest, res: Response) => {
   try {
-    const scripts = await prisma.script.findMany({ orderBy: [{ category: 'asc' }, { sortOrder: 'asc' }] });
+    const scripts = await prisma.script.findMany({ orderBy: [{ folderId: 'asc' }, { sortOrder: 'asc' }] });
     res.json({ scripts });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar scripts' });
@@ -191,9 +237,9 @@ router.get('/scripts', async (_req: AuthRequest, res: Response) => {
 
 router.post('/scripts', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, category, content, icon, sortOrder } = req.body;
+    const { title, folderId, content, icon, sortOrder } = req.body;
     const script = await prisma.script.create({
-      data: { title, category, content, icon, sortOrder: sortOrder || 0 },
+      data: { title, folderId, content, icon, sortOrder: sortOrder || 0 },
     });
     res.json({ script });
   } catch (error) {
@@ -203,10 +249,10 @@ router.post('/scripts', async (req: AuthRequest, res: Response) => {
 
 router.patch('/scripts/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, category, content, icon, sortOrder } = req.body;
+    const { title, folderId, content, icon, sortOrder } = req.body;
     const script = await prisma.script.update({
       where: { id: req.params.id },
-      data: { title, category, content, icon, sortOrder },
+      data: { title, folderId, content, icon, sortOrder },
     });
     res.json({ script });
   } catch (error) {

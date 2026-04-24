@@ -9,18 +9,16 @@ const prisma = new PrismaClient();
 // GET /api/cofre/scripts
 router.get('/scripts', authMiddleware, subscriptionMiddleware, async (_req: AuthRequest, res: Response) => {
   try {
-    const scripts = await prisma.script.findMany({
-      orderBy: [{ category: 'asc' }, { sortOrder: 'asc' }],
+    const folders = await prisma.scriptFolder.findMany({
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        scripts: {
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
     });
 
-    // Group by category
-    const grouped = scripts.reduce((acc: Record<string, any[]>, script) => {
-      if (!acc[script.category]) acc[script.category] = [];
-      acc[script.category].push(script);
-      return acc;
-    }, {});
-
-    return res.json({ scripts: grouped });
+    return res.json({ folders });
   } catch (error) {
     console.error('[COFRE] Scripts error:', error);
     return res.status(500).json({ error: 'Erro ao carregar scripts' });

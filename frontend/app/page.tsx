@@ -260,19 +260,32 @@ export default function LandingPage() {
           </div>
 
           {/* VSL */}
-          <div className={styles.heroMedia} style={{ marginTop: "40px" }}>
-            {cfg.vslEmbedHtml ? (
-              <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(45,212,191,0.3)", width: "100%", background: "#000" }}
-                dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }} />
-            ) : (
-              <div className={styles.vslPlaceholder} style={{ borderRadius: 12, border: "1px solid rgba(45,212,191,0.15)" }}>
-                <div className={styles.vslPlayBtn}>
-                  <svg width="28" height="28" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-                </div>
-                <p className={styles.vslText}>{t("vslSubtitle")}</p>
-                <p className={styles.vslHint}>{t("vslHint")}</p>
+          <div className={styles.heroMedia}>
+            <div className={styles.vslWrapper}>
+              <div className={styles.vslBar}>
+                <span className={`${styles.vslDot} ${styles.vslDotR}`} />
+                <span className={`${styles.vslDot} ${styles.vslDotY}`} />
+                <span className={`${styles.vslDot} ${styles.vslDotG}`} />
+                <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
-            )}
+              
+              {cfg.vslEmbedHtml ? (
+                <iframe 
+                  src={cfg.vslEmbedHtml.match(/src=["'](.*?)["']/i)?.[1] || ""} 
+                  style={{ display: "block", width: "100%", aspectRatio: "16/9", border: "none", borderRadius: "0 0 12px 12px", minHeight: "300px" }} 
+                  allowFullScreen 
+                  title="Video Player"
+                />
+              ) : (
+                <div className={styles.vslPlaceholder}>
+                  <div className={styles.vslPlayBtn}>
+                    <svg width="28" height="28" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                  </div>
+                  <p className={styles.vslText}>{t("vslSubtitle")}</p>
+                  <p className={styles.vslHint}>{t("vslHint")}</p>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 

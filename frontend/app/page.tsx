@@ -269,10 +269,10 @@ export default function LandingPage() {
                 <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
               {cfg.vslEmbedHtml ? (
-                <div
-                  className={styles.vslEmbed}
-                  dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }}
-                />
+                <div style={{ position: "relative", width: "100%", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: "0 0 12px 12px" }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: cfg.vslEmbedHtml.replace(/<iframe/i, '<iframe style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"') 
+                  }} />
               ) : (
                 <div className={styles.vslPlaceholder}>
                   <div className={styles.vslPlayBtn}>

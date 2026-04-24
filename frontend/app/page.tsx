@@ -268,11 +268,14 @@ export default function LandingPage() {
                 <span className={`${styles.vslDot} ${styles.vslDotG}`} />
                 <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
+              
               {cfg.vslEmbedHtml ? (
-                <div style={{ position: "relative", width: "100%", paddingBottom: "56.25%", height: 0, overflow: "hidden", borderRadius: "0 0 12px 12px" }}
-                  dangerouslySetInnerHTML={{ 
-                    __html: cfg.vslEmbedHtml.replace(/<iframe/i, '<iframe style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"') 
-                  }} />
+                <iframe 
+                  src={cfg.vslEmbedHtml.match(/src=["'](.*?)["']/i)?.[1] || ""} 
+                  style={{ display: "block", width: "100%", aspectRatio: "16/9", border: "none", borderRadius: "0 0 12px 12px", minHeight: "300px" }} 
+                  allowFullScreen 
+                  title="Video Player"
+                />
               ) : (
                 <div className={styles.vslPlaceholder}>
                   <div className={styles.vslPlayBtn}>

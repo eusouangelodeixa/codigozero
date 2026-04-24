@@ -106,25 +106,7 @@ export default function QGPage() {
       </div>
       </div>
 
-      {/* Stats */}
-      {info?.stats && (
-        <div className={styles.statsCard}>
-          <div className={styles.statItem}>
-            <span className={styles.statValue}>{info.stats.currentUsers}</span>
-            <span className={styles.statLabel}>Membros</span>
-          </div>
-          <div className={styles.statDivider} />
-          <div className={styles.statItem}>
-            <span className={styles.statValue}>{info.stats.maxUsers}</span>
-            <span className={styles.statLabel}>Vagas</span>
-          </div>
-          <div className={styles.statDivider} />
-          <div className={styles.statItem}>
-            <span className={styles.statValue}>{info.stats.maxUsers - info.stats.currentUsers}</span>
-            <span className={styles.statLabel}>Restantes</span>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

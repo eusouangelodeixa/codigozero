@@ -75,11 +75,54 @@ const DEFAULTS = {
 
 export default function LandingPage() {
   const [gateOpen, setGateOpen] = useState<boolean | null>(null);
-  const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "" });
+  const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "", phoneCode: "+258", whatsappCode: "+258" });
   const [submitting, setSubmitting] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("#preco");
   const [cfg, setCfg] = useState<any>({});
   const [sec, setSec] = useState<any>({});
+  
+  // Survey states
+  const [surveyStep, setSurveyStep] = useState(1);
+  const [surveyAnswers, setSurveyAnswers] = useState<Record<string, string>>({});
+
+  const SURVEY_STEPS = [
+    {
+      id: 'goal',
+      title: 'Qual é o seu principal objetivo financeiro para os próximos 6 meses?',
+      options: [
+        { id: 'A', text: 'Ter uma renda extra segura de 10.000 a 20.000 MT mensais.' },
+        { id: 'B', text: 'Substituir minha renda atual e gerar 50.000 MT ou mais.' },
+        { id: 'C', text: 'Criar um negócio digital escalável e independente.' }
+      ]
+    },
+    {
+      id: 'pain',
+      title: 'O que tem te impedido de alcançar esse resultado até hoje?',
+      options: [
+        { id: 'A', text: 'Não sei programar e acho tecnologia muito complexo.' },
+        { id: 'B', text: 'Não tenho ideia do que vender ou como achar clientes.' },
+        { id: 'C', text: 'Já tentei mercado de afiliados/e-books e não funcionou.' },
+        { id: 'D', text: 'Não tenho dinheiro para investir em ferramentas caras de IA.' }
+      ]
+    },
+    {
+      id: 'commitment',
+      title: 'Se você tivesse acesso a um ecossistema que entrega os clientes e ferramentas que fazem o trabalho técnico por você, quanto tempo você se dedicaria?',
+      options: [
+        { id: 'A', text: '1 a 2 horas por dia.' },
+        { id: 'B', text: '3 a 4 horas por dia.' },
+        { id: 'C', text: 'O tempo que for necessário para dar certo.' }
+      ]
+    },
+    {
+      id: 'awareness',
+      title: 'Você sabia que hoje a demanda das empresas por automações é gigante, e que é possível criar tudo isso usando Inteligência Artificial sem digitar uma linha de código?',
+      options: [
+        { id: 'A', text: 'Sim, mas não sei por onde começar.' },
+        { id: 'B', text: 'Não, isso é totalmente novo para mim.' }
+      ]
+    }
+  ];
 
   const LEAD_VERSION = "v2";
 
@@ -136,13 +179,24 @@ export default function LandingPage() {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
     setSubmitting(true);
-    const leadRecord: Record<string, string> = { ...formData, savedAt: new Date().toISOString(), _v: LEAD_VERSION };
+    
+    // Concatenate phone code with number (Use whatsapp for both)
+    const finalWhatsapp = formData.whatsapp ? `${formData.whatsappCode}${formData.whatsapp.replace(/\D/g, '')}` : "";
+    
+    const payload = {
+      ...formData,
+      phone: finalWhatsapp,
+      whatsapp: finalWhatsapp,
+      surveyAnswers
+    };
+
+    const leadRecord: Record<string, any> = { ...payload, savedAt: new Date().toISOString(), _v: LEAD_VERSION };
     localStorage.setItem("cz_lead", JSON.stringify(leadRecord));
     try {
       const res = await fetch(`${API_URL}/api/landing/lead`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.success && data.checkoutUrl) {
@@ -157,6 +211,14 @@ export default function LandingPage() {
       setSubmitting(false);
       setGateOpen(false);
     }
+  };
+
+  const handleSurveyOptionClick = (questionId: string, optionText: string) => {
+    setSurveyAnswers(prev => ({ ...prev, [questionId]: optionText }));
+    // Move to next step smoothly
+    setTimeout(() => {
+      setSurveyStep(prev => prev + 1);
+    }, 250);
   };
 
   const scrollTo = (id: string) => {
@@ -191,18 +253,64 @@ export default function LandingPage() {
       {gateOpen === true && (
         <div className={styles.gate}>
           <div className={styles.gateInner}>
-            <Logo size={40} />
-            <h2 className={styles.gateTitle}>Bem-vindo ao Código Zero</h2>
-            <p className={styles.gateSubtitle}>Preencha seus dados para acessar a apresentação completa.</p>
-            <form className={styles.gateForm} onSubmit={handleGateSubmit}>
-              <input className={styles.gateInput} placeholder="Seu nome completo" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-              <input className={styles.gateInput} placeholder="Seu melhor e-mail" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
-              <input className={styles.gateInput} placeholder="Telefone (opcional)" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
-              <input className={styles.gateInput} placeholder="WhatsApp (opcional)" value={formData.whatsapp} onChange={e => setFormData({ ...formData, whatsapp: e.target.value })} />
-              <button className={styles.gateBtn} type="submit" disabled={submitting}>
-                {submitting ? "Processando..." : "Acessar Apresentação"}
-              </button>
-            </form>
+            {surveyStep <= 4 ? (
+              <div key={`step-${surveyStep}`} className={styles.surveyFadeIn}>
+                <div className={styles.gateSurveyHeader}>
+                  <span className={styles.gateSurveyStep}>PERGUNTA {surveyStep} DE 4</span>
+                  <h2 className={styles.gateSurveyTitle}>{SURVEY_STEPS[surveyStep - 1].title}</h2>
+                </div>
+                <div className={styles.surveyOptions}>
+                  {SURVEY_STEPS[surveyStep - 1].options.map(option => (
+                    <button 
+                      key={option.id}
+                      className={styles.surveyOptionBtn}
+                      onClick={() => handleSurveyOptionClick(SURVEY_STEPS[surveyStep - 1].id, option.text)}
+                    >
+                      <div className={styles.surveyOptionLetter}>{option.id}</div>
+                      <span>{option.text}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className={styles.surveyFadeIn}>
+                <Logo size={40} />
+                <h2 className={styles.gateTitle} style={{ marginTop: '16px' }}>Diagnóstico Concluído.</h2>
+                <p className={styles.gateSubtitle} style={{ marginBottom: '24px', fontSize: '14px' }}>
+                  Com base nas suas respostas, você tem o perfil ideal para o novo modelo de micronegócios de IA em Moçambique. Liberamos um vídeo restrito mostrando os bastidores.
+                </p>
+                <form className={styles.gateForm} onSubmit={handleGateSubmit}>
+                  <div>
+                    <label className={styles.gateLabel} style={{textTransform: 'none', letterSpacing: 'normal'}}>Nome Completo <span style={{color: '#888', fontWeight: 400}}>(Como devemos te chamar no sistema?)</span></label>
+                    <input className={styles.gateInput} placeholder="Seu nome completo" required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={styles.gateLabel} style={{textTransform: 'none', letterSpacing: 'normal'}}>E-mail Principal <span style={{color: '#888', fontWeight: 400}}>(Para envio do link seguro)</span></label>
+                    <input className={styles.gateInput} placeholder="Seu melhor e-mail" type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className={styles.gateLabel} style={{textTransform: 'none', letterSpacing: 'normal'}}>WhatsApp <span style={{color: '#888', fontWeight: 400}}>(Para suporte e materiais)</span></label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <select className={styles.gateInput} style={{ width: '120px', padding: '0 8px' }} value={formData.whatsappCode} onChange={e => setFormData({ ...formData, whatsappCode: e.target.value })}>
+                        <option value="+258">🇲🇿 +258</option>
+                        <option value="+244">🇦🇴 +244</option>
+                        <option value="+55">🇧🇷 +55</option>
+                        <option value="+351">🇵🇹 +351</option>
+                        <option value="+1">🇺🇸 +1</option>
+                      </select>
+                      <input className={styles.gateInput} style={{ flex: 1 }} placeholder="WhatsApp" required value={formData.whatsapp} onChange={e => setFormData({ ...formData, whatsapp: e.target.value })} />
+                    </div>
+                  </div>
+                  
+                  <button className={styles.gateSubmit} type="submit" disabled={submitting}>
+                    {submitting ? "Processando..." : "🔓 Desbloquear Meu Acesso ao Vídeo"}
+                  </button>
+                  <div className={styles.gateFooter}>
+                    🔒 Suas informações estão seguras. Privacidade total garantida.
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -401,6 +509,10 @@ export default function LandingPage() {
             <div>
               <div className={styles.footerLogo}><Logo size={20} /><span className={styles.footerBrand}>Código Zero</span></div>
               <p className={styles.footerDesc}>{t("footerDesc")}</p>
+              <a href="https://www.instagram.com/ocodigozero_/" target="_blank" rel="noopener noreferrer" className={styles.footerLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="5" /><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" /></svg>
+                @ocodigozero_
+              </a>
             </div>
             <div>
               <h4 className={styles.footerColTitle}>Links</h4>
@@ -415,8 +527,8 @@ export default function LandingPage() {
             <div>
               <h4 className={styles.footerColTitle}>Legal</h4>
               <div className={styles.footerLinks}>
-                <a href="#" className={styles.footerLink}>Termos de Uso</a>
-                <a href="#" className={styles.footerLink}>Privacidade</a>
+                <a href="/termos" className={styles.footerLink}>Termos de Uso</a>
+                <a href="/privacidade" className={styles.footerLink}>Privacidade</a>
               </div>
             </div>
           </div>

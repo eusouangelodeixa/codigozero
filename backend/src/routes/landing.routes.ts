@@ -21,7 +21,7 @@ const PRODUCT_PRICE = 797;
  */
 router.post('/lead', async (req: Request, res: Response) => {
   try {
-    const { name, phone, whatsapp, email } = req.body;
+    const { name, phone, whatsapp, email, surveyAnswers } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
@@ -35,7 +35,11 @@ router.post('/lead', async (req: Request, res: Response) => {
     if (user) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { name },
+        data: { 
+          name, 
+          remarketingStage: 'none',
+          ...(surveyAnswers && { surveyAnswers })
+        },
       });
     } else {
       const phoneExists = await prisma.user.findUnique({ where: { phone: contactPhone } });
@@ -47,6 +51,7 @@ router.post('/lead', async (req: Request, res: Response) => {
           phone: phoneExists ? `${contactPhone}_${Date.now()}` : contactPhone,
           passwordHash: crypto.randomBytes(32).toString('hex'),
           subscriptionStatus: 'lead',
+          ...(surveyAnswers && { surveyAnswers })
         },
       });
     }
@@ -81,7 +86,10 @@ router.post('/lead', async (req: Request, res: Response) => {
 
           await prisma.user.update({
             where: { id: user.id },
-            data: { lojouOrderId: orderData.order_number },
+            data: { 
+              lojouOrderId: orderData.order_number,
+              checkoutUrl: orderData.checkout_url 
+            },
           });
         }
       } catch (e) {

@@ -37,227 +37,78 @@ async function main() {
   });
   console.log('✅ Demo user created (demo@codigozero.app / demo1234)');
 
-  // ── Scripts (Cofre) ──
+  // ── Scripts & Folders (Cofre) ──
+  console.log('Seeding Script Folders and Scripts...');
+
+  // Create Folders
+  const folderAbordagem = await prisma.scriptFolder.upsert({
+    where: { id: 'folder-abordagem' },
+    update: { name: 'Abordagem Inicial', icon: '👋', sortOrder: 1 },
+    create: { id: 'folder-abordagem', name: 'Abordagem Inicial', icon: '👋', sortOrder: 1 },
+  });
+
+  const folderSemSite = await prisma.scriptFolder.upsert({
+    where: { id: 'folder-semsite' },
+    update: { name: 'Empresas Sem Site', icon: '🌐', sortOrder: 2 },
+    create: { id: 'folder-semsite', name: 'Empresas Sem Site', icon: '🌐', sortOrder: 2 },
+  });
+
+  const folderNegociacao = await prisma.scriptFolder.upsert({
+    where: { id: 'folder-negociacao' },
+    update: { name: 'Negociação e Objeções', icon: '💼', sortOrder: 3 },
+    create: { id: 'folder-negociacao', name: 'Negociação e Objeções', icon: '💼', sortOrder: 3 },
+  });
+
+  const folderFechamento = await prisma.scriptFolder.upsert({
+    where: { id: 'folder-fechamento' },
+    update: { name: 'Fechamento de Vendas', icon: '🤝', sortOrder: 4 },
+    create: { id: 'folder-fechamento', name: 'Fechamento de Vendas', icon: '🤝', sortOrder: 4 },
+  });
+
   const scripts = [
-    // Primeira Abordagem
     {
-      title: 'Abordagem Direta pelo WhatsApp',
-      category: 'primeira_abordagem',
-      icon: '💬',
+      title: 'Primeiro Contato (Frio)',
+      folderId: folderAbordagem.id,
+      icon: '🧊',
       sortOrder: 1,
-      content: `Olá [Nome do Dono], tudo bem?
-
-Eu estava pesquisando [nicho] aqui em [cidade] e encontrei o(a) [nome do negócio]. Achei o trabalho de vocês muito interessante!
-
-Eu trabalho com automações de atendimento por Inteligência Artificial, e percebi que posso ajudar o(a) [nome do negócio] a:
-
-✅ Responder clientes automaticamente 24h/dia
-✅ Agendar atendimentos sem precisar de uma recepcionista
-✅ Recuperar clientes que sumiram com mensagens inteligentes
-
-O melhor: tudo isso sem vocês precisarem entender nada de tecnologia. Eu configuro tudo para vocês.
-
-Posso mostrar como funciona em 5 minutos? É sem compromisso.`,
+      content: `Olá, equipe do(a) {{empresa}}! Tudo bem?\n\nMeu nome é Angelo e eu ajudo empresas no setor de vocês a automatizarem o atendimento no WhatsApp para nunca mais deixarem clientes esperando (e perderem vendas por demora).\n\nNotei que vocês têm um volume legal de buscas, mas não sei se já usam inteligência artificial para responder orçamentos 24h por dia.\n\nFaz sentido batermos um papo super rápido sobre como isso funciona? Prometo ser breve!`,
     },
     {
-      title: 'Abordagem por Valor Imediato',
-      category: 'primeira_abordagem',
+      title: 'Abordagem para Empresas Sem Site',
+      folderId: folderSemSite.id,
       icon: '🎯',
-      sortOrder: 2,
-      content: `Boa tarde, [Nome]! 
-
-Sou [seu nome] e ajudo [nicho] a triplicar o número de agendamentos usando um assistente virtual inteligente.
-
-Notei que o(a) [negócio] tem ótimas avaliações no Google, mas percebi uma oportunidade:
-
-→ Vocês poderiam estar convertendo muito mais visitantes em clientes com uma automação simples no WhatsApp.
-
-Tenho um caso de um(a) [nicho similar] aqui em [cidade] que saiu de 15 para 45 agendamentos/mês gastando ZERO a mais em marketing.
-
-Quer que eu te mostre como? Leva 3 minutos.`,
-    },
-    {
-      title: 'Abordagem Fria Profissional',
-      category: 'primeira_abordagem',
-      icon: '🏢',
-      sortOrder: 3,
-      content: `Prezado(a) [Nome],
-
-Meu nome é [seu nome], sou especialista em automações comerciais com IA. Trabalho com [nicho] que buscam otimizar seu atendimento e aumentar o faturamento sem aumentar equipe.
-
-Identifiquei que o(a) [negócio] tem um bom posicionamento na região de [cidade], e gostaria de apresentar uma solução que pode:
-
-1. Reduzir o tempo de resposta a clientes para menos de 30 segundos
-2. Automatizar agendamentos e confirmações
-3. Reativar clientes inativos automaticamente
-
-Seria possível agendar 10 minutos esta semana para uma demonstração personalizada?
-
-Atenciosamente,
-[Seu nome]`,
-    },
-    // Negociação
-    {
-      title: 'Quebrando Objeção de Preço',
-      category: 'negociacao',
-      icon: '💰',
       sortOrder: 1,
-      content: `Entendo perfeitamente sua preocupação com o investimento, [Nome].
-
-Deixa eu colocar em perspectiva:
-
-📊 Quanto custa contratar uma pessoa só pra responder WhatsApp? Mínimo 8.000 MT/mês, certo?
-
-O que eu ofereço:
-→ Funciona 24h/dia, 7 dias por semana (sem folga, sem atraso)
-→ Responde 100 pessoas ao mesmo tempo
-→ Nunca esquece de fazer follow-up
-
-E o investimento é apenas [valor] por mês. Menos que o salário de um estagiário.
-
-A pergunta real não é "posso pagar?", mas "posso continuar perdendo clientes por não responder rápido?"
-
-Posso ativar um teste de 7 dias pra você ver funcionando?`,
+      content: `Olá, pessoal do(a) {{empresa}}! Como estão?\n\nEu estava pesquisando sobre serviços na região e encontrei vocês no Google Maps. Vi que o perfil está super bem avaliado, mas notei que vocês ainda não têm um website próprio, o que faz muita gente desistir de entrar em contato.\n\nEu sou especialista em criar estruturas digitais de alta conversão. Em menos de 48h, consigo colocar uma Landing Page no ar para o(a) {{empresa}} que vai dobrar a quantidade de pessoas que clicam para o WhatsApp de vocês.\n\nGostariam de ver um rascunho sem compromisso de como ficaria a vossa página?`,
     },
     {
-      title: 'Quebrando Objeção "Preciso Pensar"',
-      category: 'negociacao',
-      icon: '🤔',
-      sortOrder: 2,
-      content: `Claro, [Nome], leva o tempo que precisar!
-
-Só quero te fazer uma pergunta rápida antes:
-
-Quantos clientes você acha que entraram em contato e não foram respondidos nos últimos 30 dias? 
-
-Cada um desses é dinheiro que saiu pela porta.
-
-O que eu costumo ver: enquanto o dono "pensa", o concorrente que já automatizou está respondendo os clientes em 10 segundos e fechando a venda.
-
-Mas sem pressão! Se quiser, posso te enviar um mini-relatório gratuito de como IA está transformando [nicho] em [cidade]. Assim você decide com mais informação.
-
-Posso mandar?`,
-    },
-    // Prompts de Copy
-    {
-      title: 'Prompt: Criar Bio Instagram para Negócio',
-      category: 'prompts_copy',
-      icon: '📱',
+      title: 'Quebrando a Objeção "Está Caro"',
+      folderId: folderNegociacao.id,
+      icon: '🛡️',
       sortOrder: 1,
-      content: `Prompt para ChatGPT/Claude:
-
-"Crie uma bio de Instagram profissional e atrativa para um negócio de [nicho] localizado em [cidade, Moçambique]. 
-
-A bio deve:
-- Ter no máximo 150 caracteres
-- Incluir 1-2 emojis estratégicos
-- Ter uma proposta de valor clara
-- Incluir um CTA (chamada para ação)
-- Transmitir autoridade e confiança
-
-Contexto: O negócio se chama [nome] e oferece [serviços principais]. O diferencial é [diferencial].
-
-Gere 5 opções diferentes."`,
+      content: `Entendo perfeitamente, [Nome do Cliente]. O valor pode parecer um investimento considerável num primeiro momento.\n\nMas vamos pensar juntos: quanto custa hoje o(a) {{empresa}} perder 1 ou 2 clientes por semana porque o WhatsApp demorou a responder? \n\nO nosso sistema não é um "custo", é como ter um funcionário de atendimento trabalhando 24 horas por dia, 7 dias por semana, sem férias e sem falhas, por uma fração mínima do salário de uma pessoa.\n\nSe o sistema te trouxer apenas 2 vendas a mais neste mês, ele já não se pagou e gerou lucro?`,
     },
     {
-      title: 'Prompt: Gerar Script de Atendimento',
-      category: 'prompts_copy',
-      icon: '🤖',
+      title: 'Follow-up Após Enviar Proposta',
+      folderId: folderNegociacao.id,
+      icon: '⏳',
       sortOrder: 2,
-      content: `Prompt para ChatGPT/Claude:
-
-"Crie um fluxo de atendimento automatizado por WhatsApp para um negócio de [nicho]. 
-
-O fluxo deve cobrir:
-1. Saudação inicial (boas-vindas + identificação da necessidade)
-2. Apresentação dos serviços (máximo 3 opções)
-3. Coleta de informações do cliente (nome, preferência de horário)
-4. Confirmação do agendamento
-5. Mensagem de acompanhamento pós-atendimento
-
-Regras:
-- Tom de voz: profissional mas amigável
-- Mensagens curtas (máximo 3 linhas cada)
-- Incluir emojis com moderação
-- Oferecer opção de falar com humano em qualquer etapa
-- Contexto: Moçambique, preços em Meticais (MT)
-
-Formate como um fluxograma com as mensagens prontas para copiar."`,
+      content: `Olá, [Nome do Cliente], bom dia!\n\nTudo certo no(a) {{empresa}}?\n\nConseguiu dar uma olhada na proposta de automação que enviei ontem? Sei que a rotina é corrida!\n\nSe quiser, posso te ligar por 5 minutinhos apenas para tirar dúvidas rápidas. Como está sua agenda para hoje à tarde?`,
     },
-    // Follow-up
     {
-      title: 'Follow-up Dia Seguinte',
-      category: 'follow_up',
-      icon: '📩',
+      title: 'Fechamento Direto (Link de Pagamento)',
+      folderId: folderFechamento.id,
+      icon: '⚡',
       sortOrder: 1,
-      content: `Olá [Nome], bom dia!
-
-Ontem conversamos sobre a automação de atendimento para o(a) [negócio]. 
-
-Fiquei pensando no seu caso e preparei uma simulação rápida de como ficaria o fluxo de atendimento automático do(a) [negócio].
-
-[Enviar print/vídeo da simulação]
-
-O que achou? Posso te explicar melhor qualquer parte.
-
-Se preferir, posso agendar uma ligação rápida de 5 minutos para tirar suas dúvidas. Qual horário fica melhor pra você?`,
-    },
-    {
-      title: 'Follow-up Após Silêncio (5 dias)',
-      category: 'follow_up',
-      icon: '🔔',
-      sortOrder: 2,
-      content: `[Nome], tudo certo por aí?
-
-Sei que a rotina é corrida, mas não queria deixar de compartilhar isso:
-
-Um(a) [nicho similar] aqui em [cidade] implementou o atendimento automático semana passada e já:
-
-📈 Aumentou 40% nos agendamentos
-⏱️ Reduziu o tempo de resposta de 2h para 15 segundos  
-💬 Atendeu 127 clientes em 7 dias sem contratar ninguém
-
-Ainda faz sentido pra você explorar essa possibilidade para o(a) [negócio]?
-
-Se sim, tenho um horário amanhã às [horário]. Se não, sem problemas — fico à disposição para quando precisar! 🙏`,
-    },
-    // Fechamento
-    {
-      title: 'Proposta de Fechamento Express',
-      category: 'fechamento',
-      icon: '🤝',
-      sortOrder: 1,
-      content: `[Nome], que bom que faz sentido pra você!
-
-Aqui está o resumo da proposta:
-
-📋 O que está incluso:
-✅ Chatbot inteligente para WhatsApp (atendimento 24h)
-✅ Sistema de agendamento automático
-✅ Respostas personalizadas para o(a) [negócio]
-✅ Suporte e ajustes nos primeiros 30 dias
-✅ Treinamento de 15min para sua equipe
-
-💰 Investimento: [valor] MT/mês
-(Menos que o custo de 1 hora de trabalho por dia de um funcionário)
-
-⚡ Prazo de ativação: 48 horas
-
-🔒 Garantia: Se em 30 dias você não ver resultado, devolvemos 100% do valor.
-
-Para começar, preciso apenas:
-1. Confirmação por aqui
-2. Acesso ao WhatsApp Business do(a) [negócio]
-
-Posso dar início hoje?`,
-    },
+      content: `Perfeito, [Nome do Cliente]! Fico muito feliz que vamos avançar juntos. O(a) {{empresa}} vai dar um salto no atendimento.\n\nPara darmos início imediato ao setup do vosso sistema, vou deixar aqui o link de pagamento da primeira mensalidade/setup.\n\n🔗 [SEU LINK DE PAGAMENTO AQUI]\n\nAssim que o pagamento for confirmado, crio o grupo no WhatsApp com a nossa equipa técnica para iniciarmos a configuração do seu robô hoje mesmo.\n\nQualquer dúvida, estou à disposição!`,
+    }
   ];
 
   for (const script of scripts) {
+    const id = script.title.toLowerCase().replace(/\s+/g, '-').slice(0, 36);
     await prisma.script.upsert({
-      where: { id: script.title.toLowerCase().replace(/\s+/g, '-').slice(0, 36) },
-      update: script,
-      create: script,
+      where: { id },
+      update: { ...script },
+      create: { id, ...script },
     });
   }
   console.log(`✅ ${scripts.length} scripts created`);

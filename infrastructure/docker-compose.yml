@@ -30,6 +30,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - NODE_ENV=production
       - MAX_DAILY_SEARCHES=10
+      - KOMUNIKA_API_URL=${KOMUNIKA_API_URL:-https://api.komunika.site}
     depends_on:
       db:
         condition: service_healthy

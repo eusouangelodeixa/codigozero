@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import { env } from './config/env';
@@ -11,13 +12,16 @@ import qgRoutes from './routes/qg.routes';
 import webhookRoutes from './routes/webhook.routes';
 import landingRoutes from './routes/landing.routes';
 import adminRoutes from './routes/admin.routes';
+import chatRoutes from './routes/chat.routes';
 import { startCronJobs } from './jobs/cron';
 import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
 const app = express();
 
 // ── Security & Parsing ──
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(cors({
   origin: env.FRONTEND_URL,
   credentials: true,
@@ -26,6 +30,9 @@ app.use(cors({
 // Webhook route needs raw body for signature verification
 app.use('/api/webhooks', express.raw({ type: 'application/json' }));
 app.use(express.json());
+
+// ── Static uploads ──
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ── Routes ──
 app.use('/api/auth', authRoutes);
@@ -36,6 +43,7 @@ app.use('/api/forja', forjaRoutes);
 app.use('/api/qg', qgRoutes);
 app.use('/api/landing', landingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // ── Health Check ──

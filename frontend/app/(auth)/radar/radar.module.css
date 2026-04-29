@@ -213,12 +213,58 @@
 .modalClose:hover { background: var(--bg-glass); color: var(--text-primary); }
 .modalBody { overflow-y: auto; }
 
+/* ── Mobile Cards (hidden by default) ── */
+.mobileCards { display: none; flex-direction: column; gap: 12px; }
+
+.leadCard {
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border-default);
+  border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  animation: slideUp 0.2s ease forwards;
+}
+
+.leadCardHeader {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+}
+
+.leadCardBody {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .inputRow { grid-template-columns: 1fr; }
   .searchBtn { justify-content: center; }
+
+  /* Hide table, show cards */
+  .tableWrapper { display: none !important; }
+  .mobileCards { display: flex !important; }
+
+  .modal {
+    width: 100%; max-width: none; max-height: 92vh;
+    top: auto; bottom: 0; left: 0;
+    transform: none; border-radius: 16px 16px 0 0;
+  }
+
+  .modalHeader {
+    padding: 16px; flex-direction: column; align-items: flex-start; gap: 12px;
+  }
+
+  .modalHeader > div:first-child { width: 100%; }
+  .modalTitle { font-size: 1rem; }
+
+  .modalBody {
+    max-height: 50vh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px !important;
+  }
+
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { white-space: nowrap; font-size: 0.75rem; padding: 6px 12px; min-height: 34px; }
+
+  .sectionTitle { font-size: 1.25rem; }
 }
 
 @media (max-width: 480px) {
-  .table { min-width: 500px; }
+  .sectionTitle { font-size: 1.1rem; }
+  .sectionDescription { font-size: 0.8rem; }
 }

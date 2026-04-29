@@ -160,3 +160,22 @@ ul, ol { list-style: none; }
 .copy-toast.visible {
   opacity: 1; transform: translateX(-50%) translateY(0);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE UTILITIES — Settings Pages
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+  .settings-card {
+    padding: 16px !important;
+  }
+  .btn-row-responsive {
+    flex-direction: column !important;
+  }
+  .btn-row-responsive > * {
+    width: 100% !important;
+  }
+}

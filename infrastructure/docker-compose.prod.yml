@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # ── Frontend (Next.js) ──
+  czero_frontend:
+    container_name: czero_frontend_prod
+    build:
+      context: ../frontend
+      dockerfile: ../infrastructure/Dockerfile.frontend
+      args:
+        - NEXT_PUBLIC_API_URL=https://app.eusouangelodeixa.com
+    restart: unless-stopped
+    networks:
+      - czero-network
+
+  # ── Backend (Express.js) ──
+  czero_backend:
+    container_name: czero_backend_prod
+    build:
+      context: ../backend
+      dockerfile: ../infrastructure/Dockerfile.backend
+    environment:
+      - DATABASE_URL=postgresql://czero:${DB_PASSWORD}@czero_db:5432/codigozero
+      - REDIS_URL=redis://czero_redis:6379
+      - LOJOU_API_KEY=${LOJOU_API_KEY}
+      - LOJOU_API_URL=${LOJOU_API_URL:-https://api.lojou.app}
+      - LOJOU_PRODUCT_PID=${LOJOU_PRODUCT_PID:-uoEHz}
+      - LOJOU_PLAN_ID=${LOJOU_PLAN_ID:-tbo8f}
+      - LOJOU_WEBHOOK_SECRET=${LOJOU_WEBHOOK_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
+      - FRONTEND_URL=https://app.eusouangelodeixa.com
+      - NODE_ENV=production
+      - PORT=4000
+      - MAX_DAILY_SEARCHES=${MAX_DAILY_SEARCHES:-10}
+      - KOMUNIKA_API_URL=${KOMUNIKA_API_URL:-https://api.komunika.site}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@eusouangelodeixa.com}
+    depends_on:
+      czero_db:
+        condition: service_healthy
+      czero_redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - czero-network
+
+  # ── PostgreSQL 16 ──
+  czero_db:
+    container_name: czero_db_prod
+    image: postgres:16-alpine
+    volumes:
+      - czero_pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: codigozero
+      POSTGRES_USER: czero
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U czero -d codigozero"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - czero-network
+
+  # ── Redis (BullMQ) ──
+  czero_redis:
+    container_name: czero_redis_prod
+    image: redis:7-alpine
+    volumes:
+      - czero_redisdata:/data
+    restart: unless-stopped
+    networks:
+      - czero-network
+
+networks:
+  czero-network:
+    name: czero-network
+    driver: bridge
+
+volumes:
+  czero_pgdata:
+    name: czero_pgdata
+  czero_redisdata:
+    name: czero_redisdata

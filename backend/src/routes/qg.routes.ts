@@ -1,12 +1,13 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
+import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
 
 // GET /api/qg/info
-router.get('/info', authMiddleware, async (_req: AuthRequest, res: Response) => {
+router.get('/info', authMiddleware, subscriptionMiddleware, async (_req: AuthRequest, res: Response) => {
   try {
     let config = await prisma.systemConfig.findUnique({ where: { id: 'singleton' } });
 

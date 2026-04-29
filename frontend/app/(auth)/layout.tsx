@@ -2,15 +2,24 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { DashboardIcon, RadarIcon, CofreIcon, ForjaIcon, QGIcon } from "@/components/Icons";
+import { DashboardIcon, RadarIcon, CofreIcon, ForjaIcon, QGIcon, ChatIcon, DisparadorIcon, SubscriptionIcon, IntegrationIcon } from "@/components/Icons";
+import { subscribeToPush } from "@/lib/pushNotifications";
 import styles from "./auth.module.css";
 
 const navItems: { href: string; label: string; icon: (props: { size?: number; className?: string }) => ReactNode }[] = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/radar", label: "Radar", icon: RadarIcon },
+  { href: "/disparador", label: "Disparador", icon: DisparadorIcon },
   { href: "/cofre", label: "Scripts", icon: CofreIcon },
   { href: "/forja", label: "Aulas", icon: ForjaIcon },
   { href: "/qg", label: "Comunidade", icon: QGIcon },
+  { href: "/chat", label: "Chat", icon: ChatIcon },
+];
+
+const settingsItems: { href: string; label: string; icon: (props: { size?: number; className?: string }) => ReactNode }[] = [
+  { href: "/assinatura", label: "Assinatura", icon: SubscriptionIcon },
+  { href: "/integracoes", label: "Integrações", icon: IntegrationIcon },
+  { href: "/instalar", label: "Instalar App", icon: ({ size = 18 }: { size?: number; className?: string }) => <span style={{ fontSize: size }}>📲</span> },
 ];
 
 interface User {
@@ -19,6 +28,8 @@ interface User {
   email: string;
   role?: string;
   subscriptionStatus: string;
+  avatarUrl?: string;
+  hasCompletedOnboarding?: boolean;
 }
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -60,6 +71,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         if (data?.user) {
           setUser(data.user);
           localStorage.setItem("cz_user", JSON.stringify(data.user));
+          // Register push notifications (non-blocking)
+          subscribeToPush().catch(() => {});
+          // Redirect to onboarding if not completed
+          if (!data.user.hasCompletedOnboarding && !window.location.pathname.startsWith("/onboarding")) {
+            router.replace("/onboarding");
+          }
         }
       })
       .catch(() => {});
@@ -114,55 +131,80 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           ))}
         </nav>
 
+        {/* Thin divider — no section label */}
+        <div style={{ margin: '4px 12px', borderTop: '1px solid rgba(255,255,255,0.04)' }} />
+
+        <nav className={styles.nav}>
+          {settingsItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className={`${styles.navItem} ${pathname === item.href ? styles.navItemActive : ""}`}
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(item.href);
+              }}
+            >
+              <span className={styles.navIcon}><item.icon size={18} /></span>
+              <span className={styles.navLabel}>{item.label}</span>
+            </a>
+          ))}
+        </nav>
+
+        {/* ── Footer: user card ── */}
         <div className={styles.sidebarFooter}>
-          <div className={styles.userInfo}>
-            <div className={styles.userAvatar}>
-              {user?.name?.charAt(0)?.toUpperCase() || "?"}
+          <a
+            href="/perfil"
+            onClick={(e) => { e.preventDefault(); router.push('/perfil'); }}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, cursor: 'pointer', borderRadius: '8px', padding: '6px 8px', transition: 'background 0.15s', textDecoration: 'none' }}
+            onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+            onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div className={styles.userAvatar} style={user?.avatarUrl ? { padding: 0, overflow: 'hidden' } : {}}>
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl.startsWith('/') ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}${user.avatarUrl}` : user.avatarUrl}
+                  alt=""
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                />
+              ) : (
+                user?.name?.charAt(0)?.toUpperCase() || "?"
+              )}
             </div>
             <div className={styles.userDetails}>
-              <span className={styles.userName}>{user?.name || "Membro"}</span>
-              <span className={styles.userPlan}>Ativo</span>
-            </div>
-          </div>
-
-          {/* Profile & Admin links */}
-          <div style={{ borderTop: '1px solid rgba(45,212,191,0.08)', padding: '8px 0' }}>
-            <a
-              href="/perfil"
-              className={`${styles.navItem} ${pathname === '/perfil' ? styles.navItemActive : ''}`}
-              onClick={(e) => { e.preventDefault(); router.push('/perfil'); }}
-            >
-              <span className={styles.navIcon}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" />
-                </svg>
+              <span className={styles.userName}>{user?.name?.split(' ')[0] || "Membro"}</span>
+              <span className={styles.userPlan}>
+                {user?.role === 'admin' ? 'Admin' : 'Membro'}
               </span>
-              <span className={styles.navLabel}>Meu Perfil</span>
-            </a>
-            {user?.role === 'admin' && (
-              <a
-                href="/admin"
-                className={styles.navItem}
-                onClick={(e) => { e.preventDefault(); router.push('/admin'); }}
-                style={{ color: '#2DD4BF' }}
-              >
-                <span className={styles.navIcon}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </span>
-                <span className={styles.navLabel}>Admin Panel</span>
-              </a>
-            )}
-          </div>
+            </div>
+          </a>
 
-          <button onClick={logout} className={styles.logoutBtn} title="Sair">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => router.push('/admin')}
+                title="Admin Panel"
+                style={{
+                  padding: '6px', borderRadius: '6px', color: '#2DD4BF', cursor: 'pointer',
+                  transition: 'background 0.15s', width: '32px', height: '32px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                onMouseOver={e => e.currentTarget.style.background = 'rgba(45,212,191,0.08)'}
+                onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </button>
+            )}
+            <button onClick={logout} className={styles.logoutBtn} title="Sair">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          </div>
         </div>
       </aside>
 

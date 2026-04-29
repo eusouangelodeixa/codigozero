@@ -1,0 +1,134 @@
+/* ═══════════════════════════════════════════
+   Blocked — Subscription Expired Page
+   ═══════════════════════════════════════════ */
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--bg-base);
+}
+
+.container {
+  max-width: 460px;
+  width: 100%;
+  text-align: center;
+}
+
+.icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto var(--space-6);
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon svg {
+  width: 32px;
+  height: 32px;
+  stroke: #EF4444;
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.title {
+  font-size: var(--type-h1);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+  line-height: 1.2;
+}
+
+.message {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--space-8);
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: var(--type-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-6);
+}
+
+.statusOverdue {
+  background: rgba(245, 158, 11, 0.1);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.statusCanceled {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.renewBtn {
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--type-body);
+  font-weight: 600;
+  transition: opacity 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.renewBtn:hover {
+  opacity: 0.9;
+}
+
+.logoutBtn {
+  padding: 12px 24px;
+  border-radius: 10px;
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  font-size: var(--type-small);
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.logoutBtn:hover {
+  background: var(--bg-glass-hover);
+  color: var(--text-primary);
+}
+
+.help {
+  margin-top: var(--space-6);
+  font-size: var(--type-label);
+  color: var(--text-tertiary);
+}
+
+.helpLink {
+  color: var(--accent);
+  font-weight: 500;
+  transition: opacity 0.15s ease;
+}
+
+.helpLink:hover {
+  opacity: 0.8;
+}

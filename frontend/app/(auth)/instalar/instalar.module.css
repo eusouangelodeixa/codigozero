@@ -1,0 +1,149 @@
+.installPage {
+  padding: 24px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.installTitle {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.installDesc {
+  font-size: 0.95rem;
+  color: var(--text-tertiary);
+  margin-bottom: 32px;
+  line-height: 1.6;
+}
+
+.platformPicker {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.platformBtn {
+  flex: 1;
+  padding: 24px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.platformBtn:hover {
+  border-color: rgba(45, 212, 191, 0.3);
+  transform: translateY(-2px);
+}
+
+.platformBtnActive {
+  border-color: #2DD4BF;
+  background: rgba(45, 212, 191, 0.06);
+  box-shadow: 0 0 20px rgba(45, 212, 191, 0.08);
+}
+
+.platformIcon {
+  font-size: 2.5rem;
+}
+
+.platformLabel {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stepsContainer {
+  animation: fadeSlide 0.4s ease;
+}
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stepCard {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  margin-bottom: 12px;
+  align-items: flex-start;
+}
+
+.stepNumber {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2DD4BF, #14b8a6);
+  color: #0A0A0A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.stepContent {
+  flex: 1;
+}
+
+.stepTitle {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.stepText {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.stepHighlight {
+  display: inline;
+  background: rgba(45, 212, 191, 0.1);
+  color: #2DD4BF;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.doneBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  margin-top: 24px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2DD4BF, #14b8a6);
+  color: #0A0A0A;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.doneBtn:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 600px) {
+  .installPage { padding: 16px; }
+  .platformPicker { flex-direction: column; gap: 12px; }
+  .stepCard { padding: 14px; gap: 12px; }
+}

@@ -18,14 +18,25 @@ model User {
   subscriptionStatus String           @default("active") // active, grace_period, overdue, canceled
   subscriptionEnd    DateTime?
   lojouOrderId       String?
+  checkoutUrl        String?
   lojouCustomerId    String?
   dailySearchCount   Int              @default(0)
   lastSearchDate     DateTime?
+  komunikaApiKey     String?
+  komunikaInstanceId String?
+  remarketingStage   String           @default("none") // none, visitor_sent, checkout_failed_sent
+  surveyAnswers      Json?
+  avatarUrl          String?
+  hasCompletedOnboarding Boolean @default(false)
+  lastExpirationAlert DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  leads          Lead[]
-  lessonProgress LessonProgress[]
+  leads              Lead[]
+  lessonProgress     LessonProgress[]
+  chatMessages       ChatMessage[]
+  dispatchLogs       DispatchLog[]
+  pushSubscriptions  PushSubscription[]
 }
 
 model Lead {
@@ -123,12 +134,18 @@ model Transaction {
 }
 
 model SystemConfig {
-  id               String  @id @default("singleton")
-  maxUsers         Int     @default(50)
-  currentUsers     Int     @default(0)
-  communityLink    String?
-  mentoriaSchedule String? // next mentoria ISO datetime
-  mentoriaLink     String?
+  id                       String  @id @default("singleton")
+  maxUsers                 Int     @default(50)
+  currentUsers             Int     @default(0)
+  communityLink            String?
+  mentoriaSchedule         String? // next mentoria ISO datetime
+  mentoriaLink             String?
+  komunikaVisitorFunnelId  String?
+  komunikaCheckoutFunnelId String?
+  komunikaAdminApiKey      String?
+  komunikaInstanceId       String? // Komunika WhatsApp instance ID
+  milestoneAlertPhone      String?
+  milestoneAlertName       String?
 }
 
 model LandingConfig {
@@ -171,4 +188,70 @@ model ScrapedLead {
   createdAt   DateTime @default(now())
 
   @@index([jobId])
+}
+
+model ChatMessage {
+  id        String    @id @default(uuid())
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  channel   String    // "community" or "support_{userId}"
+  content   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([channel, createdAt])
+  @@index([senderId])
+}
+
+model DispatchLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone       String
+  contactName String?
+  message     String
+  status      String   @default("sent") // sent, failed
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Coupon {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  type          String   @default("percentage") // percentage, fixed
+  value         Float
+  maxUses       Int      @default(1)
+  usesCount     Int      @default(0)
+  active        Boolean  @default(true)
+  lojouId       String?  // ID returned from Lojou after creation
+  linkedUserId  String?  // optional: linked to specific user
+  linkedUserEmail String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PlatformMilestone {
+  id          String    @id @default(uuid())
+  category    String    // "revenue" | "subscribers"
+  targetValue Float
+  reached     Boolean   @default(false)
+  reachedAt   DateTime?
+  notified    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@unique([category, targetValue])
 }

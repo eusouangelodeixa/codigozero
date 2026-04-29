@@ -1,0 +1,474 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); color: var(--color-text-primary); }
+
+  .spec-title {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--color-text-secondary); padding: 0 0 6px; border-bottom: 0.5px solid var(--color-border-tertiary);
+    margin-bottom: 18px;
+  }
+  .section { margin-bottom: 28px; }
+  .section-label {
+    font-size: 13px; font-weight: 500; color: var(--color-text-secondary);
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;
+  }
+
+  /* ── LAYOUT OVERVIEW ── */
+  .layout-overview {
+    display: flex; gap: 0; border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg); overflow: hidden; height: 220px;
+  }
+  .sidebar-col {
+    width: 56px; min-width: 56px; background: var(--color-background-secondary);
+    border-right: 0.5px solid var(--color-border-tertiary);
+    display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 0;
+  }
+  .sidebar-icon {
+    width: 32px; height: 32px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 500;
+    color: var(--color-text-secondary);
+    margin-bottom: 6px;
+  }
+  .sidebar-icon.active { background: var(--color-background-info); color: var(--color-text-info); }
+  .sidebar-arrow {
+    font-size: 10px; color: var(--color-text-tertiary); margin-bottom: 12px;
+  }
+  .sidebar-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--color-border-secondary); margin-top: auto;
+  }
+  .main-col { flex: 1; display: flex; flex-direction: column; }
+  .hero-zone {
+    flex: 0 0 55%; background: var(--color-background-secondary);
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    display: flex; align-items: center; padding: 12px 16px; position: relative;
+    gap: 8px;
+  }
+  .hero-welcome { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-tertiary); }
+  .hero-center-placeholder {
+    width: 60px; height: 80px; background: var(--color-border-tertiary);
+    border-radius: 4px; margin: 0 auto; opacity: 0.4;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .hero-title { font-size: 18px; font-weight: 700; line-height: 1.05; text-align: right; letter-spacing: -0.02em; color: var(--color-text-secondary); }
+  .hero-title span { display: block; font-size: 13px; font-weight: 400; }
+  .hero-deco {
+    position: absolute; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--color-background-info); opacity: 0.25;
+  }
+  .hero-deco.tl { top: 0; left: 0; border-radius: 0 0 50% 0; }
+  .hero-deco.br { bottom: 0; right: 0; border-radius: 50% 0 0 0; }
+
+  .content-zone { flex: 1; padding: 10px 14px; }
+  .section-tag { font-size: 9px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 8px; }
+  .cards-row { display: flex; gap: 6px; }
+  .card-mini {
+    width: 52px; min-width: 52px; height: 56px; border-radius: 4px;
+    background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary);
+    display: flex; flex-direction: column;
+  }
+  .card-mini-img { flex: 1; background: var(--color-border-tertiary); border-radius: 4px 4px 0 0; opacity: 0.5; }
+  .card-mini-text { height: 14px; border-radius: 0 0 4px 4px; background: var(--color-background-tertiary); display: flex; align-items: center; justify-content: center; }
+  .card-mini-text span { font-size: 6px; font-weight: 700; color: var(--color-text-secondary); }
+
+  /* ── MEASUREMENT TABLE ── */
+  .meas-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .meas-table th {
+    text-align: left; font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--color-text-secondary);
+    padding: 6px 10px; border-bottom: 0.5px solid var(--color-border-tertiary);
+  }
+  .meas-table td { padding: 7px 10px; border-bottom: 0.5px solid var(--color-border-tertiary); vertical-align: top; }
+  .meas-table tr:last-child td { border-bottom: none; }
+  .meas-table .zone { font-weight: 500; white-space: nowrap; }
+  .val { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-info); background: var(--color-background-info); padding: 2px 6px; border-radius: 4px; display: inline-block; margin: 1px 2px 1px 0; }
+  .note { font-size: 11px; color: var(--color-text-secondary); }
+
+  /* ── CONSTRAINT BLOCKS ── */
+  .constraint-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .constraint-card {
+    background: var(--color-background-secondary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-md);
+    padding: 12px 14px;
+  }
+  .constraint-card.warn { border-left: 2px solid var(--color-border-warning); }
+  .constraint-card.info { border-left: 2px solid var(--color-border-info); }
+  .constraint-card.danger { border-left: 2px solid var(--color-border-danger); }
+  .constraint-card.success { border-left: 2px solid var(--color-border-success); }
+  .c-head { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .c-head.warn { color: var(--color-text-warning); }
+  .c-head.info { color: var(--color-text-info); }
+  .c-head.danger { color: var(--color-text-danger); }
+  .c-head.success { color: var(--color-text-success); }
+  .c-list { font-size: 12px; color: var(--color-text-secondary); line-height: 1.7; }
+
+  /* ── MODULE CARD ANATOMY ── */
+  .card-anatomy {
+    display: flex; gap: 20px; align-items: flex-start;
+  }
+  .card-demo {
+    width: 120px; min-width: 120px; height: 148px;
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: 6px; overflow: hidden; position: relative;
+    background: var(--color-background-secondary);
+  }
+  .card-demo-img { width: 100%; height: 100%; background: var(--color-background-tertiary); position: absolute; }
+  .card-demo-mod { position: absolute; top: 8px; left: 0; right: 0; text-align: center; font-size: 9px; font-weight: 400; color: var(--color-text-tertiary); letter-spacing: 0.05em; }
+  .card-demo-title {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--color-background-secondary); padding: 6px 8px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; line-height: 1.2;
+  }
+  .card-demo-title span { color: var(--color-text-info); }
+  .anno-list { flex: 1; font-size: 12px; color: var(--color-text-secondary); }
+  .anno-row { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .anno-row:last-child { border-bottom: none; }
+  .anno-key { font-weight: 500; color: var(--color-text-primary); white-space: nowrap; min-width: 90px; font-size: 11px; }
+  .anno-val { color: var(--color-text-secondary); font-size: 11px; }
+
+  /* ── SIDEBAR ANATOMY ── */
+  .sidebar-demo {
+    width: 56px; height: 200px; background: var(--color-background-secondary);
+    border: 0.5px solid var(--color-border-tertiary); border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; padding: 8px 0;
+  }
+
+  /* ── HERO ZONES ── */
+  .hero-breakdown {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+  }
+  .hero-zone-card {
+    background: var(--color-background-secondary);
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-md);
+    padding: 12px;
+  }
+  .hz-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-secondary); margin-bottom: 6px; }
+  .hz-content { font-size: 11px; color: var(--color-text-secondary); line-height: 1.6; }
+  hz-content .val { font-size: 10px; }
+
+  /* ── DO / DON'T ── */
+  .do-dont { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .do-card { background: var(--color-background-success); border: 0.5px solid var(--color-border-success); border-radius: var(--border-radius-md); padding: 12px 14px; }
+  .dont-card { background: var(--color-background-danger); border: 0.5px solid var(--color-border-danger); border-radius: var(--border-radius-md); padding: 12px 14px; }
+  .dd-head { font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+  .do-card .dd-head { color: var(--color-text-success); }
+  .dont-card .dd-head { color: var(--color-text-danger); }
+  .dd-list { font-size: 11px; line-height: 1.75; }
+  .do-card .dd-list { color: var(--color-text-success); }
+  .dont-card .dd-list { color: var(--color-text-danger); }
+</style>
+
+<h2 class="sr-only">Especificação de Layout — Área de Membros</h2>
+<div style="padding: 1rem 0.25rem;">
+
+  <!-- TITLE -->
+  <p class="spec-title">Especificação de Layout — Área de Membros</p>
+
+  <!-- 1. MACRO LAYOUT -->
+  <div class="section">
+    <p class="section-label">01 — Macro Layout</p>
+    <div class="layout-overview">
+      <div class="sidebar-col">
+        <div class="sidebar-arrow">›</div>
+        <div class="sidebar-icon">⌂</div>
+        <div class="sidebar-icon active">◎</div>
+        <div class="sidebar-icon">◉</div>
+        <div class="sidebar-avatar"></div>
+      </div>
+      <div class="main-col">
+        <div class="hero-zone">
+          <div class="hero-deco tl"></div>
+          <div class="hero-deco br"></div>
+          <div>
+            <div class="hero-welcome">Seja bem-vindo</div>
+          </div>
+          <div style="flex:1; display:flex; justify-content:center;">
+            <div class="hero-center-placeholder"></div>
+          </div>
+          <div class="hero-title">
+            TÍTULO<span>subtítulo</span>
+          </div>
+        </div>
+        <div class="content-zone">
+          <div class="section-tag">Seção Nacional</div>
+          <div class="cards-row">
+            <div class="card-mini"><div class="card-mini-img"></div><div class="card-mini-text"><span>MOD 01</span></div></div>
+            <div class="card-mini"><div class="card-mini-img"></div><div class="card-mini-text"><span>MOD 02</span></div></div>
+            <div class="card-mini"><div class="card-mini-img"></div><div class="card-mini-text"><span>MOD 03</span></div></div>
+            <div class="card-mini"><div class="card-mini-img"></div><div class="card-mini-text"><span>MOD 04</span></div></div>
+            <div class="card-mini"><div class="card-mini-img"></div><div class="card-mini-text"><span>MOD 05</span></div></div>
+            <div class="card-mini" style="opacity:0.4"><div class="card-mini-img"></div><div class="card-mini-text"><span>+</span></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. MEDIDAS -->
+  <div class="section">
+    <p class="section-label">02 — Medidas e Proporções</p>
+    <table class="meas-table">
+      <thead><tr><th>Zona</th><th>Dimensão</th><th>Observação</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="zone">Sidebar recolhida</td>
+          <td><span class="val">56–64px</span> largura</td>
+          <td class="note">Somente ícones. Expandida: <span class="val">220–240px</span></td>
+        </tr>
+        <tr>
+          <td class="zone">Hero Banner</td>
+          <td><span class="val">100%</span> largura × <span class="val">45–52vh</span> altura</td>
+          <td class="note">Mínimo <span class="val">320px</span> de altura absoluta</td>
+        </tr>
+        <tr>
+          <td class="zone">Imagem central (hero)</td>
+          <td><span class="val">35–45%</span> da largura do hero</td>
+          <td class="note">Centralizada horizontalmente, pode extravasar a base do hero</td>
+        </tr>
+        <tr>
+          <td class="zone">Título do produto (hero direita)</td>
+          <td>Font-size <span class="val">72–100px</span> (desktop)</td>
+          <td class="note">Peso <span class="val">900</span>, uppercase, tracking negativo <span class="val">-0.03em</span></td>
+        </tr>
+        <tr>
+          <td class="zone">Card de módulo</td>
+          <td><span class="val">190–210px</span> largura × <span class="val">260–290px</span> altura</td>
+          <td class="note">Proporção vertical ~<span class="val">4:3</span> invertido (mais alto)</td>
+        </tr>
+        <tr>
+          <td class="zone">Grid de cards</td>
+          <td>Gap <span class="val">12–16px</span>, scroll horizontal</td>
+          <td class="note">Não quebra em grid de linhas múltiplas</td>
+        </tr>
+        <tr>
+          <td class="zone">Label do módulo (topo do card)</td>
+          <td>Font-size <span class="val">11–12px</span>, peso <span class="val">400</span></td>
+          <td class="note">Centralizado, cor suave (ex: <span class="val">rgba(255,255,255,0.6)</span>)</td>
+        </tr>
+        <tr>
+          <td class="zone">Título do módulo (rodapé do card)</td>
+          <td>Font-size <span class="val">14–16px</span>, peso <span class="val">700–900</span></td>
+          <td class="note">Uppercase, 2 linhas max, gradiente ou cor de destaque na 2ª linha</td>
+        </tr>
+        <tr>
+          <td class="zone">Seção label ("PLR NACIONAL")</td>
+          <td>Font-size <span class="val">12–13px</span></td>
+          <td class="note">Uppercase, peso <span class="val">500</span>, tracking <span class="val">0.08em</span></td>
+        </tr>
+        <tr>
+          <td class="zone">Ícones da sidebar</td>
+          <td><span class="val">20–24px</span> ícone, <span class="val">36–40px</span> área clicável</td>
+          <td class="note">Espaçamento vertical de <span class="val">8–12px</span> entre ícones</td>
+        </tr>
+        <tr>
+          <td class="zone">Avatar (rodapé sidebar)</td>
+          <td><span class="val">32–36px</span> diâmetro</td>
+          <td class="note">Circular, colado ao fundo da sidebar</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. ANATOMIA DO CARD -->
+  <div class="section">
+    <p class="section-label">03 — Anatomia do Card de Módulo</p>
+    <div class="card-anatomy">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div class="card-demo">
+          <div class="card-demo-img"></div>
+          <div class="card-demo-mod">Modulo 01</div>
+          <div class="card-demo-title">TÍTULO DO<br><span>MÓDULO</span></div>
+        </div>
+        <p style="font-size:10px;color:var(--color-text-tertiary);text-align:center;">Representação<br>esquemática</p>
+      </div>
+      <div class="anno-list">
+        <div class="anno-row"><span class="anno-key">Canto superior</span><span class="anno-val">Label "Modulo 0X" — peso leve, texto suave, centralizado horizontalmente, ~8–10px do topo</span></div>
+        <div class="anno-row"><span class="anno-key">Imagem/BG</span><span class="anno-val">Ocupa 100% do card. Overlay de cor (multiply ou color) para criar identidade tonal por módulo</span></div>
+        <div class="anno-row"><span class="anno-key">Rodapé</span><span class="anno-val">Área fixa de ~60–70px com gradiente escurecendo a imagem. Título bold uppercase sobre esse escurecimento</span></div>
+        <div class="anno-row"><span class="anno-key">Cor bi-tonal</span><span class="anno-val">Parte do título em branco, parte em cor de destaque (ex: azul). Regra: verbo/substantivo principal destaca, resto branco</span></div>
+        <div class="anno-row"><span class="anno-key">Border-radius</span><span class="anno-val">4–8px nos cards. Sem sombra. Sem borda visível.</span></div>
+        <div class="anno-row"><span class="anno-key">Hover</span><span class="anno-val">Leve scale(1.03) + escurecimento do overlay. Transition 200ms ease</span></div>
+        <div class="anno-row"><span class="anno-key">Cursor</span><span class="anno-val">pointer em 100% do card. Card é clicável por inteiro.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. ANATOMIA DO HERO -->
+  <div class="section">
+    <p class="section-label">04 — Anatomia do Hero Banner</p>
+    <div class="hero-breakdown">
+      <div class="hero-zone-card">
+        <div class="hz-label">Coluna Esquerda (~30%)</div>
+        <div class="hz-content">
+          Texto de boas-vindas.<br>
+          Uppercase, peso <span class="val">400–500</span>, ~22–28px.<br>
+          Alinhado à esquerda com padding <span class="val">32–48px</span>.<br>
+          Cor: branco ou cinza claro.
+        </div>
+      </div>
+      <div class="hero-zone-card">
+        <div class="hz-label">Coluna Central (~40%)</div>
+        <div class="hz-content">
+          Imagem/personagem centralizado.<br>
+          <span class="val">object-fit: contain</span> ou PNG com fundo transparente.<br>
+          Pode ultrapassar o limite inferior do hero em <span class="val">10–20%</span> para efeito de profundidade.
+        </div>
+      </div>
+      <div class="hero-zone-card">
+        <div class="hz-label">Coluna Direita (~30%)</div>
+        <div class="hz-content">
+          Nome do produto em display giant.<br>
+          2 linhas: linha 1 peso <span class="val">900</span> azul, linha 2 peso <span class="val">900</span> branco.<br>
+          Alinhado à direita. Padding <span class="val">32–48px</span>.
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 14px;">
+      <p class="hz-label">Elementos Decorativos (Swooshes)</p>
+      <p style="font-size:12px;color:var(--color-text-secondary);line-height:1.7;">
+        Formas abstratas (curvas, gotas, arcos) posicionadas nos cantos. São <strong>SVG ou PNG com transparência</strong>, com <span class="val">position: absolute</span> relativo ao hero. Tamanho: <span class="val">15–22%</span> da largura do hero. Sempre parcialmente fora do viewport (cortados pelas bordas) para criar profundidade. Não devem sobrepor texto crítico.
+      </p>
+    </div>
+  </div>
+
+  <!-- 5. RESTRIÇÕES -->
+  <div class="section">
+    <p class="section-label">05 — Restrições do Desenvolvedor</p>
+    <div class="constraint-grid">
+      <div class="constraint-card danger">
+        <p class="c-head danger">Proibido</p>
+        <ul class="c-list" style="color:var(--color-text-danger);list-style:none;">
+          <li>✗ Quebrar cards em múltiplas linhas de grid</li>
+          <li>✗ Alterar a proporção vertical do card</li>
+          <li>✗ Usar border-radius &gt; 10px nos cards</li>
+          <li>✗ Adicionar sombra aos cards</li>
+          <li>✗ Sidebar sem posição fixed ou sticky</li>
+          <li>✗ Hero sem overflow: hidden</li>
+          <li>✗ Título do hero em caixa baixa</li>
+          <li>✗ Sidebar responsiva que colapsa &lt; 992px sem hamburger</li>
+        </ul>
+      </div>
+      <div class="constraint-card success">
+        <p class="c-head success">Obrigatório</p>
+        <ul class="c-list" style="color:var(--color-text-success);list-style:none;">
+          <li>✓ Sidebar com position: fixed, height: 100vh</li>
+          <li>✓ Cards em flex-row com overflow-x: auto (scroll horizontal)</li>
+          <li>✓ Hero com position: relative para os elementos absolutos</li>
+          <li>✓ Imagem central do hero com z-index superior ao texto</li>
+          <li>✓ Overlay escuro no rodapé de cada card (gradient)</li>
+          <li>✓ Smooth scroll no carrossel de cards</li>
+          <li>✓ Avatar da sidebar no bottom com margin-top: auto</li>
+        </ul>
+      </div>
+      <div class="constraint-card warn">
+        <p class="c-head warn">Tipografia — Regras Fixas</p>
+        <ul class="c-list" style="color:var(--color-text-warning);list-style:none;">
+          <li>⚠ Display hero: fonte condensed/black obrigatória</li>
+          <li>⚠ Card title: uppercase sempre, sem exceção</li>
+          <li>⚠ Label do módulo: peso ≤ 400 (nunca bold)</li>
+          <li>⚠ Section label: uppercase + letter-spacing &gt; 0.06em</li>
+          <li>⚠ Nenhum texto no hero usa linha-height &gt; 1.1</li>
+          <li>⚠ Título hero desktop mín. 72px, não escala abaixo de 48px</li>
+        </ul>
+      </div>
+      <div class="constraint-card info">
+        <p class="c-head info">Responsividade</p>
+        <ul class="c-list" style="color:var(--color-text-info);list-style:none;">
+          <li>◈ Desktop (&gt;1200px): sidebar 56px + hero 3 colunas</li>
+          <li>◈ Tablet (768–1200px): hero 2 colunas (sem imagem central ou imagem reduzida)</li>
+          <li>◈ Mobile (&lt;768px): sidebar vira bottom-nav (4 ícones), hero empilhado verticalmente</li>
+          <li>◈ Cards: minmax(160px, 200px), scroll horizontal em todos os breakpoints</li>
+          <li>◈ Hero altura: clamp(280px, 45vh, 520px)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. DO / DON'T -->
+  <div class="section">
+    <p class="section-label">06 — Faça / Não Faça</p>
+    <div class="do-dont">
+      <div class="do-card">
+        <p class="dd-head">✓ Faça</p>
+        <ul class="dd-list" style="list-style:none;">
+          <li>Imagem do personagem hero com PNG transparente</li>
+          <li>Overlay de cor nos cards para identidade visual</li>
+          <li>Cards com cursor: pointer em todo o componente</li>
+          <li>Swooshes cortados pelas bordas do hero</li>
+          <li>Texto título hero em weight 900</li>
+          <li>Section labels todas uppercase + tracking</li>
+          <li>Sidebar com ícone ativo destacado</li>
+        </ul>
+      </div>
+      <div class="dont-card">
+        <p class="dd-head">✗ Não Faça</p>
+        <ul class="dd-list" style="list-style:none;">
+          <li>Colocar o título do produto em caixa mista</li>
+          <li>Usar grid de 2 linhas nos módulos</li>
+          <li>Box-shadow visível nos cards</li>
+          <li>Imagem central do hero sem z-index correto</li>
+          <li>Sidebar que empurra o conteúdo (use margin-left)</li>
+          <li>Swooshes com opacity 1 e sem blend-mode</li>
+          <li>Seção de cards sem scroll horizontal (overflow hidden)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. CSS VARS CHAVE -->
+  <div class="section">
+    <p class="section-label">07 — Variáveis CSS Estruturais</p>
+    <div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:14px 16px;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--color-text-secondary);">
+      <span style="color:var(--color-text-tertiary);">/* Layout */</span><br>
+      --sidebar-w-collapsed: 56px;<br>
+      --sidebar-w-expanded: 240px;<br>
+      --hero-h: clamp(280px, 45vh, 520px);<br>
+      --content-pad-x: clamp(16px, 3vw, 48px);<br>
+      <br>
+      <span style="color:var(--color-text-tertiary);">/* Cards */</span><br>
+      --card-w: clamp(160px, 14vw, 210px);<br>
+      --card-h: calc(var(--card-w) * 1.42);<br>
+      --card-gap: 12px;<br>
+      --card-radius: 6px;<br>
+      <br>
+      <span style="color:var(--color-text-tertiary);">/* Hero título */</span><br>
+      --hero-title-size: clamp(48px, 7vw, 96px);<br>
+      --hero-title-weight: 900;<br>
+      --hero-title-tracking: -0.03em;
+    </div>
+  </div>
+
+  <!-- 8. ESTRUTURA HTML -->
+  <div class="section">
+    <p class="section-label">08 — Estrutura HTML Esperada</p>
+    <div style="background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:14px 16px;font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--color-text-secondary);">
+      &lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"app-shell"</span>&gt;<br>
+      &nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">aside</span> class=<span style="color:var(--color-text-success);">"sidebar"</span>&gt; <span style="color:var(--color-text-tertiary);">// fixed, 100vh</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">button</span> class=<span style="color:var(--color-text-success);">"sidebar__toggle"</span>&gt;›&lt;/<span style="color:var(--color-text-info);">button</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">nav</span> class=<span style="color:var(--color-text-success);">"sidebar__nav"</span>&gt;…ícones…&lt;/<span style="color:var(--color-text-info);">nav</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"sidebar__avatar"</span>&gt;…&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&lt;/<span style="color:var(--color-text-info);">aside</span>&gt;<br>
+      &nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">main</span> class=<span style="color:var(--color-text-success);">"main"</span>&gt; <span style="color:var(--color-text-tertiary);">// margin-left: var(--sidebar-w)</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">section</span> class=<span style="color:var(--color-text-success);">"hero"</span>&gt; <span style="color:var(--color-text-tertiary);">// position: relative</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"hero__deco hero__deco--tl"</span>&gt;&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"hero__left"</span>&gt;boas-vindas&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"hero__center"</span>&gt;&lt;img /&gt;&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"hero__right"</span>&gt;TÍTULO&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"hero__deco hero__deco--br"</span>&gt;&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span style="color:var(--color-text-info);">section</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">section</span> class=<span style="color:var(--color-text-success);">"module-section"</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">h2</span> class=<span style="color:var(--color-text-success);">"section-label"</span>&gt;PLR NACIONAL&lt;/<span style="color:var(--color-text-info);">h2</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">div</span> class=<span style="color:var(--color-text-success);">"cards-row"</span>&gt; <span style="color:var(--color-text-tertiary);">// overflow-x: auto</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;<span style="color:var(--color-text-info);">article</span> class=<span style="color:var(--color-text-success);">"module-card"</span>&gt;…&lt;/<span style="color:var(--color-text-info);">article</span>&gt; × N<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span style="color:var(--color-text-info);">div</span>&gt;<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&lt;/<span style="color:var(--color-text-info);">section</span>&gt;<br>
+      &nbsp;&nbsp;&lt;/<span style="color:var(--color-text-info);">main</span>&gt;<br>
+      &lt;/<span style="color:var(--color-text-info);">div</span>&gt;
+    </div>
+  </div>
+
+</div>

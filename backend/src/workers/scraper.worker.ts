@@ -27,10 +27,10 @@ export const scraperWorker = new Worker<ScrapeJobData>(
     
     try {
       const searchQuery = encodeURIComponent(`${query} em ${city}`);
-      await page.goto(`https://www.google.com/maps/search/${searchQuery}/`, { waitUntil: 'networkidle', timeout: 60000 });
+      await page.goto(`https://www.google.com/maps/search/${searchQuery}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
       
-      // Esperar que apareçam os resultados ou timeout
-      await page.waitForSelector('a[href*="/maps/place/"]', { timeout: 15000 }).catch(() => {});
+      // Esperar que apareçam os resultados
+      await page.waitForSelector('a[href*="/maps/place/"]', { timeout: 20000 }).catch(() => {});
 
       // Scroll para carregar mais resultados (limitamos a 3 scrolls para não demorar muito na demo)
       for (let i = 0; i < 3; i++) {
@@ -64,7 +64,10 @@ export const scraperWorker = new Worker<ScrapeJobData>(
             // Buscar botoes/textos que contêm telefone, site, morada
             // No Maps novo, os botões têm data-item-id contendo "phone:", "address:", "authority:"
             const phoneEl = document.querySelector('button[data-item-id^="phone:"]');
-            const phone = phoneEl ? (phoneEl as HTMLElement).innerText : null;
+            let phone = phoneEl ? (phoneEl as HTMLElement).innerText : null;
+            if (phone) {
+              phone = phone.replace(/[^+\d\s-()]/g, '').trim(); // Remove icons and newlines
+            }
             
             const websiteEl = document.querySelector('a[data-item-id^="authority:"]');
             const website = websiteEl ? (websiteEl as HTMLAnchorElement).href : null;

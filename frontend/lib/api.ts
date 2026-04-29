@@ -31,6 +31,20 @@ export async function api(path: string, options: FetchOptions = {}) {
     throw new Error('Sessão expirada');
   }
 
+  // Subscription expired/canceled — redirect to blocked page
+  if (response.status === 403) {
+    const data = await response.json();
+    if (data.subscriptionStatus && typeof window !== 'undefined') {
+      // Store the status so the blocked page knows why
+      localStorage.setItem('cz_blocked_reason', JSON.stringify({
+        status: data.subscriptionStatus,
+        message: data.message,
+      }));
+      window.location.href = '/blocked';
+    }
+    throw new Error(data.error || 'Acesso negado');
+  }
+
   const data = await response.json();
 
   if (!response.ok) {

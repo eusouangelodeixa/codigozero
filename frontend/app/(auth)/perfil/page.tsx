@@ -1,16 +1,29 @@
 "use client";
-import { useState, useEffect } from "react";
-import styles from "../auth.module.css";
+import { useState, useEffect, useRef } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "10px 14px", borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.3)",
+  color: "#fff", fontSize: 13, outline: "none", boxSizing: "border-box",
+};
+
+const btnPrimaryStyle: React.CSSProperties = {
+  padding: "10px 24px", borderRadius: 8, border: "none",
+  background: "linear-gradient(135deg, #2DD4BF, #14b8a6)",
+  color: "#0a0a0f", fontWeight: 600, fontSize: 13, cursor: "pointer",
+};
+
 export default function PerfilPage() {
   const [user, setUser] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", phone: "" });
+  const [form, setForm] = useState<any>({ name: "", phone: "", avatarUrl: "" });
   const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
   const [saving, setSaving] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hdr = () => ({
     Authorization: `Bearer ${localStorage.getItem("cz_token")}`,
@@ -28,17 +41,52 @@ export default function PerfilPage() {
       .then(data => {
         if (data.user) {
           setUser(data.user);
-          setForm({ name: data.user.name || "", phone: data.user.phone || "" });
+          setForm({
+            name: data.user.name || "",
+            phone: data.user.phone || "",
+            avatarUrl: data.user.avatarUrl || "",
+          });
         }
       });
   }, []);
+
+  const avatarSrc = form.avatarUrl
+    ? form.avatarUrl.startsWith('/')
+      ? `${API}${form.avatarUrl}`
+      : form.avatarUrl
+    : null;
+
+  const uploadAvatar = async (file: File) => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('avatar', file);
+      const res = await fetch(`${API}/api/auth/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('cz_token')}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setForm({ ...form, avatarUrl: data.avatarUrl });
+        setUser({ ...user, avatarUrl: data.avatarUrl });
+        localStorage.setItem('cz_user', JSON.stringify({ ...user, avatarUrl: data.avatarUrl }));
+        showToast('Foto atualizada ✓');
+      } else {
+        showToast(data.error || 'Erro no upload', 'error');
+      }
+    } catch {
+      showToast('Erro de conexão', 'error');
+    }
+    setUploading(false);
+  };
 
   const saveProfile = async () => {
     setSaving(true);
     try {
       const res = await fetch(`${API}/api/auth/profile`, {
         method: "PATCH", headers: hdr(),
-        body: JSON.stringify(form),
+        body: JSON.stringify({ name: form.name, phone: form.phone }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -78,84 +126,87 @@ export default function PerfilPage() {
     setChangingPw(false);
   };
 
-  const statusLabel = (s: string) => {
-    const map: Record<string, { text: string; color: string }> = {
-      active: { text: "Ativa", color: "#22c55e" },
-      lead: { text: "Aguardando Pagamento", color: "#eab308" },
-      grace_period: { text: "Período de Graça", color: "#eab308" },
-      overdue: { text: "Atrasada", color: "#ef4444" },
-      canceled: { text: "Cancelada", color: "#ef4444" },
-    };
-    return map[s] || { text: s, color: "#888" };
-  };
-
   if (!user) return null;
 
-  const status = statusLabel(user.subscriptionStatus);
-
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto" }}>
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px" }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Meu Perfil</h1>
-      <p style={{ fontSize: 14, color: "#888", marginBottom: 32 }}>Gerencie suas informações e assinatura</p>
+      <p style={{ fontSize: 14, color: "#888", marginBottom: 32 }}>Gerencie suas informações pessoais</p>
 
-      {/* ══ Subscription Card ══ */}
-      <div style={{
-        background: "rgba(255,255,255,0.02)", border: "1px solid rgba(45,212,191,0.12)",
-        borderRadius: 16, padding: 24, marginBottom: 24,
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: "#fff", margin: 0 }}>Assinatura</h2>
-          <span style={{
-            padding: "4px 14px", borderRadius: 999, fontSize: 12, fontWeight: 600,
-            background: `${status.color}20`, color: status.color,
-          }}>{status.text}</span>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div>
-            <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Plano</p>
-            <p style={{ fontSize: 15, color: "#fff", fontWeight: 500 }}>Código Zero — Mensal</p>
-          </div>
-          <div>
-            <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Valor</p>
-            <p style={{ fontSize: 15, color: "#2DD4BF", fontWeight: 600 }}>797 MT/mês</p>
-          </div>
-          <div>
-            <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Membro desde</p>
-            <p style={{ fontSize: 15, color: "#fff" }}>{new Date(user.createdAt).toLocaleDateString("pt-BR")}</p>
-          </div>
-          {user.subscriptionEnd && (
-            <div>
-              <p style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Próxima Renovação</p>
-              <p style={{ fontSize: 15, color: "#fff" }}>{new Date(user.subscriptionEnd).toLocaleDateString("pt-BR")}</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ══ Profile Form ══ */}
+      {/* ══ Avatar + Info ══ */}
       <div style={{
         background: "rgba(255,255,255,0.02)", border: "1px solid rgba(45,212,191,0.08)",
         borderRadius: 16, padding: 24, marginBottom: 24,
       }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, color: "#fff", marginBottom: 20 }}>Informações Pessoais</h2>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        {/* Avatar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              width: 72, height: 72, borderRadius: "50%", overflow: "hidden",
+              background: "rgba(255,255,255,0.06)", border: "2px solid rgba(45,212,191,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 26, fontWeight: 700, color: "#2DD4BF", flexShrink: 0,
+              cursor: "pointer", position: "relative",
+              transition: "border-color 0.15s",
+            }}
+            onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(45,212,191,0.5)'}
+            onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(45,212,191,0.2)'}
+          >
+            {avatarSrc ? (
+              <img src={avatarSrc} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              user?.name?.[0]?.toUpperCase() || "?"
+            )}
+            {/* Camera overlay */}
+            <div style={{
+              position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: 0, transition: "opacity 0.15s", borderRadius: "50%",
+            }}
+            onMouseOver={e => e.currentTarget.style.opacity = '1'}
+            onMouseOut={e => e.currentTarget.style.opacity = '0'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) uploadAvatar(file);
+              e.target.value = '';
+            }}
+          />
+          <div>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: "0 0 4px" }}>
+              Foto de Perfil
+            </p>
+            <p style={{ fontSize: 12, color: "#888", margin: "0 0 8px" }}>
+              Clique na foto para alterar
+            </p>
+            {uploading && (
+              <span style={{ fontSize: 12, color: "#2DD4BF" }}>Enviando...</span>
+            )}
+          </div>
+        </div>
+
+        <div className="grid-responsive" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
           <div>
             <label style={{ display: "block", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Nome</label>
-            <input
-              style={inputStyle}
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-            />
+            <input style={inputStyle} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Telefone</label>
-            <input
-              style={inputStyle}
-              value={form.phone}
-              onChange={e => setForm({ ...form, phone: e.target.value })}
-            />
+            <input style={inputStyle} value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
           </div>
         </div>
 
@@ -165,11 +216,7 @@ export default function PerfilPage() {
           <p style={{ fontSize: 11, color: "#555", marginTop: 4 }}>O email não pode ser alterado.</p>
         </div>
 
-        <button
-          onClick={saveProfile}
-          disabled={saving}
-          style={btnPrimaryStyle}
-        >
+        <button onClick={saveProfile} disabled={saving} style={btnPrimaryStyle}>
           {saving ? "Salvando..." : "Salvar Alterações"}
         </button>
       </div>
@@ -184,42 +231,22 @@ export default function PerfilPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
           <div>
             <label style={{ display: "block", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Senha Atual</label>
-            <input
-              type="password"
-              style={inputStyle}
-              value={pwForm.currentPassword}
-              onChange={e => setPwForm({ ...pwForm, currentPassword: e.target.value })}
-            />
+            <input type="password" style={inputStyle} value={pwForm.currentPassword} onChange={e => setPwForm({ ...pwForm, currentPassword: e.target.value })} />
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Nova Senha</label>
-            <input
-              type="password"
-              style={inputStyle}
-              value={pwForm.newPassword}
-              onChange={e => setPwForm({ ...pwForm, newPassword: e.target.value })}
-            />
+            <input type="password" style={inputStyle} value={pwForm.newPassword} onChange={e => setPwForm({ ...pwForm, newPassword: e.target.value })} />
           </div>
           <div>
             <label style={{ display: "block", fontSize: 12, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Confirmar Nova Senha</label>
-            <input
-              type="password"
-              style={inputStyle}
-              value={pwForm.confirmPassword}
-              onChange={e => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
-            />
+            <input type="password" style={inputStyle} value={pwForm.confirmPassword} onChange={e => setPwForm({ ...pwForm, confirmPassword: e.target.value })} />
           </div>
         </div>
 
         <button
           onClick={changePassword}
           disabled={changingPw || !pwForm.currentPassword || !pwForm.newPassword}
-          style={{
-            ...btnPrimaryStyle,
-            background: "none",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "#ccc",
-          }}
+          style={{ ...btnPrimaryStyle, background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#ccc" }}
         >
           {changingPw ? "Alterando..." : "Alterar Senha"}
         </button>
@@ -234,7 +261,6 @@ export default function PerfilPage() {
           border: `1px solid ${toast.type === "success" ? "rgba(45,212,191,0.3)" : "rgba(239,68,68,0.3)"}`,
           color: toast.type === "success" ? "#2DD4BF" : "#ef4444",
           fontSize: 13,
-          animation: "slideUp 0.3s ease-out",
         }}>
           {toast.msg}
         </div>
@@ -242,16 +268,3 @@ export default function PerfilPage() {
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  width: "100%", padding: "10px 14px", borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.3)",
-  color: "#fff", fontSize: 13, outline: "none", boxSizing: "border-box",
-};
-
-const btnPrimaryStyle: React.CSSProperties = {
-  padding: "10px 24px", borderRadius: 8, border: "none",
-  background: "linear-gradient(135deg, #2DD4BF, #14b8a6)",
-  color: "#0a0a0f", fontWeight: 600, fontSize: 13,
-  cursor: "pointer",
-};

@@ -491,37 +491,6 @@ export async function sendPushBroadcast(payload: { title: string; body: string; 
   }
 }
 
-// Helper: send push to a specific user by userId
-export async function sendPushToUser(userId: string, payload: { title: string; body: string; url?: string }) {
-  try {
-    const webpush = require('web-push');
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@codigozero.app',
-      process.env.VAPID_PUBLIC_KEY || '',
-      process.env.VAPID_PRIVATE_KEY || '',
-    );
-
-    const userSubs = await prisma.pushSubscription.findMany({ where: { userId } });
-    if (userSubs.length === 0) return;
-
-    for (const sub of userSubs) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify(payload),
-        );
-        console.log(`[PUSH] ✅ Sent to user ${userId}`);
-      } catch (err: any) {
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
-        }
-      }
-    }
-  } catch (e) {
-    console.error('[PUSH] User push error:', e);
-  }
-}
-
 // Helper: send push to all superadmins
 export async function sendPushToSuperAdmins(payload: { title: string; body: string; url?: string }) {
   try {

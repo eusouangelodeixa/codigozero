@@ -26,6 +26,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("cz_token");
@@ -57,7 +58,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className={styles.layout}>
-      <aside className={styles.sidebar}>
+      <aside className={`${styles.sidebar} ${mobileMenuOpen ? styles.sidebarOpen : ""}`}>
         <div className={styles.sidebarHead}>
           <Logo size={28} />
           <div>
@@ -70,7 +71,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {NAV_ITEMS.map(item => (
             <button
               key={item.href}
-              onClick={() => router.push(item.href)}
+              onClick={() => { router.push(item.href); setMobileMenuOpen(false); }}
               className={`${styles.navItem} ${pathname === item.href ? styles.navItemActive : ""}`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -98,7 +99,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
+      {/* Mobile overlay */}
+      {mobileMenuOpen && (
+        <div className={styles.mobileOverlay} onClick={() => setMobileMenuOpen(false)} />
+      )}
+
       <main className={styles.main}>
+        {/* Mobile header */}
+        <header className={styles.mobileHeader}>
+          <button
+            className={styles.hamburger}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Menu"
+          >
+            <span /><span /><span />
+          </button>
+          <span className={styles.mobileTitle}>Admin Panel</span>
+          <button
+            className={styles.backBtn}
+            onClick={() => router.push('/dashboard')}
+            title="Voltar"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </header>
         {children}
       </main>
     </div>

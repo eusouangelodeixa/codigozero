@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { subscribeToPush } from "@/lib/pushNotifications";
 import styles from "./instalar.module.css";
 
 const iosSteps = [
@@ -22,6 +23,29 @@ const androidSteps = [
 export default function InstalarPage() {
   const router = useRouter();
   const [platform, setPlatform] = useState<"ios" | "android" | null>(null);
+  const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "granted" | "denied" | "unsupported">("idle");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+        setPushStatus("unsupported");
+      } else if (Notification.permission === "granted") {
+        setPushStatus("granted");
+      } else if (Notification.permission === "denied") {
+        setPushStatus("denied");
+      }
+    }
+  }, []);
+
+  const handleActivatePush = async () => {
+    setPushStatus("loading");
+    try {
+      const success = await subscribeToPush();
+      setPushStatus(success ? "granted" : "denied");
+    } catch {
+      setPushStatus("denied");
+    }
+  };
 
   const steps = platform === "ios" ? iosSteps : platform === "android" ? androidSteps : [];
 
@@ -34,6 +58,57 @@ export default function InstalarPage() {
       <p className={styles.installDesc}>
         O Código Zero funciona como um app nativo no seu celular. Siga os passos abaixo para adicionar à tela inicial e receber notificações.
       </p>
+
+      {/* Push Notification Activation */}
+      <div style={{
+        background: "rgba(45, 212, 191, 0.06)",
+        border: "1px solid rgba(45, 212, 191, 0.15)",
+        borderRadius: 12,
+        padding: "20px 24px",
+        marginBottom: 24,
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, fontSize: "0.95rem" }}>
+            🔔 Notificações Push
+          </div>
+          <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+            {pushStatus === "granted"
+              ? "Notificações ativadas! Você receberá alertas importantes."
+              : pushStatus === "denied"
+              ? "Notificações bloqueadas. Vá às configurações do browser para permitir."
+              : pushStatus === "unsupported"
+              ? "Seu navegador não suporta notificações push."
+              : "Ative para receber alertas de aulas, promoções e novidades."}
+          </div>
+        </div>
+        {pushStatus === "idle" || pushStatus === "loading" ? (
+          <button
+            onClick={handleActivatePush}
+            disabled={pushStatus === "loading"}
+            style={{
+              padding: "10px 20px",
+              borderRadius: 8,
+              background: "linear-gradient(135deg, #2DD4BF, #14B8A6)",
+              color: "#000",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              cursor: pushStatus === "loading" ? "wait" : "pointer",
+              border: "none",
+              opacity: pushStatus === "loading" ? 0.7 : 1,
+              transition: "opacity 0.2s, transform 0.2s",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {pushStatus === "loading" ? "Ativando..." : "Ativar Notificações"}
+          </button>
+        ) : pushStatus === "granted" ? (
+          <span style={{ color: "#2DD4BF", fontWeight: 600, fontSize: "0.9rem" }}>✅ Ativas</span>
+        ) : null}
+      </div>
 
       <div className={styles.platformPicker}>
         <button
@@ -76,3 +151,4 @@ export default function InstalarPage() {
     </div>
   );
 }
+

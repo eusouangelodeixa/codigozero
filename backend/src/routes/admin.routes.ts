@@ -886,9 +886,22 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
 
     // Send Web Push notification if requested
     if (sendPush) {
+      // Strip {{variable}} placeholders since push is broadcast (not per-user)
+      const pushBody = message
+        .replace(/\{\{nome\}\}/gi, 'Aluno')
+        .replace(/\{\{email\}\}/gi, '')
+        .replace(/\{\{telefone\}\}/gi, '')
+        .replace(/\{\{objetivo\}\}/gi, '')
+        .replace(/\{\{dor\}\}/gi, '')
+        .replace(/\{\{compromisso\}\}/gi, '')
+        .replace(/\{\{consciencia\}\}/gi, '')
+        .replace(/\{\{cupom\}\}/gi, '')
+        .replace(/\{\{[^}]+\}\}/g, '')  // catch any remaining
+        .replace(/\s{2,}/g, ' ')        // collapse double spaces
+        .trim();
       sendPushBroadcast({
         title: 'Código Zero',
-        body: message.length > 100 ? message.substring(0, 100) + '...' : message,
+        body: pushBody.length > 120 ? pushBody.substring(0, 120) + '...' : pushBody,
         url: '/dashboard',
       }).catch(() => {});
     }

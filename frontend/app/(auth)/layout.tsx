@@ -174,13 +174,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <div className={styles.userDetails}>
               <span className={styles.userName}>{user?.name?.split(' ')[0] || "Membro"}</span>
               <span className={styles.userPlan}>
-                {user?.role === 'admin' ? 'Admin' : 'Membro'}
+                {user?.role === 'superadmin' ? 'Super Admin' : user?.role === 'admin' ? 'Admin' : 'Membro'}
               </span>
             </div>
           </a>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-            {user?.role === 'admin' && (
+            {(user?.role === 'admin' || user?.role === 'superadmin') && (
               <button
                 onClick={() => router.push('/admin')}
                 title="Admin Panel"

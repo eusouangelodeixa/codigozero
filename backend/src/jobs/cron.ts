@@ -298,6 +298,7 @@ export function startCronJobs() {
 
     const LOJOU_API = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
     const LOJOU_KEY = process.env.LOJOU_API_KEY;
+    const LOJOU_PRODUCT_PID = process.env.LOJOU_PRODUCT_PID;
 
     if (!LOJOU_KEY) {
       console.log('[CRON] ⚠️ No Lojou API key — skipping conciliation');
@@ -316,7 +317,17 @@ export function startCronJobs() {
       }
 
       const data = await res.json();
-      const lojouOrders = data.data || data.orders || [];
+      const allOrders = data.data || data.orders || [];
+
+      // Filter to only include orders from THIS product (Código Zero)
+      const lojouOrders = LOJOU_PRODUCT_PID
+        ? allOrders.filter((o: any) => {
+            const pid = o.product_pid || o.product?.pid || o.productPid || '';
+            return pid === LOJOU_PRODUCT_PID;
+          })
+        : allOrders;
+
+      console.log(`[CRON] Lojou: ${allOrders.length} total orders, ${lojouOrders.length} for product ${LOJOU_PRODUCT_PID || 'ALL'}`);
 
       let fixed = 0;
       let mismatches = 0;

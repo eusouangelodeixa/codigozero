@@ -9,6 +9,7 @@ services:
       dockerfile: ../infrastructure/Dockerfile.frontend
       args:
         - NEXT_PUBLIC_API_URL=https://app.eusouangelodeixa.com
+        - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
     restart: unless-stopped
     networks:
       - czero-network

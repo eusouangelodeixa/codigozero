@@ -36,7 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     })
       .then(r => r.json())
       .then(data => {
-        if (!data.user || data.user.role !== "admin") {
+        if (!data.user || (data.user.role !== "admin" && data.user.role !== "superadmin")) {
           router.push("/dashboard");
           return;
         }

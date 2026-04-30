@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 
 /**
  * Admin middleware — must be used AFTER authMiddleware.
- * Checks that the authenticated user has role 'admin'.
+ * Checks that the authenticated user has role 'admin' or 'superadmin'.
  */
 export const adminMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
@@ -19,7 +19,7 @@ export const adminMiddleware = async (req: AuthRequest, res: Response, next: Nex
       select: { role: true },
     });
 
-    if (!user || user.role !== 'admin') {
+    if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) {
       return res.status(403).json({ error: 'Acesso restrito a administradores' });
     }
 

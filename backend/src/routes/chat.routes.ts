@@ -230,7 +230,7 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
  */
 router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user!.role !== 'admin') {
+    if (req.user!.role !== 'admin' && req.user!.role !== 'superadmin') {
       return res.status(403).json({ error: 'Admin only' });
     }
 

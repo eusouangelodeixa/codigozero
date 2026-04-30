@@ -16,8 +16,8 @@ const prisma = new PrismaClient();
  */
 router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) => {
   try {
-    // ── SECURITY LAYER 1: Webhook Secret (mandatory) ──
-    const webhookSecret = req.headers['x-lojou-webhook-secret'];
+    // ── SECURITY LAYER 1: Webhook Secret (via header OR query param) ──
+    const webhookSecret = req.headers['x-lojou-webhook-secret'] || req.query.secret;
     if (!env.LOJOU_WEBHOOK_SECRET || webhookSecret !== env.LOJOU_WEBHOOK_SECRET) {
       console.warn('[WEBHOOK] 🚨 REJECTED — invalid or missing webhook secret');
       return res.status(401).json({ error: 'Unauthorized' });

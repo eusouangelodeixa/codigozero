@@ -31,14 +31,25 @@ router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) =>
       payload = req.body;
     }
 
-    const { event, data } = payload;
+    // Lojou sends { order_type, customer, product, ... } at root level
+    // Normalize: support both { event, data } and flat Lojou format
+    let event: string;
+    let data: any;
+    if (payload.order_type) {
+      // Lojou flat format: order_type at root, everything else is data
+      event = payload.order_type.replace('order_', 'order.');
+      data = payload;
+    } else {
+      event = payload.event;
+      data = payload.data;
+    }
     console.log(`[WEBHOOK] Received event: ${event}`, JSON.stringify(data, null, 2));
 
     if (!event || !data) {
       return res.status(400).json({ error: 'Invalid payload' });
     }
 
-    const orderId = data.id || data.order_id;
+    const orderId = data.order_number || data.id || data.order_id || data.transaction_id;
 
     // ── SECURITY LAYER 2: Verified Callback ──
     // Confirm the order really exists and has the claimed status at Lojou
@@ -79,9 +90,12 @@ router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) =>
     switch (event) {
       case 'order.approved': {
         const customerEmail = data.customer?.email;
-        const customerPhone = data.customer?.phone || data.customer?.cellphone;
+        const customerPhone = data.customer?.phone || data.customer?.cellphone || data.customer?.mobile_number;
         const customerName = data.customer?.name || 'Membro CZ';
-        const amount = data.amount || data.total || 797;
+        const amount = data.amount || data.total || data.product?.price || 797;
+        const productName = data.product?.name || 'Código Zero';
+        const currency = data.currency || 'MZN';
+        const paymentMethod = data.payment_method || 'mpesa';
 
         // Generate random password
         const rawPassword = uuidv4().slice(0, 8);
@@ -196,10 +210,11 @@ router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) =>
         }
 
         // 🔔 Push notification to superadmin: NEW SALE
-        const amountFormatted = (amount / 100).toFixed(2);
+        const payMethodLabel = paymentMethod === 'mpesa' ? 'M-Pesa' : paymentMethod === 'emola' ? 'E-Mola' : paymentMethod;
+        const amountFmt = new Intl.NumberFormat('pt-MZ', { minimumFractionDigits: 0 }).format(amount);
         sendPushToSuperAdmins({
           title: '💰 Nova Venda!',
-          body: `${customerName} comprou por ${amountFormatted} MT`,
+          body: `${customerName} — ${productName}\n${amountFmt} ${currency} via ${payMethodLabel}`,
           url: '/admin/finance',
         }).catch(() => {});
 

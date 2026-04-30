@@ -23,14 +23,20 @@ const androidSteps = [
 export default function InstalarPage() {
   const router = useRouter();
   const [platform, setPlatform] = useState<"ios" | "android" | null>(null);
-  const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "granted" | "denied" | "unsupported">("idle");
+  const [pushStatus, setPushStatus] = useState<"idle" | "loading" | "granted" | "denied" | "unsupported" | "error">("idle");
+  const [pushError, setPushError] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       if (!("Notification" in window) || !("serviceWorker" in navigator)) {
         setPushStatus("unsupported");
       } else if (Notification.permission === "granted") {
-        setPushStatus("granted");
+        // Check if already subscribed
+        navigator.serviceWorker.ready.then(reg => {
+          reg.pushManager.getSubscription().then(sub => {
+            setPushStatus(sub ? "granted" : "idle");
+          });
+        }).catch(() => {});
       } else if (Notification.permission === "denied") {
         setPushStatus("denied");
       }
@@ -39,11 +45,27 @@ export default function InstalarPage() {
 
   const handleActivatePush = async () => {
     setPushStatus("loading");
+    setPushError("");
     try {
       const success = await subscribeToPush();
-      setPushStatus(success ? "granted" : "denied");
-    } catch {
-      setPushStatus("denied");
+      if (success) {
+        setPushStatus("granted");
+      } else {
+        setPushStatus("error");
+        // Determine why it failed
+        if (!("PushManager" in window)) {
+          setPushError("PushManager não disponível. Adicione o app à tela inicial primeiro.");
+        } else if (Notification.permission === "denied") {
+          setPushError("Permissão negada. Vá às Configurações > Safari > Notificações.");
+        } else if (Notification.permission === "default") {
+          setPushError("Permissão não concedida. Tente novamente.");
+        } else {
+          setPushError("Falha ao registrar. Verifique sua conexão.");
+        }
+      }
+    } catch (err: any) {
+      setPushStatus("error");
+      setPushError(err?.message || "Erro desconhecido");
     }
   };
 
@@ -82,17 +104,19 @@ export default function InstalarPage() {
               ? "Notificações bloqueadas. Vá às configurações do browser para permitir."
               : pushStatus === "unsupported"
               ? "Seu navegador não suporta notificações push."
+              : pushStatus === "error"
+              ? pushError || "Falha ao ativar. Tente novamente."
               : "Ative para receber alertas de aulas, promoções e novidades."}
           </div>
         </div>
-        {pushStatus === "idle" || pushStatus === "loading" ? (
+        {(pushStatus === "idle" || pushStatus === "loading" || pushStatus === "error") ? (
           <button
             onClick={handleActivatePush}
             disabled={pushStatus === "loading"}
             style={{
               padding: "10px 20px",
               borderRadius: 8,
-              background: "linear-gradient(135deg, #2DD4BF, #14B8A6)",
+              background: pushStatus === "error" ? "linear-gradient(135deg, #F59E0B, #D97706)" : "linear-gradient(135deg, #2DD4BF, #14B8A6)",
               color: "#000",
               fontWeight: 600,
               fontSize: "0.85rem",
@@ -103,7 +127,7 @@ export default function InstalarPage() {
               whiteSpace: "nowrap",
             }}
           >
-            {pushStatus === "loading" ? "Ativando..." : "Ativar Notificações"}
+            {pushStatus === "loading" ? "Ativando..." : pushStatus === "error" ? "Tentar Novamente" : "Ativar Notificações"}
           </button>
         ) : pushStatus === "granted" ? (
           <span style={{ color: "#2DD4BF", fontWeight: 600, fontSize: "0.9rem" }}>✅ Ativas</span>

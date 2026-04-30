@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
-import { sendPushToSuperAdmins } from '../routes/auth.routes';
+import { sendPushToSuperAdmins, sendPushToUser } from '../routes/auth.routes';
 
 const prisma = new PrismaClient();
 
@@ -167,6 +167,23 @@ export function startCronJobs() {
             });
             alertsSent++;
             console.log(`[CRON] 🔔 Expiration alert (${alertTier}) sent to ${user.email}`);
+
+            // 🔔 Push to student: subscription expiring
+            const pushTitle = alertTier === 'expired'
+              ? '🔴 Assinatura expirada'
+              : alertTier === '1day'
+                ? '⚠️ Assinatura expira amanhã!'
+                : '📅 Assinatura expira em breve';
+            const pushBody = alertTier === 'expired'
+              ? 'Renove agora para não perder acesso às aulas e ferramentas.'
+              : alertTier === '1day'
+                ? 'Sua assinatura expira amanhã! Renove para continuar aprendendo.'
+                : `Sua assinatura expira em ${daysLeft} dia${daysLeft > 1 ? 's' : ''}. Renove para continuar!`;
+            sendPushToUser(user.id, {
+              title: pushTitle,
+              body: pushBody,
+              url: '/assinatura',
+            }).catch(() => {});
           }
         } catch (e) {
           console.error(`[CRON] Failed to send alert to ${user.email}:`, e);
@@ -458,4 +475,46 @@ export function startCronJobs() {
   console.log('[CRON] ⏰ Remarketing check scheduled (Every 15 mins)');
   console.log('[CRON] ⏰ Lojou conciliation scheduled (01:00)');
   console.log('[CRON] ⏰ Milestone check scheduled (Every hour)');
+
+  // ── Daily Inactivity Reminder (10:00 every day) ──
+  cron.schedule('0 10 * * *', async () => {
+    console.log('[CRON] 💤 Running inactivity reminder...');
+    try {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+
+      // Find active students who haven't logged in for 3+ days
+      const inactiveUsers = await prisma.user.findMany({
+        where: {
+          subscriptionStatus: 'active',
+          isActive: true,
+          role: 'member',
+          lastLoginAt: { lt: threeDaysAgo },
+        },
+        select: { id: true, name: true, lastLoginAt: true },
+      });
+
+      const motivationalMessages = [
+        'Novas ferramentas de IA esperam por ti! 🧠',
+        'Seus concorrentes estão estudando agora. E você? 🔥',
+        'Cada dia sem praticar é um dia perdido. Volte já! 💪',
+        'A comunidade sentiu sua falta! 👋',
+        'Tem conteúdo novo esperando por ti. Confira! 🎯',
+      ];
+      const randomMsg = motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)];
+
+      for (const user of inactiveUsers) {
+        sendPushToUser(user.id, {
+          title: '👋 Sentimos sua falta!',
+          body: randomMsg,
+          url: '/forja',
+        }).catch(() => {});
+      }
+
+      console.log(`[CRON] 💤 Inactivity reminders sent: ${inactiveUsers.length}`);
+    } catch (error) {
+      console.error('[CRON] ❌ Inactivity reminder failed:', error);
+    }
+  });
+
+  console.log('[CRON] ⏰ Inactivity reminder scheduled (10:00 daily)');
 }

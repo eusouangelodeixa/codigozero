@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
 import { sendPushBroadcast } from './auth.routes';
+import { sendPushToSuperAdmins } from './auth.routes';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -451,6 +452,15 @@ router.post('/lessons', async (req: AuthRequest, res: Response) => {
     const lesson = await prisma.lesson.create({
       data: { moduleId, title, description, videoUrl, duration, sortOrder: sortOrder || 0, tools, content, materials },
     });
+
+    // 🔔 Push to all students: new lesson
+    const mod = await prisma.module.findUnique({ where: { id: moduleId }, select: { title: true } });
+    sendPushBroadcast({
+      title: '🎓 Nova Aula Disponível!',
+      body: `${title}${mod ? ` — ${mod.title}` : ''}`,
+      url: '/forja',
+    }).catch(() => {});
+
     res.json({ lesson });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao criar aula' });

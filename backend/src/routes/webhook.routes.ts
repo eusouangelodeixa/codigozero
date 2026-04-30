@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { scarcityMiddleware } from '../middlewares/scarcity.middleware';
 import { env } from '../config/env';
+import { sendPushToSuperAdmins } from './auth.routes';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -194,6 +195,13 @@ router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) =>
           }
         }
 
+        // 🔔 Push notification to superadmin: NEW SALE
+        const amountFormatted = (amount / 100).toFixed(2);
+        sendPushToSuperAdmins({
+          title: '💰 Nova Venda!',
+          body: `${customerName} comprou por ${amountFormatted} MT`,
+          url: '/admin/finance',
+        }).catch(() => {});
 
         return res.json({ status: 'user_created', userId: user.id });
       }
@@ -226,6 +234,13 @@ router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) =>
             where: { orderId: String(orderId) },
             data: { status: 'refunded', metadata: data },
           });
+
+          // 🔔 Push notification to superadmin: REFUND
+          sendPushToSuperAdmins({
+            title: '🔄 Reembolso',
+            body: `Pedido ${orderId} foi reembolsado${user ? ` — ${user.name}` : ''}`,
+            url: '/admin/finance',
+          }).catch(() => {});
         }
 
         console.log(`[WEBHOOK] 🔄 Order refunded: ${orderId}`);

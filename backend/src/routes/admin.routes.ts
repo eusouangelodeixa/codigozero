@@ -755,6 +755,7 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
     if (!message) return res.status(400).json({ error: 'Mensagem obrigatória' });
     if (!instanceId && !sendPush) return res.status(400).json({ error: 'Selecione uma instância WhatsApp ou ative Push Notification' });
 
+    const sendWhatsApp = !!instanceId;
     const minDelay = Math.max(1, parseInt(delayMin) || 5);
     const maxDelay = Math.max(minDelay, parseInt(delayMax) || 15);
 
@@ -762,7 +763,8 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
     const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
     const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
 
-    if (!apiKey) return res.status(400).json({ error: 'Chave da API do Komunika não configurada' });
+    // Only require API key if actually sending via WhatsApp
+    if (sendWhatsApp && !apiKey) return res.status(400).json({ error: 'Chave da API do Komunika não configurada' });
 
     const where = buildSegmentWhere(segment);
     const users = await prisma.user.findMany({
@@ -789,88 +791,94 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
     let sent = 0;
     let failed = 0;
 
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
+    if (sendWhatsApp) {
+      // ── WhatsApp broadcast loop ──
+      for (let i = 0; i < users.length; i++) {
+        const user = users[i];
 
-      // Clean phone
-      let cleanPhone = user.phone.replace(/\D/g, '');
-      if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-        cleanPhone = `258${cleanPhone}`;
-      }
-
-      // Skip if no valid phone
-      if (cleanPhone.length < 9) {
-        failed++;
-        sendEvent({ type: 'skip', index: i, name: user.name, reason: 'Telefone inválido', sent, failed });
-        continue;
-      }
-
-      let personalizedMsg = substituteVariables(message, user);
-
-      // Generate per-user coupon if enabled
-      if (generateCoupons && message.includes('{{cupom}}')) {
-        const couponCode = `CZ${couponDiscount || 10}_${user.id.slice(0, 6).toUpperCase()}`;
-        try {
-          const lojouApi = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
-          const lojouKey = process.env.LOJOU_API_KEY;
-          if (lojouKey) {
-            const discRes = await fetch(`${lojouApi}/discounts`, {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${lojouKey}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                code: couponCode,
-                type: 'percentage',
-                value: parseInt(couponDiscount) || 10,
-                uses_limit: parseInt(couponMaxUses) || 1,
-                active: true,
-              }),
-            });
-            if (discRes.ok) {
-              console.log(`[BROADCAST] 🎟️ Coupon ${couponCode} created for ${user.email}`);
-            } else {
-              console.warn(`[BROADCAST] Coupon creation failed for ${user.email}: ${discRes.status}`);
-            }
-          }
-        } catch (couponErr) {
-          console.warn(`[BROADCAST] Coupon error for ${user.email}:`, couponErr);
+        // Clean phone
+        let cleanPhone = user.phone.replace(/\D/g, '');
+        if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
+          cleanPhone = `258${cleanPhone}`;
         }
-        personalizedMsg = personalizedMsg.replace(/\{\{cupom\}\}/gi, couponCode);
-      }
 
-      try {
-        const sendRes = await fetch(`${apiUrl}/api/v1/messages/send`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey,
-          },
-          body: JSON.stringify({
-            instanceId,
-            to: cleanPhone,
-            type: 'text',
-            content: personalizedMsg,
-          }),
-        });
-
-        if (sendRes.ok) {
-          sent++;
-          sendEvent({ type: 'sent', index: i, name: user.name, phone: cleanPhone, sent, failed });
-        } else {
-          const errBody = await sendRes.text().catch(() => 'Unknown error');
+        // Skip if no valid phone
+        if (cleanPhone.length < 9) {
           failed++;
-          sendEvent({ type: 'error', index: i, name: user.name, error: errBody, sent, failed });
+          sendEvent({ type: 'skip', index: i, name: user.name, reason: 'Telefone inválido', sent, failed });
+          continue;
         }
-      } catch (err: any) {
-        failed++;
-        sendEvent({ type: 'error', index: i, name: user.name, error: err.message, sent, failed });
-      }
 
-      // Randomized delay between messages (anti-block)
-      if (i < users.length - 1) {
-        const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-        sendEvent({ type: 'waiting', delay, nextIndex: i + 1, sent, failed });
-        await new Promise(resolve => setTimeout(resolve, delay * 1000));
+        let personalizedMsg = substituteVariables(message, user);
+
+        // Generate per-user coupon if enabled
+        if (generateCoupons && message.includes('{{cupom}}')) {
+          const couponCode = `CZ${couponDiscount || 10}_${user.id.slice(0, 6).toUpperCase()}`;
+          try {
+            const lojouApi = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
+            const lojouKey = process.env.LOJOU_API_KEY;
+            if (lojouKey) {
+              const discRes = await fetch(`${lojouApi}/discounts`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${lojouKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  code: couponCode,
+                  type: 'percentage',
+                  value: parseInt(couponDiscount) || 10,
+                  uses_limit: parseInt(couponMaxUses) || 1,
+                  active: true,
+                }),
+              });
+              if (discRes.ok) {
+                console.log(`[BROADCAST] 🎟️ Coupon ${couponCode} created for ${user.email}`);
+              } else {
+                console.warn(`[BROADCAST] Coupon creation failed for ${user.email}: ${discRes.status}`);
+              }
+            }
+          } catch (couponErr) {
+            console.warn(`[BROADCAST] Coupon error for ${user.email}:`, couponErr);
+          }
+          personalizedMsg = personalizedMsg.replace(/\{\{cupom\}\}/gi, couponCode);
+        }
+
+        try {
+          const sendRes = await fetch(`${apiUrl}/api/v1/messages/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-API-Key': apiKey!,
+            },
+            body: JSON.stringify({
+              instanceId,
+              to: cleanPhone,
+              type: 'text',
+              content: personalizedMsg,
+            }),
+          });
+
+          if (sendRes.ok) {
+            sent++;
+            sendEvent({ type: 'sent', index: i, name: user.name, phone: cleanPhone, sent, failed });
+          } else {
+            const errBody = await sendRes.text().catch(() => 'Unknown error');
+            failed++;
+            sendEvent({ type: 'error', index: i, name: user.name, error: errBody, sent, failed });
+          }
+        } catch (err: any) {
+          failed++;
+          sendEvent({ type: 'error', index: i, name: user.name, error: err.message, sent, failed });
+        }
+
+        // Randomized delay between messages (anti-block)
+        if (i < users.length - 1) {
+          const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+          sendEvent({ type: 'waiting', delay, nextIndex: i + 1, sent, failed });
+          await new Promise(resolve => setTimeout(resolve, delay * 1000));
+        }
       }
+    } else {
+      // ── Push-only mode: no WhatsApp loop ──
+      sent = users.length;
     }
 
     sendEvent({ type: 'complete', sent, failed, total: users.length });

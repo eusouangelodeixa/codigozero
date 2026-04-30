@@ -374,7 +374,7 @@ export default function BroadcastPage() {
         <button
           className={styles.btnPrimary}
           onClick={handleSend}
-          disabled={sending || !message.trim() || !instanceId}
+          disabled={sending || !message.trim() || (!instanceId && !sendPush)}
           style={{ opacity: sending ? 0.7 : 1 }}
         >
           {sending ? "⏳ Enviando..." : `🚀 Disparar para ${getSegmentCount(segment)} leads`}

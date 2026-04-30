@@ -488,9 +488,9 @@ export function startCronJobs() {
           subscriptionStatus: 'active',
           isActive: true,
           role: 'member',
-          lastLoginAt: { lt: threeDaysAgo },
+          updatedAt: { lt: threeDaysAgo },
         },
-        select: { id: true, name: true, lastLoginAt: true },
+        select: { id: true, name: true },
       });
 
       const motivationalMessages = [

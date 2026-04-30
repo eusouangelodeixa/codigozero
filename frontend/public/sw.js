@@ -1,22 +1,38 @@
-const CACHE_NAME = 'cz-aluno-v1';
-const OFFLINE_URLS = ['/dashboard', '/offline'];
+const CACHE_NAME = 'cz-aluno-v2';
 
-// Install — cache app shell
+// Install — activate immediately, cache in background
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS))
-  );
+  // Skip waiting to activate immediately — critical for push to work
   self.skipWaiting();
+
+  // Cache app shell in background (don't block install if any URL fails)
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const urls = ['/dashboard'];
+      for (const url of urls) {
+        try {
+          await cache.add(url);
+        } catch (e) {
+          // Don't let a single failed cache prevent SW activation
+          console.log('[SW] Cache skip:', url, e.message);
+        }
+      }
+    })
+  );
 });
 
-// Activate — clean old caches
+// Activate — clean old caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    Promise.all([
+      // Clean old caches
+      caches.keys().then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      ),
+      // Take control of all clients immediately
+      self.clients.claim(),
+    ])
   );
-  self.clients.claim();
 });
 
 // Fetch — network first, cache fallback
@@ -85,3 +101,4 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+

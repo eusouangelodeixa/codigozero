@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
+import { sendPushToSuperAdmins } from '../routes/auth.routes';
 
 const prisma = new PrismaClient();
 
@@ -68,6 +69,22 @@ export function startCronJobs() {
       });
 
       console.log(`[CRON] ✅ Subscription check complete. Processed ${expiredActive.length + graceExpired.length} users.`);
+
+      // 🔔 Push to superadmin if users were blocked
+      if (graceExpired.length > 0) {
+        sendPushToSuperAdmins({
+          title: '🔒 Utilizadores bloqueados',
+          body: `${graceExpired.length} utilizador(es) bloqueado(s) por assinatura expirada`,
+          url: '/admin/users',
+        }).catch(() => {});
+      }
+      if (expiredActive.length > 0) {
+        sendPushToSuperAdmins({
+          title: '⚠️ Assinaturas em risco',
+          body: `${expiredActive.length} utilizador(es) entrou em período de graça`,
+          url: '/admin/users',
+        }).catch(() => {});
+      }
 
     } catch (error) {
       console.error('[CRON] ❌ Subscription check failed:', error);
@@ -406,12 +423,16 @@ export function startCronJobs() {
         if (current >= m.targetValue) {
           await prisma.platformMilestone.update({ where: { id: m.id }, data: { reached: true, reachedAt: new Date() } });
 
+          const label = m.category === 'revenue'
+            ? `${m.targetValue.toLocaleString('pt-BR')} MT em faturamento`
+            : `${m.targetValue} assinante(s)`;
+
+          // WhatsApp alert
           if (config?.milestoneAlertPhone && config.komunikaAdminApiKey && config.komunikaInstanceId) {
             const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
             let phone = config.milestoneAlertPhone.replace(/\D/g, '');
             if (phone.length === 9 && phone.startsWith('8')) phone = `258${phone}`;
 
-            const label = m.category === 'revenue' ? `${m.targetValue.toLocaleString('pt-BR')} MT em faturamento` : `${m.targetValue} assinante(s)`;
             await fetch(`${apiUrl}/api/v1/messages/send`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-API-Key': config.komunikaAdminApiKey },
@@ -420,6 +441,13 @@ export function startCronJobs() {
             await prisma.platformMilestone.update({ where: { id: m.id }, data: { notified: true } });
             console.log(`[CRON] Milestone reached: ${m.category} ${m.targetValue}`);
           }
+
+          // 🔔 Push to superadmin
+          sendPushToSuperAdmins({
+            title: '🏆 Meta Alcançada!',
+            body: label,
+            url: '/admin/status',
+          }).catch(() => {});
         }
       }
     } catch (error) { console.error('[CRON] Milestone check failed:', error); }

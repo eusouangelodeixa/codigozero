@@ -115,6 +115,8 @@
 .mobileHeader {
   display: none; align-items: center; justify-content: space-between;
   padding: var(--space-3) 0; margin-bottom: var(--space-4);
+  /* iPhone PWA safe area — prevents status bar/notch from covering the hamburger */
+  padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
 }
 
 .hamburger {
@@ -151,15 +153,29 @@
     z-index: var(--z-sidebar); width: var(--sidebar-width);
     transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     padding: var(--space-5);
+    /* iPhone PWA safe area */
+    padding-top: calc(var(--space-5) + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(var(--space-5) + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(var(--space-5) + env(safe-area-inset-left, 0px));
   }
   .sidebarOpen { transform: translateX(0); }
 
-  .main { padding: var(--page-padding); padding-top: 0; }
+  .main {
+    padding: var(--page-padding); padding-top: 0;
+    /* iPhone PWA safe area — bottom home indicator */
+    padding-bottom: calc(var(--page-padding) + env(safe-area-inset-bottom, 0px));
+  }
   .mobileHeader { display: flex; }
 }
 
 /* ── Small mobile: 480px ── */
 @media (max-width: 480px) {
-  .main { padding: var(--space-3); padding-top: 0; }
-  .mobileHeader { padding: var(--space-2) 0; }
+  .main {
+    padding: var(--space-3); padding-top: 0;
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
+  .mobileHeader {
+    padding: var(--space-2) 0;
+    padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+  }
 }

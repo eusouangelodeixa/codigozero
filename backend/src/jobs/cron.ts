@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import { sendPushToSuperAdmins, sendPushToUser } from '../routes/auth.routes';
+import { lojouService } from '../services/lojou.service';
+import { env } from '../config/env';
 
 const prisma = new PrismaClient();
 
@@ -140,12 +142,39 @@ export function startCronJobs() {
         let message = '';
         const name = user.name.split(' ')[0];
 
+        // Generate dynamic renewal URL via Lojou if we don't have one
+        let currentRenewalUrl = user.renewalUrl;
+        if (!currentRenewalUrl && env.LOJOU_API_KEY) {
+          try {
+            const orderData = await lojouService.createOrder({
+              amount: 797,
+              product_pid: process.env.LOJOU_PRODUCT_PID || 'uoEHz',
+              plan_id: process.env.LOJOU_PLAN_ID || 'tbo8f',
+              customer: {
+                name: user.name,
+                email: user.email,
+                mobile_number: user.phone,
+              }
+            });
+            if (orderData?.checkout_url) {
+              currentRenewalUrl = orderData.checkout_url;
+              await prisma.user.update({
+                where: { id: user.id },
+                data: { renewalUrl: currentRenewalUrl }
+              });
+            }
+          } catch (e) {
+            console.error(`[CRON] Lojou API error for ${user.email}:`, e);
+          }
+        }
+        const finalLink = currentRenewalUrl || user.checkoutUrl || process.env.FRONTEND_URL || 'https://codigozero.app';
+
         if (alertTier === '3days') {
-          message = `Olá ${name}! 👋\n\nSua assinatura do *Código Zero* expira em *${daysLeft} dia${daysLeft > 1 ? 's' : ''}*.\n\nRenove agora para não perder acesso às aulas, scripts e ferramentas:\n🔗 ${user.checkoutUrl || process.env.FRONTEND_URL || 'https://codigozero.app'}\n\nQualquer dúvida, estamos aqui! 💪`;
+          message = `Olá ${name}! 👋\n\nSua assinatura do *Código Zero* expira em *${daysLeft} dia${daysLeft > 1 ? 's' : ''}*.\n\nRenove agora para não perder acesso às aulas, scripts e ferramentas:\n🔗 ${finalLink}\n\nQualquer dúvida, estamos aqui! 💪`;
         } else if (alertTier === '1day') {
-          message = `⚠️ *Atenção, ${name}!*\n\nSua assinatura do Código Zero expira *amanhã*!\n\nSe não renovar, você perderá acesso a:\n• Todas as aulas e materiais\n• Scripts de prospecção\n• Radar de leads\n• Chat da comunidade\n\n👉 Renove agora: ${user.checkoutUrl || process.env.FRONTEND_URL || 'https://codigozero.app'}\n\nNão deixe para última hora! 🚀`;
+          message = `⚠️ *Atenção, ${name}!*\n\nSua assinatura do Código Zero expira *amanhã*!\n\nSe não renovar, você perderá acesso a:\n• Todas as aulas e materiais\n• Scripts de prospecção\n• Radar de leads\n• Chat da comunidade\n\n👉 Renove agora: ${finalLink}\n\nNão deixe para última hora! 🚀`;
         } else {
-          message = `🔴 ${name}, sua assinatura do Código Zero *expirou*.\n\nSeu acesso será bloqueado em breve.\n\nRenove agora e continue sua jornada:\n👉 ${user.checkoutUrl || process.env.FRONTEND_URL || 'https://codigozero.app'}\n\nSe precisar de ajuda, fale com o mentor pelo suporte. 🤝`;
+          message = `🔴 ${name}, sua assinatura do Código Zero *expirou*.\n\nSeu acesso será bloqueado em breve.\n\nRenove agora e continue sua jornada:\n👉 ${finalLink}\n\nSe precisar de ajuda, fale com o mentor pelo suporte. 🤝`;
         }
 
         let cleanPhone = user.phone.replace(/\D/g, '');

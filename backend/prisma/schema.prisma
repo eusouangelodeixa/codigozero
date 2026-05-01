@@ -16,7 +16,11 @@ model User {
   role               String           @default("member") // member, admin
   isActive           Boolean          @default(true)
   subscriptionStatus String           @default("active") // active, grace_period, overdue, canceled
+  subscriptionStart  DateTime?
   subscriptionEnd    DateTime?
+  renewalUrl         String?
+  retentionCouponsUsed Int            @default(0)
+  paymentsSinceLastCoupon Int         @default(0)
   lojouOrderId       String?
   checkoutUrl        String?
   lojouCustomerId    String?

@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
+import { lojouService } from '../services/lojou.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -207,6 +208,12 @@ router.post('/retention-offer', authMiddleware, async (req: AuthRequest, res: Re
       return res.status(400).json({ error: 'Nenhuma assinatura ativa' });
     }
 
+    // 1. Elegibilidade (Anti-Fraude)
+    if (user.retentionCouponsUsed > 0 && user.paymentsSinceLastCoupon < 3) {
+      console.log(`[RETENTION] 🛑 User ${user.email} is not eligible (Used: ${user.retentionCouponsUsed}, Payments since last: ${user.paymentsSinceLastCoupon})`);
+      return res.json({ offer: null, message: 'Não elegível para nova oferta' });
+    }
+
     const LOJOU_API = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
     const LOJOU_KEY = process.env.LOJOU_API_KEY;
 
@@ -214,29 +221,62 @@ router.post('/retention-offer', authMiddleware, async (req: AuthRequest, res: Re
       return res.json({ offer: null, message: 'Gateway não configurado' });
     }
 
-    // Create a 10% discount coupon via Lojou
+    // 2. Criar cupão na Lojou
     const code = `FICA10_${user.id.slice(0, 6).toUpperCase()}`;
-    let couponCreated = false;
+    let checkoutUrl = '';
 
     try {
       const discountRes = await fetch(`${LOJOU_API}/discounts`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOJOU_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code,
-          type: 'percentage',
-          value: 10,
-          uses_limit: 1,
-          active: true,
-        }),
+        headers: { 'Authorization': `Bearer ${LOJOU_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, type: 'percentage', value: 10, uses_limit: 1, active: true }),
       });
 
       if (discountRes.ok) {
-        couponCreated = true;
         console.log(`[RETENTION] ✅ Coupon ${code} created for ${user.email}`);
+        
+        // 3. Gerar novo Checkout Link com o cupão aplicado
+        const orderData = await lojouService.createOrder({
+          amount: 797,
+          product_pid: process.env.LOJOU_PRODUCT_PID || 'uoEHz',
+          plan_id: process.env.LOJOU_PLAN_ID || 'tbo8f',
+          coupon_code: code,
+          customer: {
+            name: user.name,
+            email: user.email,
+            mobile_number: user.phone,
+          }
+        });
+
+        if (orderData?.checkout_url) {
+          checkoutUrl = orderData.checkout_url;
+
+          // 4. Update user tracking limits
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              retentionCouponsUsed: { increment: 1 },
+              paymentsSinceLastCoupon: 0,
+              renewalUrl: checkoutUrl, // Save as their new renewal link
+            }
+          });
+
+          // 5. Enviar mensagem pelo WhatsApp
+          const config = await prisma.systemConfig.findUnique({ where: { id: 'singleton' } });
+          if (config?.komunikaAdminApiKey && config.komunikaInstanceId && user.phone) {
+            const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+            let phone = user.phone.replace(/\D/g, '');
+            if (phone.length === 9 && phone.startsWith('8')) phone = `258${phone}`;
+            
+            const retentionMsg = `Olá ${user.name.split(' ')[0]}, vimos que estás a tentar cancelar a tua assinatura. 😔\n\nNão queremos perder-te! Por isso, gerámos um link de pagamento especial já com *10% de Desconto* aplicado para a tua próxima renovação.\n\n🔗 Usa este link para renovar agora: ${checkoutUrl}\n\nObrigado por estares connosco! 🤝`;
+            
+            fetch(`${apiUrl}/api/v1/messages/send`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-API-Key': config.komunikaAdminApiKey },
+              body: JSON.stringify({ instanceId: config.komunikaInstanceId, to: phone, type: 'text', content: retentionMsg }),
+            }).catch(console.error);
+          }
+        }
       } else {
         console.warn(`[RETENTION] Coupon creation failed: ${discountRes.status}`);
       }
@@ -245,10 +285,10 @@ router.post('/retention-offer', authMiddleware, async (req: AuthRequest, res: Re
     }
 
     return res.json({
-      offer: couponCreated ? {
+      offer: checkoutUrl ? {
         code,
         discount: '10%',
-        message: 'Use este cupom para renovar com 10% de desconto!',
+        message: 'Enviámos-lhe uma mensagem especial no WhatsApp com um link de desconto para ficar connosco!',
       } : null,
     });
   } catch (error) {

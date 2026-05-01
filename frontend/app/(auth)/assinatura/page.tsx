@@ -81,10 +81,10 @@ export default function AssinaturaPage() {
 
   const status = statusLabel(user.subscriptionStatus);
   const isActive = user.subscriptionStatus === "active";
-  const needsRenewal = ["grace_period", "overdue", "canceled"].includes(user.subscriptionStatus);
   const daysLeft = user.subscriptionEnd
     ? Math.ceil((new Date(user.subscriptionEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
+  const needsRenewal = ["grace_period", "overdue", "canceled"].includes(user.subscriptionStatus) || (isActive && daysLeft !== null && daysLeft <= 3);
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px" }}>
@@ -119,12 +119,14 @@ export default function AssinaturaPage() {
         {needsRenewal && (
           <div style={{ marginTop: 16 }}>
             <p style={{ fontSize: 13, color: "#aaa", marginBottom: 12 }}>
-              {user.subscriptionStatus === "grace_period"
+              {user.subscriptionStatus === "active" 
+                ? "Renove agora de forma antecipada para garantir o seu acesso contínuo."
+                : user.subscriptionStatus === "grace_period"
                 ? "Você tem até 72h de acesso restante. Renove para não perder nada."
                 : "Renove agora para recuperar o acesso a todas as aulas, scripts e ferramentas."}
             </p>
             <a
-              href={user.checkoutUrl || "/"}
+              href={user.renewalUrl || user.checkoutUrl || "/"}
               target="_blank"
               rel="noopener"
               style={{

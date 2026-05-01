@@ -110,6 +110,10 @@ router.post('/lojou', async (req: Request, res: Response) => {
           },
         });
 
+        const subscriber = data.plan_subscriber || {};
+        const subscriptionStart = subscriber.start_date ? new Date(subscriber.start_date) : new Date();
+        const subscriptionEnd = subscriber.end_date ? new Date(subscriber.end_date) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
         if (user) {
           // Reactivate existing user
           user = await prisma.user.update({
@@ -117,10 +121,12 @@ router.post('/lojou', async (req: Request, res: Response) => {
             data: {
               isActive: true,
               subscriptionStatus: 'active',
-              subscriptionEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
+              subscriptionStart,
+              subscriptionEnd,
               lojouOrderId: String(orderId),
               passwordHash, // Reset password on reactivation
               remarketingStage: 'none',
+              paymentsSinceLastCoupon: { increment: 1 },
             },
           });
         } else {
@@ -132,8 +138,10 @@ router.post('/lojou', async (req: Request, res: Response) => {
               phone: customerPhone || `+258${Date.now().toString().slice(-9)}`,
               passwordHash,
               subscriptionStatus: 'active',
-              subscriptionEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              subscriptionStart,
+              subscriptionEnd,
               lojouOrderId: String(orderId),
+              paymentsSinceLastCoupon: 1,
             },
           });
 

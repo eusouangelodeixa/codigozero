@@ -1,11 +1,16 @@
 import { env } from '../config/env';
 
 interface LojouOrderPayload {
-  product_id: number;
+  amount: number;
+  product_pid: string;
+  plan_id?: string;
+  coupon_code?: string;
+  return_url?: string;
+  cancel_url?: string;
   customer: {
     name: string;
     email: string;
-    cellphone: string;
+    mobile_number: string;
   };
   metadata?: Record<string, any>;
 }

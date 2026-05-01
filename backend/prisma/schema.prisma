@@ -159,6 +159,8 @@ model LandingConfig {
   priceAmount   Int     @default(797)
   maxVagas      Int     @default(50)
   sections      Json?   // full page sections as JSON
+  headScripts   String? // Tracking pixels for <head>
+  bodyScripts   String? // Tracking pixels for <body>
   updatedAt     DateTime @updatedAt
 }
 

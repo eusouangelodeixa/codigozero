@@ -82,6 +82,7 @@ const TABS = [
   { id: "pricing", label: "💰 Preço" },
   { id: "guarantee", label: "🛡️ Garantia" },
   { id: "footer", label: "📄 Footer" },
+  { id: "tracking", label: "📈 Tracking" },
 ];
 
 export default function AdminLanding() {
@@ -109,6 +110,8 @@ export default function AdminLanding() {
       body: JSON.stringify({
         vslEmbedHtml: cfg.vslEmbedHtml || null,
         vslEmbedUrl: cfg.vslEmbedUrl || null,
+        headScripts: cfg.headScripts || null,
+        bodyScripts: cfg.bodyScripts || null,
         heroTitle: sec.heroTitle !== DEFAULTS.heroTitle ? sec.heroTitle : null,
         heroSubtitle: sec.heroSubtitle !== DEFAULTS.heroSubtitle ? sec.heroSubtitle : null,
         heroDesc: sec.heroDesc !== DEFAULTS.heroDesc ? sec.heroDesc : null,
@@ -158,6 +161,8 @@ export default function AdminLanding() {
       body: JSON.stringify({
         vslEmbedHtml: cfg.vslEmbedHtml || null,
         vslEmbedUrl: cfg.vslEmbedUrl || null,
+        headScripts: cfg.headScripts || null,
+        bodyScripts: cfg.bodyScripts || null,
         heroTitle: null,
         heroSubtitle: null,
         heroDesc: null,
@@ -397,6 +402,32 @@ export default function AdminLanding() {
         <div className={styles.card}>
           <h3 className={styles.cardTitle}>📄 Footer</h3>
           <Field label="Descrição do Footer" field="footerDesc" multiline />
+        </div>
+      )}
+
+      {/* ═══ Tracking ═══ */}
+      {activeTab === "tracking" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>📈 Tracking (Pixels & Scripts)</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Insira os códigos do Meta Pixel, Google Analytics (GA4) ou GTM. Esses scripts serão carregados em todas as páginas da aplicação.
+          </p>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Head Scripts (&lt;head&gt;)</label>
+            <textarea className={styles.formTextarea}
+              style={{ minHeight: 150, fontFamily: "monospace", fontSize: 12 }}
+              placeholder="<!-- Meta Pixel Code -->..."
+              value={cfg.headScripts || ""}
+              onChange={e => setCfg({ ...cfg, headScripts: e.target.value })} />
+          </div>
+          <div className={styles.formGroup} style={{ marginTop: 16 }}>
+            <label className={styles.formLabel}>Body Scripts (&lt;body&gt;)</label>
+            <textarea className={styles.formTextarea}
+              style={{ minHeight: 150, fontFamily: "monospace", fontSize: 12 }}
+              placeholder="<!-- Google Tag Manager (noscript) -->..."
+              value={cfg.bodyScripts || ""}
+              onChange={e => setCfg({ ...cfg, bodyScripts: e.target.value })} />
+          </div>
         </div>
       )}
 

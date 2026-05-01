@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { TrackingInjector } from "@/components/TrackingInjector";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Código Zero - Aluno",
   description: "Crie e venda automações de Inteligência Artificial sem escrever uma linha de código. Gere seus primeiros 50.000 MT/mês.",
   icons: {
-    icon: "/favicon.svg",
+    icon: "/logo.svg",
     apple: "/icons/apple-touch-icon.png",
   },
   manifest: "/manifest.json",
@@ -34,9 +35,9 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </head>
       <body>
+        <TrackingInjector />
         {children}
         <script
           dangerouslySetInnerHTML={{

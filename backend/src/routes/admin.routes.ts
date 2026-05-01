@@ -536,11 +536,11 @@ router.get('/landing-config', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/landing-config', async (req: AuthRequest, res: Response) => {
   try {
-    const { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections } = req.body;
+    const { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections, headScripts, bodyScripts } = req.body;
     const config = await prisma.landingConfig.upsert({
       where: { id: 'singleton' },
-      update: { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections },
-      create: { id: 'singleton', vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections },
+      update: { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections, headScripts, bodyScripts },
+      create: { id: 'singleton', vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections, headScripts, bodyScripts },
     });
     res.json({ config });
   } catch (error) {

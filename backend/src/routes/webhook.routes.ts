@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { scarcityMiddleware } from '../middlewares/scarcity.middleware';
 import { env } from '../config/env';
 import { sendPushToSuperAdmins } from './auth.routes';
 
@@ -14,7 +13,7 @@ const prisma = new PrismaClient();
  * Receives payment events from Lojou gateway.
  * Events: order.approved, order.refunded, order.cancelled
  */
-router.post('/lojou', scarcityMiddleware, async (req: Request, res: Response) => {
+router.post('/lojou', async (req: Request, res: Response) => {
   try {
     // ── SECURITY LAYER 1: Webhook Secret (via header OR query param) ──
     const webhookSecret = req.headers['x-lojou-webhook-secret'] || req.query.secret;

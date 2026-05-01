@@ -30,7 +30,7 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
 
     const totalRevenue = transactions.reduce((sum, t) => sum + t.amount, 0);
     const mrr = paidUsers * 797;
-    const vagasRestantes = (config?.maxUsers || 50) - (config?.currentUsers || 0);
+    const vagasRestantes = "Ilimitado";
 
     const totalScripts = await prisma.script.count();
     const totalModules = await prisma.module.count();

@@ -20,7 +20,7 @@ export default function AdminDashboard() {
     { label: "Pagos / Ativos", value: stats.paidUsers, teal: true },
     { label: "MRR", value: `${stats.mrr.toLocaleString()} MT`, teal: true },
     { label: "Receita Total", value: `${stats.totalRevenue.toLocaleString()} MT`, teal: false },
-    { label: "Vagas Restantes", value: stats.vagasRestantes, teal: false, sub: `de ${stats.vagasRestantes + stats.paidUsers}` },
+    { label: "Vagas Restantes", value: stats.vagasRestantes, teal: false },
     { label: "Usuários Totais", value: stats.totalUsers, teal: false },
     { label: "Módulos / Aulas", value: `${stats.totalModules} / ${stats.totalLessons}`, teal: false },
     { label: "Scripts", value: stats.totalScripts, teal: false },

@@ -61,7 +61,7 @@ const DEFAULTS = {
   priceFrom: "28.500 MT",
   priceAmount: "797",
   pricePeriod: "MT/mês",
-  priceSub: "Você está a apenas 1 cliente de 3.000 MT de empatar meses da sua assinatura",
+  priceSub: "O seu primeiro passo para conquistar a segurança de um negócio digital próprio e trabalhar de onde quiser.",
   priceCtaText: "Garantir Minha Vaga (797 MT)",
   guaranteeLabel: "Garantia Condicional",
   guaranteeTitle: "Risco Zero Absoluto",
@@ -325,12 +325,6 @@ export default function LandingPage() {
               <Logo size={24} />
               <span className={styles.navBrand}>Código Zero</span>
             </div>
-            <div className={styles.navLinks}>
-              <button onClick={() => scrollTo("problema")} className={styles.navLink}>O Problema</button>
-              <button onClick={() => scrollTo("solucao")} className={styles.navLink}>A Solução</button>
-              <button onClick={() => scrollTo("conteudo")} className={styles.navLink}>Conteúdo</button>
-              <button onClick={() => scrollTo("preco")} className={styles.navLink}>Preço</button>
-            </div>
           </div>
         </nav>
 
@@ -500,10 +494,6 @@ export default function LandingPage() {
             <div>
               <h4 className={styles.footerColTitle}>Links</h4>
               <div className={styles.footerLinks}>
-                <button onClick={() => scrollTo("problema")} className={styles.footerLink}>O Problema</button>
-                <button onClick={() => scrollTo("solucao")} className={styles.footerLink}>A Solução</button>
-                <button onClick={() => scrollTo("conteudo")} className={styles.footerLink}>Conteúdo</button>
-                <button onClick={() => scrollTo("preco")} className={styles.footerLink}>Preço</button>
                 <a href="/login" className={styles.footerLink}>Área de Membros</a>
               </div>
             </div>

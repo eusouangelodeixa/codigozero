@@ -115,24 +115,6 @@ O seu único trabalho é descobrir o erro técnico e ajudá-lo a passar o pagame
         <p className={styles.pageDesc}>Controle de vagas, comunidade e mentorias</p>
       </div>
 
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>👥 Capacidade</h3>
-        <div className={styles.formGrid}>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Máximo de Usuários</label>
-            <input
-              className={styles.formInput}
-              type="number"
-              value={config.maxUsers || 50}
-              onChange={e => setConfig({ ...config, maxUsers: parseInt(e.target.value) || 50 })}
-            />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Usuários Atuais</label>
-            <input className={styles.formInput} type="number" value={config.currentUsers || 0} disabled />
-          </div>
-        </div>
-      </div>
 
       <div className={styles.card}>
         <h3 className={styles.cardTitle}>💬 Comunidade</h3>

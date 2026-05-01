@@ -38,7 +38,6 @@ export default function AdminDashboard() {
           <div key={i} className={styles.kpiCard}>
             <p className={styles.kpiLabel}>{kpi.label}</p>
             <p className={`${styles.kpiValue} ${kpi.teal ? styles.kpiValueTeal : ""}`}>{kpi.value}</p>
-            {kpi.sub && <p className={styles.kpiSub}>{kpi.sub}</p>}
           </div>
         ))}
       </div>

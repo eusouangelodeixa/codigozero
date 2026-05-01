@@ -232,8 +232,8 @@ router.post('/retention-offer', authMiddleware, async (req: AuthRequest, res: Re
         body: JSON.stringify({ code, type: 'percentage', value: 10, uses_limit: 1, active: true }),
       });
 
-      if (discountRes.ok) {
-        console.log(`[RETENTION] ✅ Coupon ${code} created for ${user.email}`);
+      if (discountRes.ok || discountRes.status === 409) {
+        console.log(`[RETENTION] ✅ Coupon ${code} ready for ${user.email} (Status: ${discountRes.status})`);
         
         // 3. Gerar novo Checkout Link com o cupão aplicado
         const orderData = await lojouService.createOrder({

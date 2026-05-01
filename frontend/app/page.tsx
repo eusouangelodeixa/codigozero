@@ -9,9 +9,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const DEFAULTS = {
   heroTitle: "Como gerar os seus primeiros 50.000 MT/mês com Inteligência Artificial",
   heroSubtitle: "Sem digitar uma única linha de código",
-  heroDesc: "O ecossistema que te entrega a tecnologia, os clientes e o método exato para fechares contratos B2B de 3.000 MT recorrentes, conquistando a liberdade de trabalhar a partir de casa apenas com um computador simples em Moçambique.",
+  heroDesc: "O ecossistema que te entrega a tecnologia, os clientes e o método exato para <strong>fechares contratos B2B de 3.000 MT recorrentes</strong>, conquistando a liberdade de trabalhar a partir de casa apenas com um computador simples em Moçambique.",
   ctaText: "Entrar no Codigo Zero",
-  trustText: "🔒 Plataforma validada com mais de 2 Milhões de MT já processados.",
+  trustText: "🚀 O atalho definitivo para conquistares a tua independência financeira sem precisares de saber programar.",
   stat1Value: "2M+ MT", stat1Label: "Processados",
   stat2Value: "50", stat2Label: "Vagas",
   stat3Value: "30 dias", stat3Label: "Garantia",
@@ -21,20 +21,20 @@ const DEFAULTS = {
   painLabel: "O Problema",
   painTitle: "O mercado digital antigo exige muito de você.",
   painTitleHighlight: "O jogo mudou.",
-  painDesc: "Você sabe que a internet é o veículo para não ficar estagnado, mas provavelmente já travou na execução e vê o dinheiro desaparecer rápido todos os meses:",
+  painDesc: "Você sabe que a internet é o veículo para não ficar estagnado, mas provavelmente já travou na execução e <strong>vê o dinheiro desaparecer rápido todos os meses</strong>:",
   painItems: [
-    "Consome horas no TikTok/YouTube sobre Marketing Digital, mas nunca aplica nem monetiza nada.",
-    "Tenta vender e-books para pessoas comuns e frustra-se com vácuos ou respostas negativas.",
-    "Fica paralisado pela síndrome do impostor, achando que precisa ser um génio da programação.",
-    "Fica preso em cursinhos teóricos que só vendem teorias, mas nunca entregam as ferramentas.",
-    "Sente que está a ser engolido pela revolução tecnológica enquanto outros prosperam.",
+    "Consome horas no TikTok/YouTube sobre Marketing Digital, mas <strong>nunca aplica nem monetiza nada</strong>.",
+    "Tenta vender e-books para pessoas comuns e frustra-se com <strong>vácuos ou respostas negativas</strong>.",
+    "Fica paralisado pela <strong>síndrome do impostor</strong>, achando que precisa ser um génio da programação.",
+    "Fica preso em cursinhos teóricos que só vendem teorias, mas <strong>nunca entregam as ferramentas</strong>.",
+    "Sente que está a ser <strong>engolido pela revolução tecnológica</strong> enquanto outros prosperam.",
   ],
-  painConclusion: "O seu problema não é falta de vontade. É tentar vender a quem não tem poder de compra, usando os métodos errados.",
+  painConclusion: "O seu problema não é falta de vontade. É tentar vender a <strong>quem não tem poder de compra</strong>, usando os métodos errados.",
   painConclusionSub: "Hoje, donos de negócios não querem saber se você sabe programar. Eles querem soluções. E nós construímos a máquina para você entregar isso.",
   solutionLabel: "A Solução",
   solutionTitle: "Apresentando: O Ecossistema",
   solutionTitleHighlight: "Código Zero",
-  solutionDesc: "Donos de negócios não querem saber se sabes programar — eles pagam por quem resolve os problemas deles. Apresentamos a máquina que faz isso por ti, do primeiro lead ao contrato assinado.",
+  solutionDesc: "Donos de negócios não querem saber se sabes programar — <strong>eles pagam por quem resolve os problemas deles</strong>. Apresentamos a máquina que faz isso por ti, do primeiro lead ao contrato assinado.",
   solutionCards: [
     { title: "Prospecção no Piloto Automático", desc: "Nosso Scraper varre a internet e te entrega o contato de empresas prontas para comprar. Sem pesquisa manual, sem perda de tempo." },
     { title: "O Que Falar — Scripts Validados", desc: "Acesso imediato ao nosso banco com mensagens de WhatsApp de alta conversão. É só copiar, colar e enviar." },
@@ -336,7 +336,7 @@ export default function LandingPage() {
               <span className={styles.heroHighlight}>Inteligência Artificial</span>
             </h1>
             <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
-            <p className={styles.heroDesc}>{t("heroDesc")}</p>
+            <p className={styles.heroDesc} dangerouslySetInnerHTML={{ __html: t("heroDesc") }} />
           </div>
 
           {/* VSL */}
@@ -369,7 +369,7 @@ export default function LandingPage() {
 
             <div className={styles.vslCtaWrapper}>
               <button onClick={() => scrollTo("preco")} className={styles.ctaPrimary}>{t("ctaText")}</button>
-              <p className={styles.heroTrust}>{t("trustText")}</p>
+              <p className={styles.heroTrust} dangerouslySetInnerHTML={{ __html: t("trustText") }} />
             </div>
           </div>
         </section>
@@ -381,17 +381,17 @@ export default function LandingPage() {
             {t("painTitle")}{" "}
             <span className={styles.sectionTitleHighlight}>{t("painTitleHighlight")}</span>
           </h2>
-          <p className={styles.sectionDesc}>{t("painDesc")}</p>
+          <p className={styles.sectionDesc} dangerouslySetInnerHTML={{ __html: t("painDesc") }} />
           <div className={styles.painGrid}>
             {painItems.map((item, i) => (
               <div key={i} className={styles.painItem}>
                 <span className={styles.painX}>✕</span>
-                <span>{item}</span>
+                <span dangerouslySetInnerHTML={{ __html: item }} />
               </div>
             ))}
           </div>
           <div className={styles.painConclusion}>
-            <p className={styles.painConclusionText}>{t("painConclusion")}</p>
+            <p className={styles.painConclusionText} dangerouslySetInnerHTML={{ __html: t("painConclusion") }} />
             <p className={styles.painConclusionSub}>{t("painConclusionSub")}</p>
           </div>
         </section>
@@ -403,7 +403,7 @@ export default function LandingPage() {
             {t("solutionTitle")}{" "}
             <span className={styles.sectionTitleHighlight}>{t("solutionTitleHighlight")}</span>
           </h2>
-          <p className={styles.sectionDesc}>{t("solutionDesc")}</p>
+          <p className={styles.sectionDesc} dangerouslySetInnerHTML={{ __html: t("solutionDesc") }} />
           <div className={styles.solutionGrid}>
             {solutionCards.map((card, i) => (
               <div key={i} className={styles.solutionCard}>

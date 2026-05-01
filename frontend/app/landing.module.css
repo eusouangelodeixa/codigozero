@@ -235,6 +235,13 @@
 .vslPlaceholder:hover .vslPlayBtn { transform: scale(1.08); }
 .vslText { color: var(--text-secondary); font-size: var(--type-body); font-weight: 500; }
 .vslHint { color: var(--text-tertiary); font-size: var(--type-label); }
+.vslCtaWrapper {
+  margin-top: var(--space-8);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 
 /* ═══ SECTION (shared) ═══ */
 .section { max-width: 1200px; margin: 0 auto; padding: var(--space-16) var(--space-6); }

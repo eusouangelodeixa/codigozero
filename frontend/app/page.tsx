@@ -10,7 +10,7 @@ const DEFAULTS = {
   heroTitle: "Como gerar os seus primeiros 50.000 MT/mês com Inteligência Artificial",
   heroSubtitle: "Sem digitar uma única linha de código",
   heroDesc: "O ecossistema completo que te entrega a ferramenta, os clientes e o conhecimento para você criar micronegócios lucrativos em Moçambique.",
-  ctaText: "Quero Garantir 1 das 50 Vagas Agora",
+  ctaText: "Entrar no Codigo Zero",
   trustText: "🔒 Plataforma validada com mais de 2 Milhões de MT já processados.",
   stat1Value: "2M+ MT", stat1Label: "Processados",
   stat2Value: "50", stat2Label: "Vagas",
@@ -331,40 +331,18 @@ export default function LandingPage() {
               <button onClick={() => scrollTo("conteudo")} className={styles.navLink}>Conteúdo</button>
               <button onClick={() => scrollTo("preco")} className={styles.navLink}>Preço</button>
             </div>
-            <div className={styles.navRight}>
-              <span className={styles.navVagas}>
-                <span className={styles.navVagasDot} />
-                Vagas Abertas
-              </span>
-              <button onClick={() => scrollTo("preco")} className={styles.navCta}>Garantir Vaga</button>
-            </div>
           </div>
         </nav>
 
         {/* HERO */}
         <section className={styles.hero}>
           <div className={styles.heroContent}>
-            <div className={styles.heroTags}>
-              <span className={styles.heroTag}><span className={styles.heroTagDot} /> Vagas Abertas</span>
-              <span className={styles.heroTag}>⚡ Turma 1</span>
-              <span className={styles.heroTag}>🛡️ Risco Zero</span>
-            </div>
-
             <h1 className={styles.heroTitle}>
               {t("heroTitle").replace("Inteligência Artificial", "").trim()}{" "}
               <span className={styles.heroHighlight}>Inteligência Artificial</span>
             </h1>
             <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
             <p className={styles.heroDesc}>{t("heroDesc")}</p>
-
-            <button onClick={() => scrollTo("preco")} className={styles.ctaPrimary}>{t("ctaText")}</button>
-            <p className={styles.heroTrust}>{t("trustText")}</p>
-
-            <div className={styles.heroStats}>
-              <div className={styles.heroStat}><span className={styles.heroStatValue}>{t("stat1Value")}</span><span className={styles.heroStatLabel}>{t("stat1Label")}</span></div>
-              <div className={styles.heroStat}><span className={styles.heroStatValue}>{t("stat2Value")}</span><span className={styles.heroStatLabel}>{t("stat2Label")}</span></div>
-              <div className={styles.heroStat}><span className={styles.heroStatValue}>{t("stat3Value")}</span><span className={styles.heroStatLabel}>{t("stat3Label")}</span></div>
-            </div>
           </div>
 
           {/* VSL */}
@@ -393,6 +371,11 @@ export default function LandingPage() {
                   <p className={styles.vslHint}>{t("vslHint")}</p>
                 </div>
               )}
+            </div>
+
+            <div className={styles.vslCtaWrapper}>
+              <button onClick={() => scrollTo("preco")} className={styles.ctaPrimary}>{t("ctaText")}</button>
+              <p className={styles.heroTrust}>{t("trustText")}</p>
             </div>
           </div>
         </section>

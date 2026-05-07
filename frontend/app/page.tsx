@@ -82,7 +82,7 @@ export default function LandingPage() {
   const [sec, setSec] = useState<any>({});
   
   // Survey states
-  const [surveyStep, setSurveyStep] = useState(1);
+  const [surveyStep, setSurveyStep] = useState(0);
   const [surveyAnswers, setSurveyAnswers] = useState<Record<string, string>>({});
 
   const SURVEY_STEPS = [
@@ -149,6 +149,7 @@ export default function LandingPage() {
         const lead = JSON.parse(saved);
         if (lead.name && lead.email) {
           if (lead._v !== LEAD_VERSION || !lead.checkoutUrl) {
+            // Re-fetch checkout URL — DON'T close gate until we have it
             fetch(`${API_URL}/api/landing/lead`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -158,16 +159,32 @@ export default function LandingPage() {
               .then(data => {
                 if (data.success && data.checkoutUrl) {
                   lead.checkoutUrl = data.checkoutUrl;
+                  lead.leadId = data.leadId;
                   lead._v = LEAD_VERSION;
+                  // Não atualiza o savedAt aqui para manter a data do primeiro cadastro
                   localStorage.setItem("cz_lead", JSON.stringify(lead));
                   setCheckoutUrl(data.checkoutUrl);
                 }
               })
-              .catch(() => {});
+              .catch(() => {})
+              .finally(() => setGateOpen(false));
           } else {
-            setCheckoutUrl(lead.checkoutUrl);
+            // Check if 4 hours have passed since the lead was saved
+            const savedTime = new Date(lead.savedAt || Date.now()).getTime();
+            const hoursPassed = (Date.now() - savedTime) / (1000 * 60 * 60);
+
+            if (hoursPassed >= 4) {
+              const fallbackUrl = new URL("https://pay.lojou.app/p/uoEHz");
+              fallbackUrl.searchParams.append("name", lead.name);
+              fallbackUrl.searchParams.append("email", lead.email);
+              if (lead.whatsapp) fallbackUrl.searchParams.append("phone", lead.whatsapp.replace(/\D/g, ''));
+              
+              setCheckoutUrl(fallbackUrl.toString());
+            } else {
+              setCheckoutUrl(lead.checkoutUrl);
+            }
+            setGateOpen(false);
           }
-          setGateOpen(false);
           return;
         }
       }
@@ -225,12 +242,39 @@ export default function LandingPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleCheckoutClick = (e: React.MouseEvent) => {
-    if (!checkoutUrl || checkoutUrl === "#preco" || checkoutUrl === "#") {
-      e.preventDefault();
-      scrollTo("preco");
-    }
+  const hasCheckout = !!checkoutUrl && checkoutUrl !== "#preco" && checkoutUrl !== "#";
+
+  const trackAndOpen = () => {
+    // Mark checkout_pending in backend (fire & forget)
+    try {
+      const saved = localStorage.getItem("cz_lead");
+      if (saved) {
+        const lead = JSON.parse(saved);
+        if (lead.leadId) {
+          fetch(`${API_URL}/api/landing/checkout-click`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ leadId: lead.leadId }),
+          }).catch(() => {});
+        }
+      }
+    } catch {}
   };
+
+  // Renders the CTA correctly: real link when we have a checkout URL, scroll button otherwise
+  const CtaLink = ({ className, children }: { className: string; children: React.ReactNode }) =>
+    hasCheckout ? (
+      <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className={className}
+         onClick={trackAndOpen} style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+        {children}
+      </a>
+    ) : (
+      <button className={className} onClick={() => scrollTo("preco")}
+              style={{ display: 'block', width: '100%', textAlign: 'center', cursor: 'pointer', border: 'none' }}>
+        {children}
+      </button>
+    );
+
 
   // Dynamic arrays with fallbacks
   const painItems = (sec.painItems || DEFAULTS.painItems) as string[];
@@ -253,7 +297,56 @@ export default function LandingPage() {
       {gateOpen === true && (
         <div className={styles.gate}>
           <div className={styles.gateInner}>
-            {surveyStep <= 4 ? (
+            {surveyStep === 0 ? (
+              /* ── HOOK PAGE (Hormozi-style awareness) ── */
+              <div className={styles.surveyFadeIn}>
+                <div className={styles.hookPage}>
+                  <Logo size={36} />
+                  <div className={styles.hookBadge}>⚡ ACESSO RESTRITO</div>
+                  <h1 className={styles.hookTitle}>
+                    Existe um novo modelo de negócio em Moçambique que está a gerar{' '}
+                    <span className={styles.hookHighlight}>50.000 MT/mês</span>{' '}
+                    sem programar uma linha de código.
+                  </h1>
+                  <p className={styles.hookDesc}>
+                    Nós preparamos uma aula gratuita que revela os bastidores deste ecossistema. 
+                    Mas antes de liberar o acesso, precisamos confirmar se este modelo é para você.
+                  </p>
+                  <div className={styles.hookSteps}>
+                    <div className={styles.hookStep}>
+                      <div className={styles.hookStepNum}>1</div>
+                      <div>
+                        <strong>Responda 4 perguntas rápidas</strong>
+                        <span>Menos de 60 segundos</span>
+                      </div>
+                    </div>
+                    <div className={styles.hookStep}>
+                      <div className={styles.hookStepNum}>2</div>
+                      <div>
+                        <strong>Preencha seus dados</strong>
+                        <span>Para liberar o seu acesso</span>
+                      </div>
+                    </div>
+                    <div className={styles.hookStep}>
+                      <div className={styles.hookStepNum}>3</div>
+                      <div>
+                        <strong>Assista a aula completa</strong>
+                        <span>Acesso imediato e gratuito</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    className={styles.hookCta} 
+                    onClick={() => setSurveyStep(1)}
+                  >
+                    Quero Descobrir Se É Para Mim →
+                  </button>
+                  <p className={styles.hookFootnote}>
+                    🔒 Sem compromisso. Sem cartão de crédito. Apenas conhecimento.
+                  </p>
+                </div>
+              </div>
+            ) : surveyStep <= 4 ? (
               <div key={`step-${surveyStep}`} className={styles.surveyFadeIn}>
                 <div className={styles.gateSurveyHeader}>
                   <span className={styles.gateSurveyStep}>PERGUNTA {surveyStep} DE 4</span>
@@ -368,7 +461,13 @@ export default function LandingPage() {
             </div>
 
             <div className={styles.vslCtaWrapper}>
-              <button onClick={() => scrollTo("preco")} className={styles.ctaPrimary}>{t("ctaText")}</button>
+              <button
+                className={styles.ctaPrimary}
+                onClick={() => scrollTo("preco")}
+                style={{ display: 'block', width: '100%', textAlign: 'center', cursor: 'pointer', border: 'none' }}
+              >
+                {t("ctaText")}
+              </button>
               <p className={styles.heroTrust} dangerouslySetInnerHTML={{ __html: t("trustText") }} />
             </div>
           </div>
@@ -454,9 +553,9 @@ export default function LandingPage() {
               {t("priceAmount")} <span className={styles.priceAccent}>{t("pricePeriod")}</span>
             </div>
             <p className={styles.priceSub}>{t("priceSub")}</p>
-            <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.priceCta}>
+            <CtaLink className={styles.priceCta}>
               {t("priceCtaText")}
-            </a>
+            </CtaLink>
           </div>
         </section>
 
@@ -474,9 +573,9 @@ export default function LandingPage() {
             <p className={styles.guaranteeText}>{t("guaranteeText2")}</p>
             <p className={styles.guaranteeHighlight}>{t("guaranteeHighlight")}</p>
             <p className={styles.guaranteeConclusion}>{t("guaranteeConclusion")}</p>
-            <a href={checkoutUrl} onClick={handleCheckoutClick} className={styles.guaranteeCta}>
+            <CtaLink className={styles.guaranteeCta}>
               {t("guaranteeCtaText")}
-            </a>
+            </CtaLink>
           </div>
         </section>
 

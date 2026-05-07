@@ -258,6 +258,14 @@ export function startCronJobs() {
           if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
             cleanPhone = `258${cleanPhone}`;
           }
+          
+          // Generate normal fallback link for remarketing agent
+          const normalUrl = new URL("https://pay.lojou.app/p/uoEHz");
+          if (lead.name) normalUrl.searchParams.append("name", lead.name);
+          if (lead.email) normalUrl.searchParams.append("email", lead.email);
+          normalUrl.searchParams.append("phone", cleanPhone);
+          const normalCheckoutUrl = normalUrl.toString();
+
           try {
             const res = await fetch(`${process.env.KOMUNIKA_API_URL || 'https://api.komunika.site'}/api/v1/funnels/${visitorFunnelId}/add-lead`, {
               method: 'POST',
@@ -272,6 +280,7 @@ export function startCronJobs() {
                 customFields: { 
                   origem: 'Landing Page Abandonada',
                   checkout_url: lead.checkoutUrl || '',
+                  normal_checkout_url: normalCheckoutUrl,
                   ...(lead.surveyAnswers && typeof lead.surveyAnswers === 'object' ? lead.surveyAnswers : {})
                 }
               })
@@ -315,6 +324,14 @@ export function startCronJobs() {
           if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
             cleanPhone = `258${cleanPhone}`;
           }
+
+          // Generate normal fallback link for remarketing agent
+          const normalUrl = new URL("https://pay.lojou.app/p/uoEHz");
+          if (lead.name) normalUrl.searchParams.append("name", lead.name);
+          if (lead.email) normalUrl.searchParams.append("email", lead.email);
+          normalUrl.searchParams.append("phone", cleanPhone);
+          const normalCheckoutUrl = normalUrl.toString();
+
           try {
             const res = await fetch(`${process.env.KOMUNIKA_API_URL || 'https://api.komunika.site'}/api/v1/funnels/${checkoutFunnelId}/add-lead`, {
               method: 'POST',
@@ -329,6 +346,7 @@ export function startCronJobs() {
                 customFields: {
                   order_id: lead.lojouOrderId || '',
                   checkout_url: lead.checkoutUrl || '',
+                  normal_checkout_url: normalCheckoutUrl,
                   ...(lead.surveyAnswers && typeof lead.surveyAnswers === 'object' ? lead.surveyAnswers : {})
                 }
               })

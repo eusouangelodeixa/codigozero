@@ -8,7 +8,7 @@ services:
       context: ../frontend
       dockerfile: ../infrastructure/Dockerfile.frontend
       args:
-        - NEXT_PUBLIC_API_URL=https://app.eusouangelodeixa.com
+        - NEXT_PUBLIC_API_URL=https://api.czero.sbs
         - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
     restart: unless-stopped
     networks:
@@ -30,7 +30,7 @@ services:
       - LOJOU_WEBHOOK_SECRET=${LOJOU_WEBHOOK_SECRET}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
-      - FRONTEND_URL=https://app.eusouangelodeixa.com
+      - FRONTEND_URL=https://app.czero.sbs
       - NODE_ENV=production
       - PORT=4000
       - MAX_DAILY_SEARCHES=${MAX_DAILY_SEARCHES:-10}
@@ -40,12 +40,15 @@ services:
       - KOMUNIKA_FUNNEL_CHECKOUT_ID=${KOMUNIKA_FUNNEL_CHECKOUT_ID:-}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
-      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@eusouangelodeixa.com}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@czero.sbs}
+      - PUSHCUT_WEBHOOK_URL=${PUSHCUT_WEBHOOK_URL}
     depends_on:
       czero_db:
         condition: service_healthy
       czero_redis:
         condition: service_started
+    volumes:
+      - ../backend/uploads:/app/uploads
     restart: unless-stopped
     networks:
       - czero-network

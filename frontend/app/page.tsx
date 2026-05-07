@@ -461,13 +461,9 @@ export default function LandingPage() {
             </div>
 
             <div className={styles.vslCtaWrapper}>
-              <button
-                className={styles.ctaPrimary}
-                onClick={() => scrollTo("preco")}
-                style={{ display: 'block', width: '100%', textAlign: 'center', cursor: 'pointer', border: 'none' }}
-              >
+              <CtaLink className={styles.ctaPrimary}>
                 {t("ctaText")}
-              </button>
+              </CtaLink>
               <p className={styles.heroTrust} dangerouslySetInnerHTML={{ __html: t("trustText") }} />
             </div>
           </div>

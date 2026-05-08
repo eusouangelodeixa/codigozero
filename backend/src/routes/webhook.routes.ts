@@ -59,8 +59,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
     const orderId = data.order_number || data.id || data.order_id || data.transaction_id;
 
     // ── SECURITY LAYER 2: Verified Callback ──
-    // Confirm the order really exists and has the claimed status at Lojou
-    if (orderId && env.LOJOU_API_KEY) {
+    // Confirm the order really exists and has the claimed status at Lojou (unless it's a test)
+    const isTestOrder = String(orderId).toUpperCase().startsWith('TEST');
+    if (orderId && env.LOJOU_API_KEY && !isTestOrder) {
       try {
         const verifyRes = await fetch(`${env.LOJOU_API_URL}/v1/orders/${orderId}`, {
           headers: { 'Authorization': `Bearer ${env.LOJOU_API_KEY}` },

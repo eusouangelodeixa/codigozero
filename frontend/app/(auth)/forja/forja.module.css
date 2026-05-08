@@ -33,6 +33,9 @@
 .theaterPlayer { z-index: 2; }
 
 .videoContainer { position: relative; }
+.videoEmbed { width: 100%; aspect-ratio: 16/9; background: #000; overflow: hidden; border-radius: 12px 12px 0 0; }
+.videoEmbed iframe { width: 100%; height: 100%; border: none; }
+
 
 .videoPlaceholder {
   aspect-ratio: 16/9; background: var(--bg-surface);
@@ -112,8 +115,9 @@
 .modulesColumn {
   display: flex; flex-direction: column; gap: var(--space-3);
   transition: filter 0.4s ease, opacity 0.4s ease;
-  max-height: calc(100vh - 160px); overflow-y: auto;
+  max-height: calc(100vh - 120px); overflow-y: auto;
   position: sticky; top: var(--page-padding);
+  padding-bottom: 60px; /* Garante que a última aula possa subir e ficar visível */
 }
 
 .moduleCard {
@@ -139,7 +143,9 @@
 .expandIcon { transition: transform 0.2s ease; color: var(--text-tertiary); }
 .expandIconOpen { transform: rotate(180deg); }
 
-.lessonsList { border-top: 1px solid var(--border-subtle); }
+.lessonsList { 
+  border-top: 1px solid var(--border-subtle); 
+}
 .lessonItem {
   width: 100%; display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-2) var(--space-4); text-align: left;
@@ -178,6 +184,7 @@
 @media (max-width: 768px) {
   .layout { grid-template-columns: 1fr; }
   .modulesColumn {
-    position: static; max-height: none; overflow-y: visible;
+    position: relative; max-height: none; overflow-y: visible;
+    padding-bottom: 80px;
   }
 }

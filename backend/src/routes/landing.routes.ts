@@ -109,6 +109,29 @@ router.post('/lead', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/landing/checkout-click
+ * Called when a lead clicks the CTA and goes to checkout.
+ * Marks the lead as checkout_pending so the recovery cron can follow up.
+ */
+router.post('/checkout-click', async (req: Request, res: Response) => {
+  try {
+    const { leadId } = req.body;
+    if (!leadId) return res.status(400).json({ error: 'leadId obrigatório' });
+
+    await prisma.user.update({
+      where: { id: leadId },
+      data: { remarketingStage: 'checkout_pending' },
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    // Silently ignore — non-critical tracking call
+    return res.json({ success: false });
+  }
+});
+
+
+/**
  * GET /api/landing/config
  * Public endpoint — returns landing page config (texts, VSL URL, etc.)
  */

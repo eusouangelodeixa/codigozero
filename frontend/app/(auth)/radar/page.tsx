@@ -14,17 +14,32 @@ export default function RadarPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [dispatchToast, setDispatchToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  // Conditions
+  const [requirePhone, setRequirePhone] = useState(false);
+  const [requireWebsite, setRequireWebsite] = useState(false);
+
   // Script Modal state
   const [scriptsFolders, setScriptsFolders] = useState<any[]>([]);
   const [suggestedScript, setSuggestedScript] = useState<any | null>(null);
   const [selectedLead, setSelectedLead] = useState<any>(null);
 
   const { status, results, error, remaining, startSearch } = useRadar();
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   useEffect(() => { 
     loadSavedHistory(); 
     loadScripts();
   }, []);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (status === "processing") {
+      timer = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
+    } else {
+      setElapsedTime(0);
+    }
+    return () => clearInterval(timer);
+  }, [status]);
 
   useEffect(() => {
     if (status === "completed" && results.length > 0) loadSavedHistory();
@@ -97,7 +112,11 @@ export default function RadarPage() {
   };
 
   const allSavedLeads = savedJobs.flatMap(job => job.leads || []);
-  const displayLeads = showSaved ? allSavedLeads : results;
+  const displayLeads = (showSaved ? allSavedLeads : results).filter((lead: any) => {
+    if (requirePhone && (!lead.phone || lead.phone.trim() === '')) return false;
+    if (requireWebsite && (!lead.website || lead.website.trim() === '')) return false;
+    return true;
+  });
 
   const exportCsv = () => {
     if (displayLeads.length === 0) return;
@@ -118,6 +137,34 @@ export default function RadarPage() {
     a.download = `leads_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const [exportingCrm, setExportingCrm] = useState(false);
+  
+  const exportToCRM = async () => {
+    if (displayLeads.length === 0) return;
+    setExportingCrm(true);
+    try {
+      const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const res = await fetch(`${API}/api/radar/export-crm`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('cz_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ leads: displayLeads, tags: ['CodigoZero_Radar', `Nicho_${query}`] })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDispatchToast({ msg: `✅ CRM Atualizado! (${data.successCount} leads guardados)`, type: "success" });
+      } else {
+        setDispatchToast({ msg: `❌ Erro: ${data.error || 'Falha ao exportar'}`, type: "error" });
+      }
+    } catch {
+      setDispatchToast({ msg: "❌ Erro de conexão ao exportar", type: "error" });
+    }
+    setExportingCrm(false);
+    setTimeout(() => setDispatchToast(null), 4000);
   };
 
   return (
@@ -156,13 +203,30 @@ export default function RadarPage() {
             ) : "Rastrear (Background)"}
           </button>
         </div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 12, marginLeft: 4 }}>
+          <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={requirePhone} onChange={e => setRequirePhone(e.target.checked)} />
+            Exigir Telefone
+          </label>
+          <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={requireWebsite} onChange={e => setRequireWebsite(e.target.checked)} />
+            Exigir Website
+          </label>
+        </div>
       </form>
 
       {/* Scraper Loader Indicator */}
       {status === "processing" && (
         <div className={styles.loaderSection}>
-          <div className={styles.scraperSpinner} />
-          <p className={styles.loaderText}>Robô extraindo dados via Google Maps... ({results.length} leads encontrados)</p>
+          <div className={styles.radarCircle}>
+            <div className={styles.radarPulse}></div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <p className={styles.loaderText}>Nossa I.A. mapeando e extraindo leads da web... ({results.length} leads encontrados)</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', fontWeight: 500 }}>
+              Tempo estimado de processamento: ~{Math.max(10, 120 - elapsedTime)} segundos
+            </p>
+          </div>
         </div>
       )}
 
@@ -186,14 +250,24 @@ export default function RadarPage() {
               onClick={() => setShowSaved(true)}>Histórico Completo ({allSavedLeads.length})</button>
           </div>
           {displayLeads.length > 0 && (
-            <button onClick={exportCsv} style={{
-              padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500,
-              background: "rgba(45,212,191,0.08)", border: "1px solid rgba(45,212,191,0.15)",
-              color: "#2DD4BF", cursor: "pointer", transition: "opacity 0.15s",
-              display: "flex", alignItems: "center", gap: 6,
-            }}>
-              📥 Exportar CSV
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={exportToCRM} disabled={exportingCrm} style={{
+                padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500,
+                background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+                color: "var(--accent)", cursor: exportingCrm ? "wait" : "pointer", transition: "opacity 0.15s",
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                {exportingCrm ? "⏳ Salvando..." : "☁️ Salvar no Komunika CRM"}
+              </button>
+              <button onClick={exportCsv} style={{
+                padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500,
+                background: "rgba(45,212,191,0.08)", border: "1px solid rgba(45,212,191,0.15)",
+                color: "#2DD4BF", cursor: "pointer", transition: "opacity 0.15s",
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                📥 Exportar CSV
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -208,6 +282,7 @@ export default function RadarPage() {
                 <tr>
                   <th>Nome / Negócio</th>
                   <th>Contato</th>
+                  <th>Website</th>
                   <th>Status do Site</th>
                   <th>Instagram</th>
                   <th>Ação / Script</th>
@@ -226,6 +301,17 @@ export default function RadarPage() {
                             <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                           </svg>
                         </span>
+                      </td>
+                      <td>
+                        {lead.website ? (
+                          <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} 
+                             target="_blank" rel="noreferrer" 
+                             style={{ fontSize: 12, color: "var(--accent)", textDecoration: "none", display: "flex", alignItems: "center", gap: 4 }}>
+                            🌍 Visitar ↗
+                          </a>
+                        ) : (
+                          <span className={styles.noData}>—</span>
+                        )}
                       </td>
                       <td>
                         <span className={`${styles.badge} ${lead.status === "Sem Website" ? styles.badgeRed : lead.status === "Website Lento/Antigo" ? styles.badgeYellow : styles.badgeGreen}`}>
@@ -268,6 +354,9 @@ export default function RadarPage() {
                       📞 {lead.phone}
                       {copiedId === id && <span style={{ color: "var(--color-success)", fontSize: 11, marginLeft: 4 }}>✓</span>}
                     </span>
+                    {lead.website && (
+                      <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noreferrer" className={styles.igLink}>🌍 Website ↗</a>
+                    )}
                     {lead.instagram && (
                       <a href={lead.instagram} target="_blank" className={styles.igLink}>📷 Instagram ↗</a>
                     )}

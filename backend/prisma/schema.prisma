@@ -28,7 +28,7 @@ model User {
   lastSearchDate     DateTime?
   komunikaApiKey     String?
   komunikaInstanceId String?
-  remarketingStage   String           @default("none") // none, visitor_sent, checkout_failed_sent
+  remarketingStage   String           @default("none") // none → visitor_sent | none → checkout_pending → checkout_failed_sent
   surveyAnswers      Json?
   avatarUrl          String?
   hasCompletedOnboarding Boolean @default(false)
@@ -163,9 +163,10 @@ model LandingConfig {
   priceAmount   Int     @default(797)
   maxVagas      Int     @default(50)
   sections      Json?   // full page sections as JSON
-  headScripts   String? // Tracking pixels for <head>
-  bodyScripts   String? // Tracking pixels for <body>
-  updatedAt     DateTime @updatedAt
+  headScripts       String? // Tracking pixels for <head> (concatenated)
+  headScriptBlocks  String? // Tracking pixels as JSON array [{name, code}]
+  bodyScripts       String? // Tracking pixels for <body>
+  updatedAt         DateTime @updatedAt
 }
 
 model ScrapeJob {

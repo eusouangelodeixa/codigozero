@@ -36,14 +36,21 @@ export default function DisparadorPage() {
   const [dispatchResult, setDispatchResult] = useState<{ sent: number; failed: number } | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  // Komunika Integration State
+  const [komunikaInfo, setKomunikaInfo] = useState<{ configured: boolean; instanceStatus: any; funnels: any[] } | null>(null);
+  const [dispatchMode, setDispatchMode] = useState<"message" | "funnel">("message");
+  const [msgType, setMsgType] = useState<"text" | "audio" | "document">("text");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [selectedFunnel, setSelectedFunnel] = useState("");
+
   // History
   const [history, setHistory] = useState<DispatchLog[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
-  const hdr = () => ({
+  const hdr = useCallback(() => ({
     Authorization: `Bearer ${localStorage.getItem("cz_token")}`,
     "Content-Type": "application/json",
-  });
+  }), []);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToast({ msg, type });
@@ -80,7 +87,18 @@ export default function DisparadorPage() {
         setRadarLeads(leads);
       })
       .catch(() => {});
-  }, []);
+  }, [hdr]);
+
+  // Load Komunika info
+  useEffect(() => {
+    fetch(`${API}/api/radar/komunika-info`, { headers: hdr() })
+      .then(r => r.json())
+      .then(data => {
+         setKomunikaInfo(data);
+         if (data.funnels && data.funnels.length > 0) setSelectedFunnel(data.funnels[0].id);
+      })
+      .catch(() => {});
+  }, [hdr]);
 
   // Load history
   const loadHistory = useCallback(() => {
@@ -215,9 +233,47 @@ export default function DisparadorPage() {
   };
 
   // Dispatch
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    showToast("⏳ Fazendo upload...", "success");
+    try {
+      const res = await fetch(`${API}/api/radar/upload-media`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('cz_token')}` },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMediaUrl(data.url);
+        showToast("✅ Ficheiro pronto para envio!", "success");
+      } else {
+        showToast(data.error || "Erro no upload", "error");
+      }
+    } catch {
+      showToast("Erro de conexão ao enviar arquivo", "error");
+    }
+    e.target.value = '';
+  };
+
   const handleDispatch = async () => {
-    if (selectedContacts.length === 0 || !message.trim()) {
-      showToast("Selecione contatos e escreva uma mensagem", "error");
+    if (selectedContacts.length === 0) {
+      showToast("Selecione pelo menos um contato", "error");
+      return;
+    }
+    if (dispatchMode === "message" && msgType === "text" && !message.trim()) {
+      showToast("Preencha a mensagem de texto", "error");
+      return;
+    }
+    if (dispatchMode === "message" && msgType !== "text" && !mediaUrl) {
+      showToast("Aguarde o upload do ficheiro ou insira um válido", "error");
+      return;
+    }
+    if (dispatchMode === "funnel" && !selectedFunnel) {
+      showToast("Selecione um Funil de destino", "error");
       return;
     }
 
@@ -242,7 +298,11 @@ export default function DisparadorPage() {
         headers: hdr(),
         body: JSON.stringify({
           contacts: selectedContacts.map(c => ({ phone: c.phone, name: c.name, variables: c.variables || {} })),
-          message: message,
+          message: dispatchMode === "message" ? message : undefined,
+          dispatchMode,
+          type: msgType,
+          mediaUrl: msgType !== "text" ? mediaUrl : undefined,
+          funnelId: dispatchMode === "funnel" ? selectedFunnel : undefined
         }),
       });
       const data = await res.json();
@@ -269,60 +329,107 @@ export default function DisparadorPage() {
   return (
     <div className={styles.page}>
       <span className={styles.sectionLabel}>Disparador / Central de Prospecção</span>
-      <h1 className={styles.sectionTitle}>Disparador</h1>
-      <p className={styles.sectionDescription}>
-        Envie mensagens personalizadas via WhatsApp para seus leads
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <h1 className={styles.sectionTitle}>Disparador</h1>
+          <p className={styles.sectionDescription}>
+            Envie mensagens personalizadas ou inicie funis via Komunika
+          </p>
+        </div>
+        {komunikaInfo && komunikaInfo.configured && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border-default)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>WhatsApp:</span>
+            {komunikaInfo.instanceStatus?.status === 'connected' ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-success)', fontWeight: 600 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)', boxShadow: '0 0 8px var(--color-success)' }} />
+                Conectado ({komunikaInfo.instanceStatus?.phone?.replace('@s.whatsapp.net', '')})
+              </span>
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--color-error)', fontWeight: 600 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-error)' }} />
+                Desconectado
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className={styles.layout}>
         {/* ══ Left: Message Editor ══ */}
         <div className={styles.card}>
           <div className={styles.cardTitle}>📝 Mensagem</div>
 
-          <select
-            className={styles.scriptSelect}
-            value={selectedScriptId}
-            onChange={e => handleScriptChange(e.target.value)}
-          >
-            <option value="">Selecione um script ou escreva manualmente...</option>
-            {scripts.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.folderName} → {s.title}
-              </option>
-            ))}
-          </select>
-
-          <div style={{ marginTop: 12, flex: 1, display: "flex", flexDirection: "column" }}>
-            <textarea
-              className={styles.messageEditor}
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              placeholder={`Escreva sua mensagem aqui...\n\nUse variáveis como {{nome}} e {{telefone}} para personalizar.\n\nExemplo:\nOlá {{nome}}, tudo bem?\nVi que seu negócio pode se beneficiar de...`}
-            />
-
-            <div className={styles.variableHint}>
-              <span style={{ fontSize: 11, color: "#666", marginRight: 4 }}>Variáveis:</span>
-              {["nome", "telefone", "empresa", "cidade", "produto", "negocio"].map(v => (
-                <button key={v} className={styles.variableTag} onClick={() => insertVariable(v)}>
-                  {`{{${v}}}`}
-                </button>
-              ))}
-            </div>
-            {extraVars.length > 0 && (
-              <div style={{ fontSize: 11, color: "#2DD4BF", marginTop: 4 }}>
-                ℹ️ Variáveis detectadas: {detectedVars.join(", ")} — preencha nos contatos
-              </div>
-            )}
-
-            {message && (
-              <div className={styles.charCount}>
-                {message.length} caracteres
-              </div>
-            )}
+          <div style={{ display: "flex", gap: 12, marginBottom: 16, background: "rgba(255,255,255,0.02)", padding: 4, borderRadius: 8 }}>
+            <button 
+              style={{ flex: 1, padding: "8px", borderRadius: 6, fontSize: 13, fontWeight: 500, background: dispatchMode === "message" ? "var(--accent-dim)" : "transparent", color: dispatchMode === "message" ? "var(--accent)" : "var(--text-tertiary)", border: "none", cursor: "pointer" }}
+              onClick={() => setDispatchMode("message")}
+            >✉️ Enviar Mensagem</button>
+            <button 
+              style={{ flex: 1, padding: "8px", borderRadius: 6, fontSize: 13, fontWeight: 500, background: dispatchMode === "funnel" ? "var(--accent-dim)" : "transparent", color: dispatchMode === "funnel" ? "var(--accent)" : "var(--text-tertiary)", border: "none", cursor: "pointer" }}
+              onClick={() => setDispatchMode("funnel")}
+            >⚡ Injetar no Funil</button>
           </div>
 
+          {dispatchMode === "message" ? (
+            <>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {["text", "document"].map(t => (
+                   <button key={t} onClick={() => setMsgType(t as any)} style={{
+                     padding: "6px 12px", borderRadius: 16, fontSize: 11, fontWeight: 600, border: `1px solid ${msgType === t ? 'var(--accent)' : 'var(--border-default)'}`,
+                     background: msgType === t ? 'var(--accent)' : 'transparent', color: msgType === t ? 'var(--bg-base)' : 'var(--text-secondary)', cursor: 'pointer'
+                   }}>
+                     {t === 'text' ? 'Texto' : '📄 Documento (PDF)'}
+                   </button>
+                ))}
+              </div>
+
+              {msgType !== "text" && (
+                <div style={{ marginBottom: 12, padding: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px dashed var(--border-default)' }}>
+                  <label className={styles.addBtn} style={{ cursor: "pointer", display: "inline-block", width: 'fit-content' }}>
+                    📁 Carregar Documento (PDF)
+                    <input type="file" accept="application/pdf" onChange={handleFileUpload} style={{ display: "none" }} />
+                  </label>
+                  {mediaUrl && <div style={{ fontSize: 11, color: "var(--color-success)", marginTop: 8 }}>✓ Anexo pronto: {mediaUrl.split('/').pop()}</div>}
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>Os ficheiros são temporários e serão eliminados automaticamente (Reciclagem Verde).</div>
+                </div>
+              )}
+
+              <select className={styles.scriptSelect} value={selectedScriptId} onChange={e => handleScriptChange(e.target.value)}>
+                <option value="">Selecione um script do cofre...</option>
+                {scripts.map(s => <option key={s.id} value={s.id}>{s.folderName} → {s.title}</option>)}
+              </select>
+
+              <div style={{ marginTop: 12, flex: 1, display: "flex", flexDirection: "column" }}>
+                <textarea className={styles.messageEditor} value={message} onChange={e => setMessage(e.target.value)} placeholder={`Escreva sua mensagem ${msgType !== "text" ? '(legenda)' : ''} aqui...\n\nUse variáveis como {{nome}} e {{telefone}} para personalizar.`} />
+
+                <div className={styles.variableHint}>
+                  <span style={{ fontSize: 11, color: "#666", marginRight: 4 }}>Variáveis:</span>
+                  {["nome", "telefone", "empresa", "cidade", "produto"].map(v => (
+                    <button key={v} className={styles.variableTag} onClick={() => insertVariable(v)}>{`{{${v}}}`}</button>
+                  ))}
+                </div>
+                {extraVars.length > 0 && <div style={{ fontSize: 11, color: "#2DD4BF", marginTop: 4 }}>ℹ️ Variáveis detectadas: {detectedVars.join(", ")}</div>}
+              </div>
+            </>
+          ) : (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                Escolha um Funil Automático configurado na sua conta do Komunika. Todos os contatos selecionados iniciarão este fluxo imediatamente.
+              </p>
+              {komunikaInfo?.funnels?.length ? (
+                <select className={styles.scriptSelect} value={selectedFunnel} onChange={e => setSelectedFunnel(e.target.value)}>
+                  {komunikaInfo.funnels.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+              ) : (
+                <div style={{ padding: 16, background: "rgba(239,68,68,0.1)", borderRadius: 8, color: "var(--color-error)", fontSize: 13 }}>
+                  Nenhum funil encontrado no seu Komunika. Crie um lá primeiro!
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Preview */}
-          {message && selectedContacts.length > 0 && (
+          {dispatchMode === "message" && message && selectedContacts.length > 0 && (
             <div style={{
               marginTop: 12, padding: 12, borderRadius: 8,
               background: "rgba(45,212,191,0.04)", border: "1px solid rgba(45,212,191,0.1)",
@@ -403,22 +510,21 @@ export default function DisparadorPage() {
                 </div>
               </div>
 
-              {/* Dynamic variable fields */}
-              {extraVars.length > 0 && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {extraVars.map(v => (
-                    <div key={v} style={{ flex: 1, minWidth: 120 }}>
-                      <label style={{ fontSize: 11, color: "#2DD4BF", display: "block", marginBottom: 4 }}>
-                        {`{{${v}}}`}
-                      </label>
-                      <input className={styles.manualInput}
-                        placeholder={v.charAt(0).toUpperCase() + v.slice(1)}
-                        value={manualVars[v] || ""}
-                        onChange={e => setManualVars(prev => ({ ...prev, [v]: e.target.value }))} />
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Variable fields */}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {Array.from(new Set([...["empresa", "cidade", "produto", "negocio"], ...extraVars])).map(v => (
+                  <div key={v} style={{ flex: 1, minWidth: 100 }}>
+                    <label style={{ fontSize: 11, color: extraVars.includes(v) ? "#2DD4BF" : "#aaa", display: "block", marginBottom: 4 }}>
+                      {extraVars.includes(v) ? `{{${v}}}` : v.charAt(0).toUpperCase() + v.slice(1)}
+                    </label>
+                    <input className={styles.manualInput}
+                      placeholder={`Opcional`}
+                      value={manualVars[v] || ""}
+                      onChange={e => setManualVars(prev => ({ ...prev, [v]: e.target.value }))}
+                      onKeyDown={e => e.key === "Enter" && addManualContact()} />
+                  </div>
+                ))}
+              </div>
 
               <button className={styles.addBtn} onClick={addManualContact}
                 style={{ alignSelf: "flex-start" }}>+ Adicionar contato</button>
@@ -486,7 +592,7 @@ export default function DisparadorPage() {
       <div className={styles.footer}>
         <button
           className={styles.dispatchBtn}
-          disabled={dispatching || selectedContacts.length === 0 || !message.trim()}
+          disabled={dispatching || selectedContacts.length === 0 || (dispatchMode === "message" && msgType === "text" && !message.trim()) || (dispatchMode === "message" && msgType !== "text" && !mediaUrl) || (dispatchMode === "funnel" && !selectedFunnel)}
           onClick={handleDispatch}
         >
           {dispatching ? (

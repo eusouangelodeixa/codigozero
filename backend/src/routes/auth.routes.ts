@@ -538,6 +538,22 @@ export async function sendPushToSuperAdmins(payload: { title: string; body: stri
     for (const admin of admins) {
       await sendPushToUser(admin.id, payload);
     }
+
+    // Integração Pushcut para iPhone
+    if (process.env.PUSHCUT_WEBHOOK_URL) {
+      try {
+        await fetch(process.env.PUSHCUT_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: payload.title,
+            text: payload.body,
+          })
+        });
+      } catch (e) {
+        console.error('[PUSHCUT] Delivery error:', e);
+      }
+    }
   } catch (e) {
     console.error('[PUSH] Superadmin push error:', e);
   }

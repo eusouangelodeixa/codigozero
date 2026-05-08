@@ -91,15 +91,24 @@ export default function ForjaPage() {
           {activeLesson ? (
             <div className={`${styles.playerWrapper} ${theaterMode ? styles.theaterPlayer : ""}`}>
               <div className={styles.videoContainer}>
-                <div className={styles.videoPlaceholder} onClick={() => setTheaterMode(!theaterMode)}>
-                  <div className={styles.playButton}>
-                    <svg width="32" height="32" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                {activeLesson.videoUrl ? (
+                  <div 
+                    className={styles.videoEmbed}
+                    dangerouslySetInnerHTML={{ 
+                      __html: activeLesson.videoUrl.replace('<iframe ', '<iframe allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true" ') 
+                    }} 
+                  />
+                ) : (
+                  <div className={styles.videoPlaceholder} onClick={() => setTheaterMode(!theaterMode)}>
+                    <div className={styles.playButton}>
+                      <svg width="32" height="32" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                    </div>
+                    <p className={styles.videoTitle}>{activeLesson.title}</p>
+                    <p className={styles.videoHint}>
+                      {theaterMode ? "Sair do Modo Teatro" : "Ativar Modo Teatro"}
+                    </p>
                   </div>
-                  <p className={styles.videoTitle}>{activeLesson.title}</p>
-                  <p className={styles.videoHint}>
-                    {theaterMode ? "Sair do Modo Teatro" : "Ativar Modo Teatro"}
-                  </p>
-                </div>
+                )}
               </div>
 
               <div className={styles.lessonInfo}>

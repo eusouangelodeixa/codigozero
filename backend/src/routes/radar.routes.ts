@@ -8,6 +8,23 @@ import { scraperQueue, redisConnection } from '../queues/scraper.queue';
 const router = Router();
 const prisma = new PrismaClient();
 
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + ext);
+  }
+});
+const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
+
 /**
  * POST /api/radar/start
  * Starts a Google Maps scraping job via BullMQ
@@ -179,7 +196,7 @@ router.get('/leads', authMiddleware, subscriptionMiddleware, async (req: AuthReq
 router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { phone, content, contacts, message } = req.body;
+    const { phone, content, contacts, message, dispatchMode = 'message', type = 'text', mediaUrl, funnelId } = req.body;
 
     // Normalize to batch format
     const contactList: { phone: string; name?: string; variables?: Record<string, string> }[] = contacts
@@ -188,8 +205,17 @@ router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: Aut
 
     const msgContent = message || content;
 
-    if (contactList.length === 0 || !msgContent) {
-      return res.status(400).json({ error: 'Contatos e mensagem são obrigatórios' });
+    if (contactList.length === 0) {
+      return res.status(400).json({ error: 'Contatos são obrigatórios' });
+    }
+    if (dispatchMode === 'message' && type === 'text' && !msgContent) {
+      return res.status(400).json({ error: 'Mensagem de texto é obrigatória para este modo' });
+    }
+    if (dispatchMode === 'message' && type !== 'text' && !mediaUrl) {
+      return res.status(400).json({ error: 'O upload do arquivo (Áudio/Documento) é obrigatório' });
+    }
+    if (dispatchMode === 'funnel' && !funnelId) {
+      return res.status(400).json({ error: 'O ID do Funil é obrigatório para este modo' });
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -205,28 +231,36 @@ router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: Aut
     for (const contact of contactList) {
       const cleanPhone = contact.phone.replace(/\D/g, '');
 
-      // Replace standard variables
-      let personalizedMsg = msgContent
-        .replace(/\{\{nome\}\}/gi, contact.name || contact.variables?.nome || '')
-        .replace(/\{\{telefone\}\}/gi, contact.phone || '')
-        .replace(/\{\{negocio\}\}/gi, contact.variables?.negocio || contact.name || '');
+      let personalizedMsg = '';
+      if (msgContent) {
+        personalizedMsg = msgContent
+          .replace(/\{\{nome\}\}/gi, contact.name || contact.variables?.nome || '')
+          .replace(/\{\{telefone\}\}/gi, contact.phone || '')
+          .replace(/\{\{negocio\}\}/gi, contact.variables?.negocio || contact.name || '');
 
-      // Replace all custom variables from contact.variables
-      if (contact.variables) {
-        Object.entries(contact.variables).forEach(([key, val]) => {
-          personalizedMsg = personalizedMsg.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), val || '');
-        });
+        if (contact.variables) {
+          Object.entries(contact.variables).forEach(([key, val]) => {
+            personalizedMsg = personalizedMsg.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), val || '');
+          });
+        }
       }
 
       try {
-        const response = await fetch(`${apiUrl}/api/v1/messages/send`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': user.komunikaApiKey,
-          },
-          body: JSON.stringify({ instanceId: user.komunikaInstanceId, to: cleanPhone, type: 'text', content: personalizedMsg }),
-        });
+        let response;
+        if (dispatchMode === 'funnel') {
+           response = await fetch(`${apiUrl}/api/v1/funnels/${funnelId}/add-lead`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json', 'X-API-Key': user.komunikaApiKey },
+             body: JSON.stringify({ phone: cleanPhone, name: contact.name, customFields: contact.variables || {} })
+           });
+           personalizedMsg = `[Injetado no Funil: ${funnelId}]`;
+        } else {
+           response = await fetch(`${apiUrl}/api/v1/messages/send`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json', 'X-API-Key': user.komunikaApiKey },
+             body: JSON.stringify({ instanceId: user.komunikaInstanceId, to: cleanPhone, type, mediaUrl, fileName: mediaUrl ? mediaUrl.split('/').pop() : undefined, ...(personalizedMsg ? { content: personalizedMsg } : {}) })
+           });
+        }
 
         const data = await response.json().catch(() => null);
 
@@ -284,6 +318,126 @@ router.get('/dispatch-history', authMiddleware, subscriptionMiddleware, async (r
   } catch (error) {
     console.error('[DISPATCH] History error:', error);
     return res.status(500).json({ error: 'Erro ao carregar histórico' });
+  }
+});
+
+/**
+ * POST /api/radar/upload-media
+ * Uploads a file and returns its public URL to be used as mediaUrl
+ */
+router.post('/upload-media', authMiddleware, upload.single('file'), (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    }
+    const host = req.get('host') || 'api.czero.sbs';
+    const protocol = req.protocol === 'https' || host.includes('sbs') ? 'https' : 'http';
+    const baseUrl = `${protocol}://${host}`;
+    const mediaUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    return res.json({ url: mediaUrl });
+  } catch (err: any) {
+    console.error('[RADAR] Upload Error:', err);
+    return res.status(500).json({ error: 'Erro ao fazer upload do ficheiro' });
+  }
+});
+
+/**
+ * POST /api/radar/export-crm
+ * Exports a list of leads to Komunika CRM
+ */
+router.post('/export-crm', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { leads, tags } = req.body;
+    
+    if (!leads || !Array.isArray(leads) || leads.length === 0) {
+      return res.status(400).json({ error: 'Nenhum lead fornecido para exportação' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.komunikaApiKey) {
+      return res.status(400).json({ error: 'KOMUNIKA_NOT_CONFIGURED', message: 'API Key do Komunika não configurada.' });
+    }
+
+    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+    const results = { success: 0, failed: 0 };
+
+    // Process leads in parallel batches of 10 to respect rate limits
+    for (let i = 0; i < leads.length; i += 10) {
+      const batch = leads.slice(i, i + 10);
+      await Promise.all(batch.map(async (lead) => {
+        try {
+          const cleanPhone = (lead.phone || '').replace(/\D/g, '');
+          if (!cleanPhone) { results.failed++; return; }
+          
+          const response = await fetch(`${apiUrl}/api/v1/contacts/capture`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': user.komunikaApiKey! },
+            body: JSON.stringify({
+              phone: cleanPhone,
+              name: lead.name || 'Desconhecido',
+              tags: tags || ['CodigoZero_Radar'],
+              customFields: { status: lead.status || '', instagram: lead.instagram || '', source: 'Radar' }
+            })
+          });
+          
+          if (response.ok) results.success++;
+          else results.failed++;
+        } catch {
+          results.failed++;
+        }
+      }));
+    }
+
+    return res.json({ success: true, successCount: results.success, failedCount: results.failed });
+  } catch (error: any) {
+    console.error('[RADAR] Export CRM error:', error);
+    return res.status(500).json({ error: 'Erro interno ao exportar CRM' });
+  }
+});
+
+/**
+ * GET /api/radar/komunika-info
+ * Returns Komunika instance status and active funnels
+ */
+router.get('/komunika-info', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user || !user.komunikaApiKey) {
+      return res.json({ configured: false });
+    }
+
+    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+    
+    let instanceStatus = null;
+    if (user.komunikaInstanceId) {
+       try {
+         const stRes = await fetch(`${apiUrl}/api/v1/instances/${user.komunikaInstanceId}/status`, {
+           headers: { 'X-API-Key': user.komunikaApiKey }
+         });
+         if (stRes.ok) {
+           const stData = await stRes.json();
+           instanceStatus = stData.data;
+         }
+       } catch {}
+    }
+
+    let funnels = [];
+    try {
+      const fnRes = await fetch(`${apiUrl}/api/v1/funnels`, {
+        headers: { 'X-API-Key': user.komunikaApiKey }
+      });
+      if (fnRes.ok) {
+        const fnData = await fnRes.json();
+        funnels = fnData.data || [];
+      }
+    } catch {}
+
+    return res.json({ configured: true, instanceStatus, funnels });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao buscar info do Komunika' });
   }
 });
 

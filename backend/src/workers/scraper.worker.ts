@@ -22,10 +22,15 @@ export const scraperWorker = new Worker<ScrapeJobData>(
       data: { status: 'processing' }
     });
 
-    const browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage();
-    
+    let browser;
     try {
+      browser = await chromium.launch({ 
+        headless: true,
+        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      });
+      const page = await browser.newPage();
+      
       const searchQuery = encodeURIComponent(`${query} em ${city}`);
       await page.goto(`https://www.google.com/maps/search/${searchQuery}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
       
@@ -169,7 +174,7 @@ export const scraperWorker = new Worker<ScrapeJobData>(
       });
       redisConnection.publish(`job:${jobId}`, JSON.stringify({ event: 'FAILED' }));
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
     }
   },
   { connection: redisConnection }

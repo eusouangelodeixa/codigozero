@@ -91,6 +91,8 @@ export default function AdminLanding() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [activeTab, setActiveTab] = useState("vsl");
+  // Head scripts: array of { name: string, code: string }
+  const [headScriptBlocks, setHeadScriptBlocks] = useState<{ name: string; code: string }[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/admin/landing-config`, { headers: hdr() })
@@ -98,10 +100,20 @@ export default function AdminLanding() {
         const config = d.config || {};
         setCfg(config);
         setSec({ ...DEFAULTS, ...(config.sections || {}) });
+        // Parse stored headScriptBlocks (stored as JSON comment blocks or plain string)
+        if (config.headScriptBlocks) {
+          try { setHeadScriptBlocks(JSON.parse(config.headScriptBlocks)); } catch { setHeadScriptBlocks([]); }
+        } else if (config.headScripts) {
+          // Legacy: migrate plain headScripts to one block
+          setHeadScriptBlocks([{ name: "Scripts", code: config.headScripts }]);
+        }
       });
   }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  const serializeHeadScripts = (blocks: { name: string; code: string }[]) =>
+    blocks.map(b => b.code).filter(Boolean).join("\n");
 
   const saveAll = async () => {
     setSaving(true);
@@ -110,7 +122,8 @@ export default function AdminLanding() {
       body: JSON.stringify({
         vslEmbedHtml: cfg.vslEmbedHtml || null,
         vslEmbedUrl: cfg.vslEmbedUrl || null,
-        headScripts: cfg.headScripts || null,
+        headScripts: serializeHeadScripts(headScriptBlocks) || null,
+        headScriptBlocks: JSON.stringify(headScriptBlocks),
         bodyScripts: cfg.bodyScripts || null,
         heroTitle: sec.heroTitle !== DEFAULTS.heroTitle ? sec.heroTitle : null,
         heroSubtitle: sec.heroSubtitle !== DEFAULTS.heroSubtitle ? sec.heroSubtitle : null,
@@ -154,14 +167,15 @@ export default function AdminLanding() {
   );
 
   const revertToDefaults = async () => {
-    if (!confirm("⚠️ Reverter TODOS os textos para os valores originais?\n\nIsso vai apagar todas as customizações de texto.\nO embed da VSL será mantido.\n\nContinuar?")) return;
+    if (!confirm("⚠️ Reverter TODOS os textos para os valores originais?\n\nIsso vai apagar todas as customizações de texto.\nO embed da VSL e scripts de tracking serão mantidos.\n\nContinuar?")) return;
     setSaving(true);
     await fetch(`${API}/api/admin/landing-config`, {
       method: "PATCH", headers: hdr(),
       body: JSON.stringify({
         vslEmbedHtml: cfg.vslEmbedHtml || null,
         vslEmbedUrl: cfg.vslEmbedUrl || null,
-        headScripts: cfg.headScripts || null,
+        headScripts: serializeHeadScripts(headScriptBlocks) || null,
+        headScriptBlocks: JSON.stringify(headScriptBlocks),
         bodyScripts: cfg.bodyScripts || null,
         heroTitle: null,
         heroSubtitle: null,
@@ -408,25 +422,79 @@ export default function AdminLanding() {
       {/* ═══ Tracking ═══ */}
       {activeTab === "tracking" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>📈 Tracking (Pixels & Scripts)</h3>
-          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
-            Insira os códigos do Meta Pixel, Google Analytics (GA4) ou GTM. Esses scripts serão carregados em todas as páginas da aplicação.
+          <h3 className={styles.cardTitle}>📈 Tracking — Head Scripts</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 20 }}>
+            Adicione múltiplos scripts para o <code style={{ background: "rgba(99,102,241,0.15)", padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>&lt;head&gt;</code> da landing page.
+            Cada bloco tem um nome identificativo (ex: "Meta Pixel", "VSL Pixel"). Só ficam no código — não aparecem visualmente.
           </p>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Head Scripts (&lt;head&gt;)</label>
-            <textarea className={styles.formTextarea}
-              style={{ minHeight: 150, fontFamily: "monospace", fontSize: 12 }}
-              placeholder="<!-- Meta Pixel Code -->..."
-              value={cfg.headScripts || ""}
-              onChange={e => setCfg({ ...cfg, headScripts: e.target.value })} />
-          </div>
-          <div className={styles.formGroup} style={{ marginTop: 16 }}>
-            <label className={styles.formLabel}>Body Scripts (&lt;body&gt;)</label>
-            <textarea className={styles.formTextarea}
-              style={{ minHeight: 150, fontFamily: "monospace", fontSize: 12 }}
+
+          {headScriptBlocks.length === 0 && (
+            <p style={{ color: "#666", fontSize: 13, marginBottom: 16, fontStyle: "italic" }}>Nenhum script adicionado. Clique em "+ Adicionar Script" para começar.</p>
+          )}
+
+          {headScriptBlocks.map((block, i) => (
+            <div key={i} style={{
+              background: "rgba(0,0,0,0.25)", border: "1px solid rgba(99,102,241,0.2)",
+              borderRadius: 10, padding: 16, marginBottom: 12,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <span style={{
+                  background: "rgba(99,102,241,0.2)", color: "#a5b4fc",
+                  borderRadius: 6, padding: "2px 10px", fontSize: 11, fontWeight: 700,
+                  letterSpacing: "0.06em", textTransform: "uppercase",
+                }}>#{i + 1}</span>
+                <input
+                  className={styles.formInput}
+                  style={{ flex: 1, fontWeight: 600 }}
+                  placeholder="Nome do script (ex: Meta Pixel, VSL Pixel, GTM)"
+                  value={block.name}
+                  onChange={e => {
+                    const updated = [...headScriptBlocks];
+                    updated[i] = { ...block, name: e.target.value };
+                    setHeadScriptBlocks(updated);
+                  }}
+                />
+                <button
+                  onClick={() => setHeadScriptBlocks(headScriptBlocks.filter((_, idx) => idx !== i))}
+                  style={{
+                    background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)",
+                    color: "#ef4444", borderRadius: 6, padding: "6px 12px", cursor: "pointer",
+                    fontSize: 12, fontWeight: 600,
+                  }}
+                >✕ Remover</button>
+              </div>
+              <textarea
+                className={styles.formTextarea}
+                style={{ minHeight: 120, fontFamily: "monospace", fontSize: 12 }}
+                placeholder={`<!-- Código do ${block.name || "script"} -->`}
+                value={block.code}
+                onChange={e => {
+                  const updated = [...headScriptBlocks];
+                  updated[i] = { ...block, code: e.target.value };
+                  setHeadScriptBlocks(updated);
+                }}
+              />
+            </div>
+          ))}
+
+          <button
+            className={styles.btnSecondary}
+            style={{ marginTop: 4 }}
+            onClick={() => setHeadScriptBlocks([...headScriptBlocks, { name: "", code: "" }])}
+          >
+            + Adicionar Script no &lt;head&gt;
+          </button>
+
+          <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <label className={styles.formLabel} style={{ marginBottom: 8, display: "block" }}>Body Scripts (&lt;/body&gt;)</label>
+            <p style={{ color: "#666", fontSize: 12, marginBottom: 10 }}>Para scripts que devem ser injetados antes do fechamento do body (ex: noscript do GTM).</p>
+            <textarea
+              className={styles.formTextarea}
+              style={{ minHeight: 100, fontFamily: "monospace", fontSize: 12 }}
               placeholder="<!-- Google Tag Manager (noscript) -->..."
               value={cfg.bodyScripts || ""}
-              onChange={e => setCfg({ ...cfg, bodyScripts: e.target.value })} />
+              onChange={e => setCfg({ ...cfg, bodyScripts: e.target.value })}
+            />
           </div>
         </div>
       )}

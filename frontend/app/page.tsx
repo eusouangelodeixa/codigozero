@@ -192,6 +192,19 @@ export default function LandingPage() {
     setGateOpen(true);
   }, []);
 
+  // Handle anchor links (e.g. czero.sbs/#preco) — scroll after page mounts
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash?.replace("#", "");
+    if (!hash) return;
+    // Small delay to ensure the DOM is fully rendered
+    const t = setTimeout(() => {
+      const el = document.getElementById(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 600);
+    return () => clearTimeout(t);
+  }, []);
+
   const handleGateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;

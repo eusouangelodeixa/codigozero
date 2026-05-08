@@ -177,7 +177,7 @@ export default function LandingPage() {
               const fallbackUrl = new URL("https://pay.lojou.app/p/uoEHz");
               fallbackUrl.searchParams.append("name", lead.name);
               fallbackUrl.searchParams.append("email", lead.email);
-              if (lead.whatsapp) fallbackUrl.searchParams.append("phone", lead.whatsapp.replace(/\D/g, ''));
+              if (lead.whatsapp) fallbackUrl.searchParams.append("number", lead.whatsapp.replace(/\D/g, ''));
               
               setCheckoutUrl(fallbackUrl.toString());
             } else {

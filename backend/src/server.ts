@@ -21,9 +21,24 @@ const app = express();
 // ── Security & Parsing ──
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // Nginx already sends these headers — disable to prevent duplicates
+  // that cause Safari/iOS "Load failed" network errors
+  hsts: false,
+  contentSecurityPolicy: false,
+  xContentTypeOptions: false,
 }));
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, mobile apps, same-origin)
+    if (!origin) return callback(null, true);
+    const allowed = [
+      env.FRONTEND_URL,           // https://app.czero.sbs
+      'https://czero.sbs',        // landing page root domain
+      'https://www.czero.sbs',    // www variant
+    ].filter(Boolean);
+    if (allowed.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
 }));
 

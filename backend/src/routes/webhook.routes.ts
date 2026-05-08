@@ -75,6 +75,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
             console.warn(`[WEBHOOK] 🚨 MISMATCH — webhook says approved but Lojou says ${realStatus}`);
             return res.status(403).json({ error: 'Order status mismatch' });
           }
+        } else if (verifyRes.status === 404) {
+          console.warn(`[WEBHOOK] 🚨 FAKE ORDER — order ${orderId} does not exist at Lojou`);
+          return res.status(403).json({ error: 'Order not found at gateway' });
         } else {
           console.warn(`[WEBHOOK] ⚠️ Could not verify order ${orderId} at Lojou (status ${verifyRes.status})`);
         }

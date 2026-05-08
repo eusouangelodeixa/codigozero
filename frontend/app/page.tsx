@@ -443,11 +443,9 @@ export default function LandingPage() {
               </div>
               
               {cfg.vslEmbedHtml ? (
-                <iframe 
-                  src={cfg.vslEmbedHtml.match(/src=["'](.*?)["']/i)?.[1] || ""} 
-                  style={{ display: "block", width: "100%", aspectRatio: "16/9", border: "none", borderRadius: "0 0 12px 12px", minHeight: "300px" }} 
-                  allowFullScreen 
-                  title="Video Player"
+                <div
+                  style={{ display: "block", width: "100%", aspectRatio: "16/9", border: "none", borderRadius: "0 0 12px 12px", minHeight: "300px", overflow: "hidden" }}
+                  dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }}
                 />
               ) : (
                 <div className={styles.vslPlaceholder}>

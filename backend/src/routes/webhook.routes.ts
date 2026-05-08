@@ -24,10 +24,18 @@ router.post('/lojou', async (req: Request, res: Response) => {
 
     // Parse body (may be raw buffer from express.raw())
     let payload: any;
-    if (Buffer.isBuffer(req.body)) {
-      payload = JSON.parse(req.body.toString());
-    } else {
-      payload = req.body;
+    try {
+      if (Buffer.isBuffer(req.body)) {
+        const bodyStr = req.body.toString().trim();
+        payload = bodyStr ? JSON.parse(bodyStr) : {};
+      } else if (typeof req.body === 'string') {
+        payload = req.body.trim() ? JSON.parse(req.body) : {};
+      } else {
+        payload = req.body || {};
+      }
+    } catch (err) {
+      console.warn('[WEBHOOK] 🚨 JSON Parse failed:', err);
+      return res.status(400).json({ error: 'Invalid JSON payload' });
     }
 
     // Lojou sends { order_type, customer, product, ... } at root level

@@ -42,8 +42,8 @@ app.use(cors({
   credentials: true,
 }));
 
-// Webhook route needs raw body for signature verification
-app.use('/api/webhooks', express.raw({ type: 'application/json' }));
+// Webhook route needs raw body for signature verification (accepts any content type)
+app.use('/api/webhooks', express.raw({ type: '*/*' }));
 app.use(express.json());
 
 // ── Static uploads ──

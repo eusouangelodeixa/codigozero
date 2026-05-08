@@ -296,19 +296,24 @@
 
 /* VSL — macOS window, below hero text */
 .heroMedia {
+  /* Shrink-wrap to the video: max 800px but can be narrower */
   max-width: 800px; margin: 0 auto; width: 100%; position: relative; z-index: 10;
 }
 .vslWrapper {
   background: var(--bg-surface); border: 1px solid var(--border-default);
-  border-radius: 12px; overflow: hidden;
+  border-radius: 14px; overflow: hidden;
+  /* 8px padding around the embed so the container is just a touch larger than the video */
+  padding: 0 0 8px;
 }
 .vslWrapper iframe {
   display: block; width: 100%; aspect-ratio: 16/9; border: none;
 }
 .vslEmbed {
-  width: 100%; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 12px;
+  width: 100%; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;
 }
-.vslEmbed iframe {
+.vslEmbed iframe,
+.vslEmbed > div > iframe,
+.vslEmbed > div {
   position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; border: none !important;
 }
 .vslBar {

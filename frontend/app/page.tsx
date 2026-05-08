@@ -444,7 +444,7 @@ export default function LandingPage() {
               
               {cfg.vslEmbedHtml ? (
                 <div
-                  style={{ display: "block", width: "100%", aspectRatio: "16/9", border: "none", borderRadius: "0 0 12px 12px", minHeight: "300px", overflow: "hidden" }}
+                  className={styles.vslEmbed}
                   dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }}
                 />
               ) : (

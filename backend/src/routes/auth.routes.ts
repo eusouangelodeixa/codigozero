@@ -8,6 +8,12 @@ import fs from 'fs';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { lojouService } from '../services/lojou.service';
+import {
+  sendPushToUser,
+  sendPushToUsers,
+  sendPushBroadcast,
+  sendPushToSuperAdmins,
+} from '../services/push.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -471,90 +477,24 @@ router.post('/push-subscribe', authMiddleware, async (req: AuthRequest, res: Res
   }
 });
 
+// POST /api/auth/push-test — send a self-test notification to the caller
+router.post('/push-test', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const result = await sendPushToUser(req.user!.id, {
+    title: '🧪 Teste de notificação',
+    body: 'Funcionou! Suas notificações do Código Zero estão ativas.',
+    url: '/perfil',
+  });
+  if (result.attempted === 0) {
+    return res.status(404).json({
+      success: false,
+      error: 'Nenhuma assinatura push registrada neste dispositivo. Ative as notificações primeiro.',
+      ...result,
+    });
+  }
+  return res.json({ success: result.delivered > 0, ...result });
+});
+
 export default router;
 
-// ── Helper: send push to a user ──
-export async function sendPushToUser(userId: string, payload: { title: string; body: string; url?: string; icon?: string }) {
-  try {
-    const webpush = require('web-push');
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@codigozero.app',
-      process.env.VAPID_PUBLIC_KEY || '',
-      process.env.VAPID_PRIVATE_KEY || '',
-    );
-
-    const subs = await prisma.pushSubscription.findMany({ where: { userId } });
-
-    for (const sub of subs) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify(payload),
-        );
-      } catch (err: any) {
-        // Remove expired subscriptions (410 Gone)
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
-        }
-      }
-    }
-  } catch (e) {
-    console.error('[PUSH] Send error:', e);
-  }
-}
-// Helper: broadcast push to ALL users
-export async function sendPushBroadcast(payload: { title: string; body: string; url?: string }) {
-  try {
-    const webpush = require('web-push');
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@codigozero.app',
-      process.env.VAPID_PUBLIC_KEY || '',
-      process.env.VAPID_PRIVATE_KEY || '',
-    );
-
-    const allSubs = await prisma.pushSubscription.findMany();
-
-    for (const sub of allSubs) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify(payload),
-        );
-      } catch (err: any) {
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
-        }
-      }
-    }
-  } catch (e) {
-    console.error('[PUSH] Broadcast error:', e);
-  }
-}
-
-// Helper: send push to all superadmins
-export async function sendPushToSuperAdmins(payload: { title: string; body: string; url?: string }) {
-  try {
-    const admins = await prisma.user.findMany({ where: { role: 'superadmin' }, select: { id: true } });
-    for (const admin of admins) {
-      await sendPushToUser(admin.id, payload);
-    }
-
-    // Integração Pushcut para iPhone
-    if (process.env.PUSHCUT_WEBHOOK_URL) {
-      try {
-        await fetch(process.env.PUSHCUT_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: payload.title,
-            text: payload.body,
-          })
-        });
-      } catch (e) {
-        console.error('[PUSHCUT] Delivery error:', e);
-      }
-    }
-  } catch (e) {
-    console.error('[PUSH] Superadmin push error:', e);
-  }
-}
+// Re-export push helpers for legacy import paths (chat / admin / cron / webhook)
+export { sendPushToUser, sendPushToUsers, sendPushBroadcast, sendPushToSuperAdmins };

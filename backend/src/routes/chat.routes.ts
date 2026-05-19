@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
-import { sendPushToUser } from './auth.routes';
+import { sendPushToUser, sendPushToUsers } from './auth.routes';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -70,14 +70,22 @@ router.post('/community', async (req: AuthRequest, res: Response) => {
       include: { sender: { select: SENDER_SELECT } },
     });
 
-    // Push notification to all other users
-    const allUsers = await prisma.user.findMany({ where: { id: { not: req.user!.id }, isActive: true }, select: { id: true } });
-    const senderName = message.sender?.name || 'Alguém';
-    for (const u of allUsers) {
-      sendPushToUser(u.id, { title: `💬 ${senderName} na Comunidade`, body: content.trim().substring(0, 100), url: '/chat' }).catch(() => {});
-    }
-
     res.json({ message });
+
+    // Push notification to all other active users (fire-and-forget, batched in one query)
+    const allUsers = await prisma.user.findMany({
+      where: { id: { not: req.user!.id }, isActive: true },
+      select: { id: true },
+    });
+    const senderName = message.sender?.name || 'Alguém';
+    sendPushToUsers(
+      allUsers.map((u) => u.id),
+      {
+        title: `💬 ${senderName} na Comunidade`,
+        body: content.trim().substring(0, 140),
+        url: '/chat',
+      },
+    ).catch((e) => console.error('[CHAT] community push error:', e));
   } catch (error) {
     console.error('[CHAT] Community send error:', error);
     res.status(500).json({ error: 'Erro ao enviar mensagem' });
@@ -204,20 +212,25 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
       include: { sender: { select: SENDER_SELECT } },
     });
 
-    // Push notification to the other party
-    const recipientId = isAdmin ? targetUserId : 'admin';
-    if (isAdmin) {
-      // Admin replying to user
-      sendPushToUser(targetUserId, { title: '🛟 Suporte — Código Zero', body: content.trim().substring(0, 100), url: '/chat' }).catch(() => {});
-    } else {
-      // User messaging support — notify all admins
-      const admins = await prisma.user.findMany({ where: { role: 'admin' }, select: { id: true } });
-      for (const a of admins) {
-        sendPushToUser(a.id, { title: '🛟 Nova mensagem de suporte', body: content.trim().substring(0, 100), url: '/chat' }).catch(() => {});
-      }
-    }
-
     res.json({ message });
+
+    // Push notification to the other party (fire-and-forget)
+    if (isAdmin) {
+      sendPushToUser(targetUserId, {
+        title: '🛟 Suporte — Código Zero',
+        body: content.trim().substring(0, 140),
+        url: '/chat',
+      }).catch((e) => console.error('[CHAT] support push error:', e));
+    } else {
+      const admins = await prisma.user.findMany({
+        where: { role: 'admin' },
+        select: { id: true },
+      });
+      sendPushToUsers(
+        admins.map((a) => a.id),
+        { title: '🛟 Nova mensagem de suporte', body: content.trim().substring(0, 140), url: '/chat' },
+      ).catch((e) => console.error('[CHAT] support push (admins) error:', e));
+    }
   } catch (error) {
     console.error('[CHAT] Support send error:', error);
     res.status(500).json({ error: 'Erro ao enviar mensagem de suporte' });

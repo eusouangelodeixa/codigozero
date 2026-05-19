@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { PageHeader, Card, Button, Input, useToast } from "@/components/ui";
+import { subscribeToPush } from "@/lib/pushNotifications";
 import styles from "./perfil.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -29,6 +30,7 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hdr = () => ({
@@ -111,6 +113,46 @@ export default function PerfilPage() {
       toast.error("Erro de conexão");
     }
     setSaving(false);
+  };
+
+  const testPush = async () => {
+    setTestingPush(true);
+    try {
+      // Ensure browser has an active subscription before asking server to push.
+      const ok = await subscribeToPush();
+      if (!ok) {
+        toast.error(
+          "Notificações desativadas",
+          "Permita notificações neste dispositivo (ou instale o app na tela inicial)."
+        );
+        setTestingPush(false);
+        return;
+      }
+      const res = await fetch(`${API}/api/auth/push-test`, {
+        method: "POST",
+        headers: hdr(),
+      });
+      const data = await res.json();
+      if (res.ok && data.delivered > 0) {
+        toast.success(
+          "Notificação enviada",
+          `Entregue em ${data.delivered} dispositivo(s). Confira a tela.`
+        );
+      } else if (data.attempted === 0) {
+        toast.error(
+          "Sem assinatura push",
+          "Permita notificações neste navegador e tente de novo."
+        );
+      } else {
+        toast.error(
+          "Falha no envio",
+          data.errors?.[0] || `Tentou ${data.attempted}, entregou ${data.delivered ?? 0}.`
+        );
+      }
+    } catch {
+      toast.error("Erro de conexão");
+    }
+    setTestingPush(false);
   };
 
   const changePassword = async () => {
@@ -214,6 +256,23 @@ export default function PerfilPage() {
           <div>
             <Button variant="primary" onClick={saveProfile} loading={saving}>
               Salvar alterações
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* ── Notificações ── */}
+      <Card padding="lg">
+        <div className={styles.section}>
+          <div>
+            <h2 className={styles.sectionTitle}>Notificações push</h2>
+            <p className={styles.sectionSubtitle}>
+              Receba avisos do chat da comunidade, suporte e novidades neste dispositivo.
+            </p>
+          </div>
+          <div>
+            <Button variant="secondary" onClick={testPush} loading={testingPush}>
+              Enviar notificação de teste
             </Button>
           </div>
         </div>

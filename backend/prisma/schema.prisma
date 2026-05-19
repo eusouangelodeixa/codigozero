@@ -36,6 +36,11 @@ model User {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
+  // Affiliate program
+  referredByCode     String?              // affiliate code that brought this user in
+  affiliateAccount   AffiliateAccount?    // becomes an affiliate themselves
+  affiliateReferrals AffiliateReferral[]  @relation("AffiliateReferralUser")
+
   leads              Lead[]
   lessonProgress     LessonProgress[]
   chatMessages       ChatMessage[]
@@ -167,6 +172,9 @@ model LandingConfig {
   headScripts       String? // Tracking pixels for <head> (concatenated)
   headScriptBlocks  String? // Tracking pixels as JSON array [{name, code}]
   bodyScripts       String? // Tracking pixels for <body>
+  // Affiliate-specific overrides (used when the visitor lands via /r/{code})
+  affiliateVslEmbedHtml  String?
+  affiliateCreativesUrl  String?
   updatedAt         DateTime @updatedAt
 }
 
@@ -257,6 +265,84 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// ═══════════════════════════════════════════
+// AFFILIATE PROGRAM
+// ═══════════════════════════════════════════
+
+model AffiliateAccount {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code          String   @unique               // 7–9 alphanumeric chars
+  enabled       Boolean  @default(true)
+  payoutMethod  String?                        // "mpesa" | "emola"
+  payoutTarget  String?                        // phone number to receive funds
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  referrals     AffiliateReferral[]
+  commissions   AffiliateCommission[]
+  withdrawals   AffiliateWithdrawal[]
+
+  @@index([code])
+}
+
+model AffiliateReferral {
+  id            String           @id @default(uuid())
+  affiliateId   String
+  affiliate     AffiliateAccount @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  email         String?
+  phone         String?
+  // Once the lead pays, link to the resulting user account
+  userId        String?
+  user          User?            @relation("AffiliateReferralUser", fields: [userId], references: [id], onDelete: SetNull)
+  status        String           @default("pending") // pending | paid | refunded | lost_to_remarketing
+  paidAt        DateTime?
+  createdAt     DateTime         @default(now())
+
+  @@index([affiliateId, status])
+  @@index([email])
+}
+
+model AffiliateCommission {
+  id            String           @id @default(uuid())
+  affiliateId   String
+  affiliate     AffiliateAccount @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referralId    String?
+  lojouOrderId  String?
+  saleAmount    Float
+  grossAmount   Float            // commission before platform fee
+  feeAmount     Float            // platform fee (10% of sale + fixed)
+  netAmount     Float            // grossAmount - feeAmount (what's added to balance)
+  availableAt   DateTime         // commission becomes withdrawable from this date (D+7)
+  status        String           @default("pending") // pending | available | withdrawn | refunded
+  withdrawalId  String?          // populated when included in a withdrawal payout
+  createdAt     DateTime         @default(now())
+
+  @@index([affiliateId, status])
+  @@index([availableAt, status])
+  @@index([withdrawalId])
+}
+
+model AffiliateWithdrawal {
+  id              String           @id @default(uuid())
+  affiliateId     String
+  affiliate       AffiliateAccount @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  amountRequested Float            // total gross (sum of net commissions consumed)
+  feeAmount       Float            // 3% + 45 MZN
+  amountNet       Float            // what the affiliate actually receives
+  payoutMethod    String           // "mpesa" | "emola"
+  payoutTarget    String
+  status          String           @default("pending") // pending | paid | rejected
+  notes           String?
+  processedAt     DateTime?
+  processedBy     String?          // admin user id who approved/rejected
+  createdAt       DateTime         @default(now())
+
+  @@index([affiliateId, status])
+  @@index([status, createdAt])
 }
 
 model Coupon {

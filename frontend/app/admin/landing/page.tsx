@@ -83,6 +83,7 @@ const TABS = [
   { id: "guarantee", label: "🛡️ Garantia" },
   { id: "footer", label: "📄 Footer" },
   { id: "tracking", label: "📈 Tracking" },
+  { id: "affiliate", label: "🤝 Afiliados" },
 ];
 
 export default function AdminLanding() {
@@ -132,6 +133,8 @@ export default function AdminLanding() {
         priceAmount: parseInt(sec.priceAmount) || 797,
         maxVagas: parseInt(sec.stat2Value) || 50,
         sections: sec,
+        affiliateVslEmbedHtml: cfg.affiliateVslEmbedHtml || null,
+        affiliateCreativesUrl: cfg.affiliateCreativesUrl || null,
       }),
     });
     setSaving(false);
@@ -494,6 +497,58 @@ export default function AdminLanding() {
               placeholder="<!-- Google Tag Manager (noscript) -->..."
               value={cfg.bodyScripts || ""}
               onChange={e => setCfg({ ...cfg, bodyScripts: e.target.value })}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Affiliate ═══ */}
+      {activeTab === "affiliate" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🤝 Landing dos Afiliados</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 20 }}>
+            Esses campos só se aplicam à página acessada via{" "}
+            <code style={{ background: "rgba(99,102,241,0.15)", padding: "2px 6px", borderRadius: 4, fontSize: 11 }}>
+              /r/&#123;código&#125;
+            </code>
+            . Se vazios, a landing de afiliados usa a VSL padrão.
+          </p>
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>VSL exclusiva da landing de afiliados</label>
+            <p style={{ color: "#666", fontSize: 12, marginBottom: 10 }}>
+              Cole o &lt;iframe&gt; da VSL específica do afiliado. Quando preenchido, sobrepõe a VSL padrão na rota{" "}
+              <code style={{ fontFamily: "monospace" }}>/r/&#123;código&#125;</code>.
+            </p>
+            <textarea
+              className={styles.formTextarea}
+              style={{ minHeight: 100, fontFamily: "monospace", fontSize: 12 }}
+              placeholder='<iframe width="100%" style="aspect-ratio: 16/9;" src="https://..." frameborder="0" allowfullscreen></iframe>'
+              value={cfg.affiliateVslEmbedHtml || ""}
+              onChange={e => setCfg({ ...cfg, affiliateVslEmbedHtml: e.target.value })}
+            />
+            {cfg.affiliateVslEmbedHtml && (
+              <div style={{ marginTop: 16 }}>
+                <label className={styles.formLabel} style={{ marginBottom: 8, display: "block" }}>Preview:</label>
+                <div
+                  style={{ borderRadius: 8, overflow: "hidden", border: "1px solid rgba(45,212,191,0.15)" }}
+                  dangerouslySetInnerHTML={{ __html: cfg.affiliateVslEmbedHtml }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className={styles.formGroup} style={{ marginTop: 24 }}>
+            <label className={styles.formLabel}>Pasta de criativos (URL pública)</label>
+            <p style={{ color: "#666", fontSize: 12, marginBottom: 10 }}>
+              Link para Google Drive, Notion ou Dropbox com banners, vídeos e prints que os afiliados podem usar.
+              O botão "Acessar pasta de criativos" no painel do afiliado leva para esta URL.
+            </p>
+            <input
+              className={styles.formInput}
+              placeholder="https://drive.google.com/..."
+              value={cfg.affiliateCreativesUrl || ""}
+              onChange={e => setCfg({ ...cfg, affiliateCreativesUrl: e.target.value })}
             />
           </div>
         </div>

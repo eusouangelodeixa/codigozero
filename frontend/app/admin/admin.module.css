@@ -625,6 +625,92 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ── Toolbar + filters + tables (shared admin utilities) ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 240px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-glass);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--type-small);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.searchInput::placeholder { color: var(--text-tertiary); }
+
+.filterRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tableCard {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.linkBtn {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+.linkBtn:hover { background: var(--bg-glass); color: var(--text-primary); border-color: var(--border-strong); }
+
+.primaryBtn {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--motion-fast);
+}
+.primaryBtn:hover:not(:disabled) { background: rgba(45, 212, 191, 0.85); }
+.primaryBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dangerBtn {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--color-error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+.dangerBtn:hover:not(:disabled) { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.5); }
+.dangerBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Empty ── */
 .empty {
   text-align: center;

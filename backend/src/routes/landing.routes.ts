@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
 import crypto from 'crypto';
+import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -21,7 +22,7 @@ const PRODUCT_PRICE = 797;
  */
 router.post('/lead', async (req: Request, res: Response) => {
   try {
-    const { name, phone, whatsapp, email, surveyAnswers } = req.body;
+    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
@@ -29,16 +30,37 @@ router.post('/lead', async (req: Request, res: Response) => {
 
     const contactPhone = whatsapp || phone || `+258${Date.now().toString().slice(-9)}`;
 
+    // ── Affiliate check ────────────────────────────────────────────────
+    // If we got an affiliate code, validate it before anything else. An
+    // invalid code is silently ignored (no error) so a typo on a copied
+    // link doesn't break the lead form, but the lead won't get attributed.
+    let affiliateAccount: { id: string; code: string } | null = null;
+    if (affiliateCode && typeof affiliateCode === 'string') {
+      const code = affiliateCode.trim();
+      const acc = await prisma.affiliateAccount.findUnique({
+        where: { code },
+        select: { id: true, code: true, enabled: true },
+      });
+      if (acc && acc.enabled) affiliateAccount = { id: acc.id, code: acc.code };
+    }
+
+    const isAffiliateFlow = affiliateAccount !== null;
+
     // Try to find existing user by email first
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (user) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { 
-          name, 
+        data: {
+          name,
           remarketingStage: 'none',
-          ...(surveyAnswers && { surveyAnswers })
+          ...(surveyAnswers && { surveyAnswers }),
+          // Stamp the affiliate code on the User row only if not already set.
+          // Avoids re-attributing an existing customer to a new affiliate.
+          ...(affiliateAccount && !user.referredByCode
+            ? { referredByCode: affiliateAccount.code }
+            : {}),
         },
       });
     } else {
@@ -51,14 +73,45 @@ router.post('/lead', async (req: Request, res: Response) => {
           phone: phoneExists ? `${contactPhone}_${Date.now()}` : contactPhone,
           passwordHash: crypto.randomBytes(32).toString('hex'),
           subscriptionStatus: 'lead',
-          ...(surveyAnswers && { surveyAnswers })
+          ...(surveyAnswers && { surveyAnswers }),
+          ...(affiliateAccount ? { referredByCode: affiliateAccount.code } : {}),
         },
       });
     }
 
-    // Create Lojou order with plan_id for recurring checkout
+    // Record (or update) the referral row when applicable.
+    if (affiliateAccount) {
+      const existingReferral = await prisma.affiliateReferral.findFirst({
+        where: { affiliateId: affiliateAccount.id, userId: user.id },
+      });
+      if (!existingReferral) {
+        await prisma.affiliateReferral.create({
+          data: {
+            affiliateId: affiliateAccount.id,
+            userId: user.id,
+            email,
+            phone: contactPhone,
+            status: 'pending',
+          },
+        });
+      }
+    }
+
+    // ── Checkout URL strategy ─────────────────────────────────────────
+    // Default landing: create a personalized Lojou order (prefilled checkout).
+    // Affiliate landing: skip Lojou orders API and return the standard public
+    // checkout URL for the affiliate product. The user re-enters their info
+    // on Lojou; the system attributes the sale via the email captured here
+    // when the webhook fires (see User.referredByCode).
     let checkoutUrl = '';
-    if (LOJOU_KEY) {
+
+    if (isAffiliateFlow) {
+      checkoutUrl = AFFILIATE_PRODUCT.checkoutUrl;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { checkoutUrl },
+      });
+    } else if (LOJOU_KEY) {
       try {
         const orderRes = await fetch(`${LOJOU_API}/orders`, {
           method: 'POST',
@@ -86,9 +139,9 @@ router.post('/lead', async (req: Request, res: Response) => {
 
           await prisma.user.update({
             where: { id: user.id },
-            data: { 
+            data: {
               lojouOrderId: orderData.order_number,
-              checkoutUrl: orderData.checkout_url 
+              checkoutUrl: orderData.checkout_url,
             },
           });
         }
@@ -101,6 +154,7 @@ router.post('/lead', async (req: Request, res: Response) => {
       success: true,
       leadId: user.id,
       checkoutUrl,
+      attributed: isAffiliateFlow,
     });
   } catch (error: any) {
     console.error('[Landing] Lead capture error:', error);

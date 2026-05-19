@@ -3,7 +3,11 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '../config/env';
-import { sendPushToSuperAdmins } from './auth.routes';
+import { sendPushToSuperAdmins, sendPushToUser } from './auth.routes';
+import {
+  creditCommissionForOrder,
+  refundCommissionForOrder,
+} from '../services/affiliate.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -237,6 +241,43 @@ router.post('/lojou', async (req: Request, res: Response) => {
           url: '/admin/finance',
         }).catch(() => {});
 
+        // ── Affiliate commission credit ────────────────────────────────
+        // Sales recovered via remarketing belong to the system per the
+        // program rules; pre-remarketing sales attributed to an affiliate
+        // get a commission row.
+        try {
+          if (user.referredByCode) {
+            const credit = await creditCommissionForOrder({
+              userId: user.id,
+              affiliateCode: user.referredByCode,
+              remarketingStage: user.remarketingStage,
+              saleAmount: amount,
+              lojouOrderId: String(orderId),
+            });
+            if (credit.credited) {
+              console.log(
+                `[WEBHOOK] 🎉 Affiliate ${user.referredByCode} credited (commission=${credit.commissionId})`,
+              );
+              // Notify the affiliate they got a new sale
+              const affAccount = await prisma.affiliateAccount.findFirst({
+                where: { id: credit.affiliateId },
+                include: { user: { select: { id: true } } },
+              });
+              if (affAccount) {
+                sendPushToUser(affAccount.user.id, {
+                  title: '🎉 Nova venda pelo seu link!',
+                  body: 'Comissão lançada — disponível para saque em 7 dias.',
+                  url: '/afiliacao',
+                }).catch(() => {});
+              }
+            } else {
+              console.log(`[WEBHOOK] Affiliate credit skipped: ${credit.skipped}`);
+            }
+          }
+        } catch (affErr) {
+          console.error('[WEBHOOK] Affiliate commission error (non-blocking):', affErr);
+        }
+
         return res.json({ status: 'user_created', userId: user.id });
       }
 
@@ -275,6 +316,16 @@ router.post('/lojou', async (req: Request, res: Response) => {
             body: `Pedido ${orderId} foi reembolsado${user ? ` — ${user.name}` : ''}`,
             url: '/admin/finance',
           }).catch(() => {});
+        }
+
+        // Reverse any affiliate commission tied to this order
+        try {
+          const reversed = await refundCommissionForOrder(String(orderId));
+          if (reversed > 0) {
+            console.log(`[WEBHOOK] ↩️ Reversed ${reversed} affiliate commission(s) for ${orderId}`);
+          }
+        } catch (affErr) {
+          console.error('[WEBHOOK] Affiliate refund error (non-blocking):', affErr);
         }
 
         console.log(`[WEBHOOK] 🔄 Order refunded: ${orderId}`);

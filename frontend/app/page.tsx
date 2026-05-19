@@ -73,7 +73,16 @@ const DEFAULTS = {
   footerDesc: "O ecossistema de tecnologia para criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",
 };
 
-export default function LandingPage() {
+// When loaded via /r/[code], the affiliate landing variant overrides the VSL
+// and forces all checkout URLs to the standard public affiliate checkout
+// (the system attributes commissions via the captured email on the webhook).
+export interface AffiliateContext {
+  code: string;
+  affiliateVslEmbedHtml?: string | null;
+  checkoutUrl?: string;
+}
+
+export default function LandingPage({ affiliateContext }: { affiliateContext?: AffiliateContext } = {}) {
   const [gateOpen, setGateOpen] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "", phoneCode: "+258", whatsappCode: "+258" });
   const [submitting, setSubmitting] = useState(false);
@@ -153,7 +162,13 @@ export default function LandingPage() {
             fetch(`${API_URL}/api/landing/lead`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: lead.name, email: lead.email, phone: lead.phone, whatsapp: lead.whatsapp }),
+              body: JSON.stringify({
+                name: lead.name,
+                email: lead.email,
+                phone: lead.phone,
+                whatsapp: lead.whatsapp,
+                ...(affiliateContext?.code ? { affiliateCode: affiliateContext.code } : {}),
+              }),
             })
               .then(r => r.json())
               .then(data => {
@@ -174,11 +189,12 @@ export default function LandingPage() {
             const hoursPassed = (Date.now() - savedTime) / (1000 * 60 * 60);
 
             if (hoursPassed >= 4) {
-              const fallbackUrl = new URL("https://pay.lojou.app/p/uoEHz");
+              const fallbackBase = affiliateContext?.checkoutUrl || "https://pay.lojou.app/p/uoEHz";
+              const fallbackUrl = new URL(fallbackBase);
               fallbackUrl.searchParams.append("name", lead.name);
               fallbackUrl.searchParams.append("email", lead.email);
               if (lead.whatsapp) fallbackUrl.searchParams.append("number", lead.whatsapp.replace(/\D/g, ''));
-              
+
               setCheckoutUrl(fallbackUrl.toString());
             } else {
               setCheckoutUrl(lead.checkoutUrl);
@@ -217,7 +233,8 @@ export default function LandingPage() {
       ...formData,
       phone: finalWhatsapp,
       whatsapp: finalWhatsapp,
-      surveyAnswers
+      surveyAnswers,
+      ...(affiliateContext?.code ? { affiliateCode: affiliateContext.code } : {}),
     };
 
     const leadRecord: Record<string, any> = { ...payload, savedAt: new Date().toISOString(), _v: LEAD_VERSION };
@@ -455,10 +472,12 @@ export default function LandingPage() {
                 <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
               
-              {cfg.vslEmbedHtml ? (
+              {(affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml) ? (
                 <div
                   className={styles.vslEmbed}
-                  dangerouslySetInnerHTML={{ __html: cfg.vslEmbedHtml }}
+                  dangerouslySetInnerHTML={{
+                    __html: affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml,
+                  }}
                 />
               ) : (
                 <div className={styles.vslPlaceholder}>

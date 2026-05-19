@@ -4,7 +4,11 @@ import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
 import { sendPushBroadcast } from './auth.routes';
-import { sendPushToSuperAdmins } from './auth.routes';
+import { sendPushToSuperAdmins, sendPushToUser } from './auth.routes';
+import {
+  markWithdrawalPaid,
+  rejectWithdrawal,
+} from '../services/affiliate.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -536,11 +540,42 @@ router.get('/landing-config', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/landing-config', async (req: AuthRequest, res: Response) => {
   try {
-    const { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections, headScripts, headScriptBlocks, bodyScripts } = req.body;
+    const {
+      vslEmbedUrl,
+      vslEmbedHtml,
+      heroTitle,
+      heroSubtitle,
+      heroDesc,
+      ctaText,
+      priceAmount,
+      maxVagas,
+      sections,
+      headScripts,
+      headScriptBlocks,
+      bodyScripts,
+      affiliateVslEmbedHtml,
+      affiliateCreativesUrl,
+    } = req.body;
+    const data = {
+      vslEmbedUrl,
+      vslEmbedHtml,
+      heroTitle,
+      heroSubtitle,
+      heroDesc,
+      ctaText,
+      priceAmount,
+      maxVagas,
+      sections,
+      headScripts,
+      headScriptBlocks,
+      bodyScripts,
+      affiliateVslEmbedHtml,
+      affiliateCreativesUrl,
+    };
     const config = await prisma.landingConfig.upsert({
       where: { id: 'singleton' },
-      update: { vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections, headScripts, headScriptBlocks, bodyScripts },
-      create: { id: 'singleton', vslEmbedUrl, vslEmbedHtml, heroTitle, heroSubtitle, heroDesc, ctaText, priceAmount, maxVagas, sections, headScripts, headScriptBlocks, bodyScripts },
+      update: data,
+      create: { id: 'singleton', ...data },
     });
     res.json({ config });
   } catch (error) {
@@ -1424,6 +1459,230 @@ router.post('/cupons/send', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[ADMIN] Send coupon error:', error);
     return res.status(500).json({ error: 'Erro ao enviar cupom' });
+  }
+});
+
+// ═══════════════════════════════════════
+// AFFILIATE PROGRAM — ADMIN
+// ═══════════════════════════════════════
+
+/**
+ * GET /api/admin/affiliates
+ * Returns every affiliate account with rollup stats (referrals, commissions,
+ * withdrawals).
+ */
+router.get('/affiliates', async (_req: AuthRequest, res: Response) => {
+  try {
+    const accounts = await prisma.affiliateAccount.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+      },
+    });
+
+    const ids = accounts.map((a) => a.id);
+    const [referralCounts, commissionAggs, withdrawalAggs] = await Promise.all([
+      prisma.affiliateReferral.groupBy({
+        by: ['affiliateId', 'status'],
+        where: { affiliateId: { in: ids } },
+        _count: true,
+      }),
+      prisma.affiliateCommission.groupBy({
+        by: ['affiliateId', 'status'],
+        where: { affiliateId: { in: ids } },
+        _sum: { netAmount: true },
+        _count: true,
+      }),
+      prisma.affiliateWithdrawal.groupBy({
+        by: ['affiliateId', 'status'],
+        where: { affiliateId: { in: ids } },
+        _sum: { amountNet: true, amountRequested: true },
+        _count: true,
+      }),
+    ]);
+
+    const byAff = <T extends { affiliateId: string }>(rows: T[]) => {
+      const m = new Map<string, T[]>();
+      for (const r of rows) {
+        const list = m.get(r.affiliateId) ?? [];
+        list.push(r);
+        m.set(r.affiliateId, list);
+      }
+      return m;
+    };
+    const refMap = byAff(referralCounts);
+    const commMap = byAff(commissionAggs);
+    const wdMap = byAff(withdrawalAggs);
+
+    const affiliates = accounts.map((a) => {
+      const refs = refMap.get(a.id) ?? [];
+      const comms = commMap.get(a.id) ?? [];
+      const wds = wdMap.get(a.id) ?? [];
+      const paidReferrals = refs.find((r) => r.status === 'paid')?._count ?? 0;
+      const lostReferrals =
+        (refs.find((r) => r.status === 'lost_to_remarketing')?._count ?? 0) +
+        (refs.find((r) => r.status === 'refunded')?._count ?? 0);
+      const pendingComm = comms.find((c) => c.status === 'pending')?._sum.netAmount ?? 0;
+      const availableComm = comms.find((c) => c.status === 'available')?._sum.netAmount ?? 0;
+      const withdrawnComm = comms.find((c) => c.status === 'withdrawn')?._sum.netAmount ?? 0;
+      const paidOut =
+        wds.find((w) => w.status === 'paid')?._sum.amountNet ?? 0;
+
+      return {
+        id: a.id,
+        code: a.code,
+        enabled: a.enabled,
+        createdAt: a.createdAt,
+        user: a.user,
+        payoutMethod: a.payoutMethod,
+        payoutTarget: a.payoutTarget,
+        stats: {
+          paidReferrals,
+          lostReferrals,
+          pendingCommission: pendingComm,
+          availableCommission: availableComm,
+          withdrawnCommission: withdrawnComm,
+          totalPaidOut: paidOut,
+        },
+      };
+    });
+
+    return res.json({ affiliates });
+  } catch (error) {
+    console.error('[ADMIN] affiliates list error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar afiliados' });
+  }
+});
+
+/**
+ * GET /api/admin/affiliates/:id — detail with referrals + commissions + withdrawals
+ */
+router.get('/affiliates/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const account = await prisma.affiliateAccount.findUnique({
+      where: { id: req.params.id },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        referrals: {
+          orderBy: { createdAt: 'desc' },
+          take: 200,
+          include: { user: { select: { name: true, email: true } } },
+        },
+        commissions: { orderBy: { createdAt: 'desc' }, take: 200 },
+        withdrawals: { orderBy: { createdAt: 'desc' }, take: 50 },
+      },
+    });
+    if (!account) return res.status(404).json({ error: 'Afiliado não encontrado' });
+    return res.json({ account });
+  } catch (error) {
+    console.error('[ADMIN] affiliate detail error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar afiliado' });
+  }
+});
+
+/**
+ * PATCH /api/admin/affiliates/:id — toggle enable/disable
+ */
+router.patch('/affiliates/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled deve ser booleano' });
+    }
+    const updated = await prisma.affiliateAccount.update({
+      where: { id: req.params.id },
+      data: { enabled },
+    });
+    return res.json({ success: true, account: updated });
+  } catch (error) {
+    console.error('[ADMIN] affiliate toggle error:', error);
+    return res.status(500).json({ error: 'Erro ao atualizar afiliado' });
+  }
+});
+
+/**
+ * GET /api/admin/affiliate-withdrawals
+ * Returns withdrawals queue. Filters: status=pending|paid|rejected (default all).
+ */
+router.get('/affiliate-withdrawals', async (req: AuthRequest, res: Response) => {
+  try {
+    const status = req.query.status as string | undefined;
+    const rows = await prisma.affiliateWithdrawal.findMany({
+      where: status ? { status } : undefined,
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      take: 200,
+      include: {
+        affiliate: {
+          select: {
+            code: true,
+            user: { select: { id: true, name: true, email: true, phone: true } },
+          },
+        },
+      },
+    });
+    return res.json({ withdrawals: rows });
+  } catch (error) {
+    console.error('[ADMIN] withdrawals list error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar saques' });
+  }
+});
+
+/**
+ * POST /api/admin/affiliate-withdrawals/:id/approve — mark paid
+ */
+router.post('/affiliate-withdrawals/:id/approve', async (req: AuthRequest, res: Response) => {
+  try {
+    const { notes } = req.body;
+    const wd = await prisma.affiliateWithdrawal.findUnique({
+      where: { id: req.params.id },
+      include: { affiliate: { include: { user: { select: { id: true, name: true } } } } },
+    });
+    if (!wd) return res.status(404).json({ error: 'Saque não encontrado' });
+    if (wd.status !== 'pending') {
+      return res.status(400).json({ error: `Saque já está '${wd.status}'` });
+    }
+    const updated = await markWithdrawalPaid(wd.id, req.user!.id, notes);
+
+    sendPushToUser(wd.affiliate.user.id, {
+      title: '💰 Saque aprovado',
+      body: `${updated.amountNet} MZN foram pagos via ${updated.payoutMethod}.`,
+      url: '/afiliacao',
+    }).catch(() => {});
+
+    return res.json({ success: true, withdrawal: updated });
+  } catch (error) {
+    console.error('[ADMIN] withdrawal approve error:', error);
+    return res.status(500).json({ error: 'Erro ao aprovar saque' });
+  }
+});
+
+/**
+ * POST /api/admin/affiliate-withdrawals/:id/reject
+ * Releases the held commissions back to the affiliate's available balance.
+ */
+router.post('/affiliate-withdrawals/:id/reject', async (req: AuthRequest, res: Response) => {
+  try {
+    const { notes } = req.body;
+    const wd = await prisma.affiliateWithdrawal.findUnique({
+      where: { id: req.params.id },
+      include: { affiliate: { include: { user: { select: { id: true } } } } },
+    });
+    if (!wd) return res.status(404).json({ error: 'Saque não encontrado' });
+    if (wd.status !== 'pending') {
+      return res.status(400).json({ error: `Saque já está '${wd.status}'` });
+    }
+    const updated = await rejectWithdrawal(wd.id, req.user!.id, notes);
+
+    sendPushToUser(wd.affiliate.user.id, {
+      title: '↩️ Saque devolvido',
+      body: `Seu saque de ${wd.amountRequested} MZN foi rejeitado e o saldo retornou.`,
+      url: '/afiliacao',
+    }).catch(() => {});
+
+    return res.json({ success: true, withdrawal: updated });
+  } catch (error) {
+    console.error('[ADMIN] withdrawal reject error:', error);
+    return res.status(500).json({ error: 'Erro ao rejeitar saque' });
   }
 });
 

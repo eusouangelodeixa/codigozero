@@ -4,6 +4,7 @@ import { sendPushToSuperAdmins, sendPushToUser } from '../routes/auth.routes';
 import { lojouService } from '../services/lojou.service';
 import { env } from '../config/env';
 import { processDueDispatches, processDispatch } from '../services/dispatch.service';
+import { transitionDuePending } from '../services/affiliate.service';
 
 const prisma = new PrismaClient();
 
@@ -576,6 +577,20 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Scheduled dispatches tick (every 30s)');
+
+  // ── Affiliate commission availability (hourly) ──
+  // Moves pending commissions to 'available' once their D+7 window matures.
+  // Runs hourly rather than daily so admins manually adjusting D+7 don't have
+  // to wait until the next midnight.
+  cron.schedule('15 * * * *', async () => {
+    try {
+      const moved = await transitionDuePending();
+      if (moved > 0) console.log(`[CRON] 💵 Affiliate commissions matured: ${moved}`);
+    } catch (error) {
+      console.error('[CRON] Affiliate availability tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Affiliate availability tick (hourly)');
 
   // ── Recover orphaned dispatches on boot ──
   // Any 'running' rows left over from a previous process crash, plus any

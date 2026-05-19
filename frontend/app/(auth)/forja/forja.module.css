@@ -478,16 +478,62 @@
     max-height: none;
     overflow-y: visible;
     padding-bottom: 0;
+    padding-right: 0;
   }
   .lessonBar {
     flex-direction: column;
     align-items: stretch;
     padding: var(--space-4);
+    gap: var(--space-4);
   }
+  .lessonTitle {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.3;
+  }
+  .lessonBar > button,
+  .lessonBar > a {
+    width: 100%;
+  }
+  .resource {
+    padding: 10px 12px;
+    gap: var(--space-2);
+  }
+  .resourceIcon {
+    width: 28px;
+    height: 28px;
+  }
+  .contentBlock {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--type-small);
+  }
+  .moduleHeader { padding: 12px 14px; }
+  .moduleName { font-size: 13px; }
+  .moduleProgressTrack { max-width: 60px; }
 }
 
 @media (max-width: 480px) {
   .page { gap: var(--space-4); }
+  .lessonBar { padding: var(--space-3); }
+  .lessonTitle { font-size: 1rem; }
+  .lessonDesc { font-size: 12.5px; max-width: none; }
   .lessonItemTitle { font-size: 12.5px; }
+  .lessonItem { padding: 10px 12px; gap: 10px; min-height: 44px; }
+  .lessonItemNumber { width: 22px; height: 22px; font-size: 10px; }
   .skeletonModule { height: 48px; }
+  .videoFrame {
+    margin-left: calc(var(--page-padding) * -1);
+    margin-right: calc(var(--page-padding) * -1);
+    border-radius: 0;
+  }
+  .playerCard {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin-left: calc(var(--page-padding) * -1);
+    margin-right: calc(var(--page-padding) * -1);
+  }
+  .resourceTitle { font-size: 13px; line-height: 1.3; }
+  .resourceDesc { font-size: 10.5px; }
 }

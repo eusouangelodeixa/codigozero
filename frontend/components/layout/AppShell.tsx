@@ -1,6 +1,6 @@
 "use client";
 import { useRouter, usePathname } from "next/navigation";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Logo } from "@/components/Logo";
 import {
   DashboardIcon,
@@ -73,12 +73,26 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+const MenuIcon = ({ size = 20 }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="4" y1="7" x2="20" y2="7" />
+    <line x1="4" y1="12" x2="20" y2="12" />
+    <line x1="4" y1="17" x2="20" y2="17" />
+  </svg>
+);
+
+const CloseIcon = ({ size = 18 }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="6" y1="6" x2="18" y2="18" />
+    <line x1="18" y1="6" x2="6" y2="18" />
+  </svg>
+);
+
 const BOTTOM_NAV: NavItem[] = [
   { href: "/dashboard", label: "Início", icon: DashboardIcon },
   { href: "/radar", label: "Radar", icon: RadarIcon },
   { href: "/forja", label: "Forja", icon: ForjaIcon },
   { href: "/cofre", label: "Cofre", icon: CofreIcon },
-  { href: "/qg", label: "QG", icon: QGIcon },
 ];
 
 // Fallback mapping for the mobile topbar title.
@@ -117,6 +131,18 @@ export function AppShell({
   const router = useRouter();
   const pathname = usePathname();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [menuOpen]);
 
   const pageTitle = useMemo(() => {
     if (!pathname) return "Código Zero";
@@ -261,8 +287,114 @@ export function AppShell({
               </a>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className={cx(styles.bottomItem, menuOpen && styles.bottomItemActive)}
+            aria-label="Abrir menu completo"
+            aria-expanded={menuOpen}
+          >
+            <MenuIcon size={20} />
+            <span>Menu</span>
+          </button>
         </div>
       </nav>
+
+      {/* ───────── Mobile drawer (full nav) ───────── */}
+      {menuOpen && (
+        <div
+          className={styles.drawerBackdrop}
+          onClick={() => setMenuOpen(false)}
+          aria-hidden
+        />
+      )}
+      <aside
+        className={cx(styles.drawer, menuOpen && styles.drawerOpen)}
+        aria-hidden={!menuOpen}
+        aria-label="Menu completo"
+      >
+        <header className={styles.drawerHeader}>
+          <a
+            href="/perfil"
+            onClick={go("/perfil")}
+            className={styles.drawerUser}
+            aria-label="Abrir perfil"
+          >
+            <div className={styles.avatar}>
+              {avatarSrc ? <img src={avatarSrc} alt="" /> : initial}
+            </div>
+            <div className={styles.userMeta}>
+              <span className={styles.userName}>{firstName}</span>
+              <span className={cx(styles.userRole, isAdmin && styles.userRoleAdmin)}>
+                {user?.role === "superadmin" ? "Super Admin" : isAdmin ? "Admin" : "Membro"}
+              </span>
+            </div>
+          </a>
+          <button
+            type="button"
+            onClick={() => setMenuOpen(false)}
+            className={styles.drawerClose}
+            aria-label="Fechar menu"
+          >
+            <CloseIcon size={18} />
+          </button>
+        </header>
+
+        <nav className={styles.drawerNav}>
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className={styles.group}>
+              <span className={styles.groupLabel}>{group.label}</span>
+              {group.items.map((item) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    onClick={go(item.href)}
+                    className={cx(styles.navItem, active && styles.navItemActive)}
+                    aria-current={active ? "page" : undefined}
+                  >
+                    <span className={styles.navIcon}><Icon size={17} /></span>
+                    <span className={styles.navLabel}>{item.label}</span>
+                  </a>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <footer className={styles.drawerFooter}>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); router.push("/admin"); }}
+              className={cx(styles.iconButton, styles.adminButton)}
+              aria-label="Painel admin"
+              title="Painel admin"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" />
+                <path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              <span>Admin</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onLogout}
+            className={cx(styles.iconButton, styles.logoutButton)}
+            aria-label="Sair"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            <span>Sair</span>
+          </button>
+        </footer>
+      </aside>
     </div>
   );
 }

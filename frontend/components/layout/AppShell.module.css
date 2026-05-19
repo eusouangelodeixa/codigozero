@@ -326,6 +326,12 @@
   margin: 0 auto;
 }
 
+.bottomItem[type="button"] {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+}
+
 .bottomItem {
   display: flex;
   flex-direction: column;
@@ -362,6 +368,112 @@
   box-shadow: 0 0 8px var(--accent);
 }
 
+/* ═══════════════════════ MOBILE DRAWER ═══════════════════════ */
+
+.drawerBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: calc(var(--z-bottomnav) + 5);
+  animation: backdropIn 220ms var(--ease-out);
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.drawer {
+  display: none;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: min(320px, 88vw);
+  z-index: calc(var(--z-bottomnav) + 10);
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-default);
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 260ms var(--ease-out);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.drawerOpen {
+  transform: translateX(0);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.drawerUser {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--motion-fast);
+}
+.drawerUser:hover { background: var(--bg-glass); }
+
+.drawerClose {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.drawerClose:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+
+.drawerNav {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.drawerFooter {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-subtle);
+}
+
+.drawerFooter .iconButton {
+  flex: 1;
+  height: 44px;
+  width: auto;
+  gap: 8px;
+  font-size: var(--type-small);
+  font-weight: 600;
+  background: var(--bg-glass);
+  border-color: var(--border-default);
+}
+
+.drawerFooter .iconButton span { line-height: 1; }
+
 /* ═══════════════════════ RESPONSIVE ═══════════════════════ */
 
 @media (max-width: 1024px) {
@@ -375,6 +487,8 @@
   .sidebar { display: none; }
   .mobileTopbar { display: flex; }
   .bottomNav { display: block; }
+  .drawer { display: flex; }
+  .drawerBackdrop { display: block; }
 
   .content {
     padding: var(--space-5) var(--space-4);

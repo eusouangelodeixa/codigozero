@@ -1,0 +1,123 @@
+/* ─────────────────────────────────────────────────────────
+   Section — sectioned card with collapsible body + icon
+   ───────────────────────────────────────────────────────── */
+
+.section {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color var(--motion-base);
+}
+
+.head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 18px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: background var(--motion-fast);
+}
+
+.head:hover { background: var(--bg-glass); }
+.headStatic { cursor: default; }
+.headStatic:hover { background: transparent; }
+
+.headInner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+
+.icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.chevron {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: transform var(--motion-fast);
+}
+
+.chevronOpen { transform: rotate(180deg); }
+
+.body {
+  padding: 4px 20px 22px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: sectionIn 280ms var(--ease-out);
+}
+
+.bodyClosed { display: none; }
+
+@keyframes sectionIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.bodyGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.bodyGridFull { grid-column: 1 / -1; }
+
+@media (max-width: 720px) {
+  .bodyGrid { grid-template-columns: 1fr; }
+  .head { padding: 14px 16px; }
+  .body { padding: 4px 16px 18px; }
+}

@@ -1,122 +1,153 @@
-.page { animation: slideUp 0.3s ease forwards; }
+/* ─────────────────────────────────────────────────────────
+   QG — Código Zero
+   ───────────────────────────────────────────────────────── */
 
-/* ── Section Header ── */
-.sectionHeader { margin-bottom: var(--space-6); }
-.sectionLabel {
-  font-size: var(--type-label); font-weight: 500; letter-spacing: 0.12em;
-  text-transform: uppercase; color: var(--accent); display: block; margin-bottom: var(--space-2);
+.page { display: flex; flex-direction: column; gap: var(--space-6); }
+
+/* ── Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--grid-gap);
 }
-.sectionTitle {
-  font-size: var(--type-h1); font-weight: 700; color: var(--text-primary);
-  letter-spacing: -0.03em; margin-bottom: var(--space-2);
+
+.fullCard {
+  grid-column: 1 / -1;
 }
-.sectionDescription { font-size: var(--type-body); color: var(--text-tertiary); max-width: 500px; }
 
-/* ── Cards Layout ── */
-.cardsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gap); margin-bottom: var(--space-6); }
-
-/* ── Community ── */
-.communityCard {
-  background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  border: 1px solid var(--border-default); border-radius: 12px;
-  padding: var(--card-padding); transition: border-color 0.2s ease;
-  display: flex; flex-direction: column;
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  height: 100%;
 }
-.communityCard:hover { border-color: var(--border-strong); }
 
-.communityHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-5); }
+/* ── Card header (icon + title) ── */
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cardIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border-default);
+  background: var(--bg-glass);
+}
 
 .discordIcon {
-  width: 44px; height: 44px; border-radius: 10px;
-  background: #5865F2; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: #5865F2;
+  border-color: transparent;
+  color: #fff;
 }
 
-.communityTitle { font-size: var(--type-h3); font-weight: 600; color: var(--text-primary); }
-.communityDesc { font-size: var(--type-small); color: var(--text-tertiary); margin-top: 2px; }
-
-.communityBtn {
-  display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5);
-  background: var(--cta-bg); color: var(--cta-fg);
-  font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease, transform 0.1s ease;
-  min-height: 44px; font-size: var(--type-body); margin-top: auto; align-self: flex-start;
-}
-.communityBtn:hover { opacity: 0.9; }
-.communityBtn:active { transform: scale(0.98); }
-
-/* ── Mentoria ── */
-.mentoriaCard {
-  background: var(--bg-glass); backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  border: 1px solid var(--border-default); border-radius: 12px;
-  padding: var(--card-padding); display: flex; flex-direction: column;
+.mentoriaIcon {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
-.mentoriaHeader { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-5); }
-.mentoriaIcon { font-size: 1.25rem; }
-.mentoriaTitle { font-size: var(--type-h3); font-weight: 600; color: var(--text-primary); }
-.mentoriaDesc { font-size: var(--type-small); color: var(--text-tertiary); margin-top: 2px; }
+.cardTitle {
+  font-size: var(--type-h3);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.cardDesc {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin-top: 3px;
+}
 
 /* ── Countdown ── */
-.countdownGrid {
-  display: flex; gap: var(--space-4); align-items: center; justify-content: center;
-  margin-bottom: var(--space-5); flex: 1; padding: var(--space-4) 0;
+.countdown {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-2);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
 }
 
-.countdownItem { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.countdownBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 56px;
+}
 
 .countdownValue {
-  font-size: var(--type-h2); font-weight: 700; color: var(--accent);
-  font-variant-numeric: tabular-nums; font-family: var(--font-mono); line-height: 1;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  line-height: 1;
+  letter-spacing: -0.04em;
 }
 
 .countdownLabel {
-  font-size: var(--type-label); color: var(--text-tertiary);
-  text-transform: uppercase; letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
 .countdownSep {
-  font-size: var(--type-h2); color: var(--text-tertiary);
-  margin-bottom: 16px; font-weight: 300;
+  font-size: 1.5rem;
+  color: var(--text-tertiary);
+  font-weight: 300;
+  margin-bottom: 18px;
+  user-select: none;
 }
 
-.mentoriaBtn {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; padding: var(--space-3) var(--space-6);
-  background: var(--cta-bg); color: var(--cta-fg);
-  font-weight: 600; border-radius: 8px; transition: opacity 0.15s ease;
-  min-height: 44px; font-size: var(--type-body); margin-top: auto;
-}
-.mentoriaBtn:hover { opacity: 0.9; }
-
-.noMentoria { text-align: center; padding: var(--space-6); color: var(--text-tertiary); font-size: var(--type-small); flex: 1; display: flex; align-items: center; justify-content: center; }
-
-/* ── Stats ── */
-.statsCard {
-  background: var(--bg-glass); border: 1px solid var(--border-default); border-radius: 12px;
-  padding: var(--card-padding); display: flex; align-items: center; justify-content: center; gap: var(--space-10);
+.scheduleLine {
+  text-align: center;
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  margin-top: -8px;
 }
 
-.statItem { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.statValue {
-  font-size: var(--type-h2); font-weight: 700; color: var(--accent);
-  font-variant-numeric: tabular-nums;
+.noMentoria {
+  background: var(--bg-glass);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--type-small);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.statLabel {
-  font-size: var(--type-label); color: var(--text-tertiary);
-  text-transform: uppercase; letter-spacing: 0.08em;
+
+.spacer { flex: 1; }
+
+.cardActions {
+  margin-top: auto;
 }
-.statDivider { width: 1px; height: 40px; background: var(--border-subtle); }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
-  .cardsGrid { grid-template-columns: 1fr; }
-  .countdownGrid { gap: var(--space-3); }
-  .statsCard { gap: var(--space-6); }
+  .grid { grid-template-columns: 1fr; }
+  .countdownValue { font-size: 1.5rem; }
+  .countdownBlock { min-width: 44px; }
 }
 
 @media (max-width: 480px) {
-  .countdownValue { font-size: var(--type-h3); }
-  .statsCard { flex-direction: column; gap: var(--space-4); }
-  .statDivider { width: 60px; height: 1px; }
+  .countdown { padding: var(--space-4) var(--space-2); gap: var(--space-2); }
+  .countdownSep { font-size: 1.125rem; margin-bottom: 14px; }
 }

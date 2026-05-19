@@ -1,0 +1,60 @@
+/* ─────────────────────────────────────────────────────────
+   Card — glass surface, no decorative shadow
+   ───────────────────────────────────────────────────────── */
+
+.card {
+  position: relative;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  transition: background var(--motion-base), border-color var(--motion-base);
+}
+
+.elevated {
+  background: var(--bg-elevated);
+  border-color: var(--border-default);
+  box-shadow: var(--elevation-1);
+}
+
+.interactive {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  display: block;
+  color: inherit;
+  font: inherit;
+}
+
+.interactive:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-strong);
+}
+
+.interactive:active { transform: scale(0.995); }
+
+/* ── Accent border ring on hover (for highlighted cards) ── */
+.accentHover:hover { border-color: var(--accent-border); }
+
+/* ── Padding ── */
+.padNone { padding: 0; }
+.padSm   { padding: var(--space-4); }
+.padMd   { padding: var(--card-padding); }
+.padLg   { padding: var(--space-8); }
+
+/* ── Header / Body / Footer slots ── */
+.header,
+.footer {
+  padding: var(--card-padding);
+}
+
+.header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.footer {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.body { padding: var(--card-padding); }

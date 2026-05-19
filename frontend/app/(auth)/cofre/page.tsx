@@ -1,126 +1,182 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { apiClient } from "@/lib/api";
+import {
+  PageHeader,
+  Modal,
+  Button,
+  EmptyState,
+  useToast,
+} from "@/components/ui";
+import { CofreIcon } from "@/components/Icons";
 import styles from "./cofre.module.css";
 
+interface Script {
+  id: string;
+  title: string;
+  content: string;
+  icon?: string;
+}
+interface Folder {
+  id: string;
+  name: string;
+  icon?: string;
+  scripts?: Script[];
+}
+
+const ChevronRight = (p: { size?: number }) => (
+  <svg width={p.size ?? 16} height={p.size ?? 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+
+const ChevronLeft = (p: { size?: number }) => (
+  <svg width={p.size ?? 14} height={p.size ?? 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
+const CopyIcon = (p: { size?: number }) => (
+  <svg width={p.size ?? 14} height={p.size ?? 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" />
+    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+  </svg>
+);
+
 export default function CofrePage() {
-  const [folders, setFolders] = useState<any[]>([]);
-  const [selectedFolder, setSelectedFolder] = useState<any | null>(null);
-  const [selectedScript, setSelectedScript] = useState<any | null>(null);
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null);
+  const [selectedScript, setSelectedScript] = useState<Script | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadFolders(); }, []);
-
-  const loadFolders = async () => {
-    try { 
-      const data = await apiClient.getScripts(); 
-      // The new API returns { folders: [...] }
-      setFolders(data.folders || []); 
-    }
-    catch (e) { console.error("Failed:", e); }
-    finally { setLoading(false); }
-  };
-
-  const copyContent = async (content: string) => {
-    try { await navigator.clipboard.writeText(content); } catch {
-      const el = document.createElement("textarea"); el.value = content;
-      document.body.appendChild(el); el.select(); document.execCommand("copy"); document.body.removeChild(el);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // Close modal with Escape
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === "Escape") setSelectedScript(null);
+  useEffect(() => {
+    apiClient
+      .getScripts()
+      .then((data) => setFolders(data.folders || []))
+      .catch((e) => console.error("Failed:", e))
+      .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+  const copyContent = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      toast.success("Script copiado", "Cole no WhatsApp para enviar.");
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = content;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      toast.success("Script copiado");
+    }
+  };
+
+  const isInFolder = !!selectedFolder;
+  const headerLabel = isInFolder ? "Arsenal · Cofre" : "Arsenal · Cofre";
+  const headerTitle = isInFolder ? selectedFolder!.name : "Scripts prontos para vender";
+  const headerDesc = isInFolder
+    ? "Selecione um script abaixo para abrir, personalizar e copiar."
+    : "Sua biblioteca de mensagens testadas. Copie, adapte ao lead e feche o contrato.";
 
   return (
     <div className={styles.page}>
-      <div className={styles.sectionHeader}>
-        {selectedFolder ? (
-          <button className={styles.backBtn} onClick={() => setSelectedFolder(null)}>
-            ← Voltar às Pastas
-          </button>
-        ) : (
-          <span className={styles.sectionLabel}>Scripts</span>
-        )}
-        <h1 className={styles.sectionTitle}>
-          {selectedFolder ? `${selectedFolder.icon || "📁"} ${selectedFolder.name}` : "Scripts prontos para vender"}
-        </h1>
-        <p className={styles.sectionDescription}>
-          {selectedFolder ? "Selecione um script abaixo." : "Copie, adapte e feche seus primeiros clientes."}
-        </p>
-      </div>
+      {isInFolder && (
+        <button className={styles.crumb} onClick={() => setSelectedFolder(null)} type="button">
+          <ChevronLeft /> Voltar às pastas
+        </button>
+      )}
+
+      <PageHeader label={headerLabel} title={headerTitle} description={headerDesc} />
 
       {loading ? (
         <div className={styles.loadingGrid}>
-          {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className={styles.skeletonCard} />)}
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className={styles.skeletonCard} />
+          ))}
         </div>
-      ) : !selectedFolder ? (
-        // SHOW FOLDERS
+      ) : !isInFolder ? (
+        folders.length === 0 ? (
+          <EmptyState
+            icon={<CofreIcon size={26} />}
+            title="Cofre vazio"
+            description="Nenhuma pasta de scripts cadastrada. Avise o admin para liberar a biblioteca."
+          />
+        ) : (
+          <div className={styles.grid}>
+            {folders.map((folder) => (
+              <button
+                key={folder.id}
+                type="button"
+                className={styles.folderCard}
+                onClick={() => setSelectedFolder(folder)}
+              >
+                <div className={styles.folderHead}>
+                  <span className={styles.folderEmoji}>{folder.icon || "📁"}</span>
+                  <span className={styles.folderName}>{folder.name}</span>
+                </div>
+                <span className={styles.folderCount}>
+                  {folder.scripts?.length || 0} {folder.scripts?.length === 1 ? "script" : "scripts"}
+                </span>
+                <span className={styles.folderArrow}>
+                  <ChevronRight />
+                </span>
+              </button>
+            ))}
+          </div>
+        )
+      ) : !selectedFolder?.scripts || selectedFolder.scripts.length === 0 ? (
+        <EmptyState
+          icon={<CofreIcon size={26} />}
+          title="Pasta vazia"
+          description="Esta pasta ainda não tem scripts. Volte e escolha outra, ou aguarde novos serem adicionados."
+          actions={
+            <Button variant="secondary" onClick={() => setSelectedFolder(null)}>
+              Voltar
+            </Button>
+          }
+        />
+      ) : (
         <div className={styles.grid}>
-          {folders.map(folder => (
-            <button key={folder.id} className={styles.scriptCard} onClick={() => setSelectedFolder(folder)} style={{ textAlign: "center", padding: "32px 24px" }}>
-              <span className={styles.scriptIcon} style={{ fontSize: "2rem", marginBottom: "16px", display: "inline-block" }}>{folder.icon || "📁"}</span>
-              <span className={styles.scriptTitle}>{folder.name}</span>
-              <span className={styles.scriptPreview} style={{ marginTop: "8px" }}>{folder.scripts?.length || 0} scripts</span>
+          {selectedFolder.scripts.map((script) => (
+            <button
+              key={script.id}
+              type="button"
+              className={styles.scriptCard}
+              onClick={() => setSelectedScript(script)}
+            >
+              {script.icon && <span className={styles.scriptIcon}>{script.icon}</span>}
+              <span className={styles.scriptTitle}>{script.title}</span>
+              <span className={styles.scriptPreview}>{script.content.slice(0, 140)}…</span>
+              <span className={styles.scriptCta}>
+                Abrir <ChevronRight size={12} />
+              </span>
             </button>
           ))}
         </div>
-      ) : (
-        // SHOW SCRIPTS IN SELECTED FOLDER
-        <div className={styles.categorySection}>
-          <div className={styles.grid}>
-            {selectedFolder.scripts?.map((script: any) => (
-              <button key={script.id} className={styles.scriptCard} onClick={() => setSelectedScript(script)}>
-                <span className={styles.scriptIcon}>{script.icon || "📝"}</span>
-                <span className={styles.scriptTitle}>{script.title}</span>
-                <span className={styles.scriptPreview}>{script.content.slice(0, 80)}...</span>
-                <span className={styles.scriptAction}>Abrir →</span>
-              </button>
-            ))}
-            {(!selectedFolder.scripts || selectedFolder.scripts.length === 0) && (
-              <p style={{ color: "var(--text-tertiary)" }}>Nenhum script nesta pasta.</p>
-            )}
-          </div>
-        </div>
       )}
 
-      {/* Modal */}
-      {selectedScript && (
-        <>
-          <div className={styles.modalBackdrop} onClick={() => setSelectedScript(null)} />
-          <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <div className={styles.modalTitleRow}>
-                <span className={styles.modalIcon}>{selectedScript.icon || "📝"}</span>
-                <h2 className={styles.modalTitle}>{selectedScript.title}</h2>
-              </div>
-              <button className={styles.modalClose} onClick={() => setSelectedScript(null)}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div className={styles.modalBody}>
-              <pre className={styles.scriptContent}>{selectedScript.content}</pre>
-            </div>
-            <div className={styles.modalFooter}>
-              <button className={`${styles.copyAllBtn} ${copied ? styles.copyAllBtnSuccess : ""}`}
-                onClick={() => copyContent(selectedScript.content)}>
-                {copied ? "✓ Copiado" : "Copiar Tudo"}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <Modal
+        open={!!selectedScript}
+        onClose={() => setSelectedScript(null)}
+        title={selectedScript?.title || ""}
+        description={selectedFolder ? `Pasta: ${selectedFolder.name}` : undefined}
+        size="md"
+        footer={
+          selectedScript ? (
+            <Button
+              variant="primary"
+              onClick={() => copyContent(selectedScript.content)}
+              iconStart={<CopyIcon />}
+            >
+              Copiar tudo
+            </Button>
+          ) : null
+        }
+      >
+        {selectedScript && <pre className={styles.scriptContent}>{selectedScript.content}</pre>}
+      </Modal>
     </div>
   );
 }

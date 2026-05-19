@@ -1,17 +1,21 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button, Input } from "@/components/ui";
 import styles from "./onboarding.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
+
 const TOTAL_STEPS = 5;
 
 const iosSteps = [
-  "Abra no Safari → toque no ícone ⬆️ Compartilhar",
+  "Abra no Safari → toque no ícone Compartilhar",
   "Selecione \"Adicionar à Tela de Início\"",
   "Confirme o nome e toque em Adicionar",
 ];
+
 const androidSteps = [
   "Abra no Chrome → toque nos 3 pontos ⋮",
   "Selecione \"Adicionar à tela inicial\"",
@@ -21,10 +25,10 @@ const androidSteps = [
 const features = [
   { icon: "🔍", name: "Radar", desc: "Encontre leads automaticamente" },
   { icon: "🚀", name: "Disparador", desc: "Envio em massa via WhatsApp" },
-  { icon: "📂", name: "Cofre de Scripts", desc: "Seus scripts organizados" },
-  { icon: "🎓", name: "Aulas", desc: "Conteúdo exclusivo do curso" },
+  { icon: "📂", name: "Cofre", desc: "Scripts organizados" },
+  { icon: "🎓", name: "Forja", desc: "Aulas exclusivas" },
   { icon: "💬", name: "Comunidade", desc: "Chat com outros alunos" },
-  { icon: "🛟", name: "Suporte", desc: "Ajuda direta com a equipe" },
+  { icon: "🛟", name: "Suporte", desc: "Mentor direto" },
 ];
 
 export default function OnboardingPage() {
@@ -40,9 +44,7 @@ export default function OnboardingPage() {
       try {
         const u = JSON.parse(cached);
         setUserName(u.name?.split(" ")[0] || "");
-        if (u.hasCompletedOnboarding) {
-          router.replace("/dashboard");
-        }
+        if (u.hasCompletedOnboarding) router.replace("/dashboard");
       } catch {}
     }
   }, [router]);
@@ -52,8 +54,8 @@ export default function OnboardingPage() {
     "Content-Type": "application/json",
   });
 
-  const next = () => setStep(s => Math.min(s + 1, TOTAL_STEPS));
-  const prev = () => setStep(s => Math.max(s - 1, 1));
+  const next = () => setStep((s) => Math.min(s + 1, TOTAL_STEPS));
+  const prev = () => setStep((s) => Math.max(s - 1, 1));
 
   const finish = async () => {
     setFinishing(true);
@@ -62,7 +64,6 @@ export default function OnboardingPage() {
         method: "PATCH",
         headers: hdr(),
       });
-      // Update cached user
       const cached = localStorage.getItem("cz_user");
       if (cached) {
         const u = JSON.parse(cached);
@@ -76,162 +77,143 @@ export default function OnboardingPage() {
   const progress = (step / TOTAL_STEPS) * 100;
 
   return (
-    <div className={styles.onboardingOverlay}>
-      <div className={styles.onboardingCard}>
-        <div className={styles.progressBar}>
+    <div className={styles.overlay}>
+      <div className={styles.card} role="dialog" aria-modal="true">
+        <div className={styles.progressTrack}>
           <div className={styles.progressFill} style={{ width: `${progress}%` }} />
         </div>
 
-        {/* Step 1: Welcome */}
-        {step === 1 && (
-          <div className={styles.cardBody} key="s1">
-            <div className={styles.stepLabel}>Passo 1 de {TOTAL_STEPS}</div>
-            <h1 className={styles.stepTitle}>
-              Bem-vindo ao Código Zero{userName ? `, ${userName}` : ""}! 🎉
-            </h1>
-            <p className={styles.stepText}>
-              Você acabou de entrar na plataforma que vai transformar como você cria e vende micronegócios de IA.
-              <br /><br />
-              Aqui você vai aprender a gerar seus primeiros 50.000 MT/mês usando automações inteligentes — sem escrever uma linha de código.
-              <br /><br />
-              Vamos configurar tudo em poucos passos. Leva menos de 2 minutos!
-            </p>
-          </div>
-        )}
+        <div className={styles.body}>
+          <span className={styles.eyebrow}>Passo {step} de {TOTAL_STEPS}</span>
 
-        {/* Step 2: Profile */}
-        {step === 2 && (
-          <div className={styles.cardBody} key="s2">
-            <div className={styles.stepLabel}>Passo 2 de {TOTAL_STEPS}</div>
-            <h1 className={styles.stepTitle}>📸 Configure seu Perfil</h1>
-            <p className={styles.stepText}>
-              Seu perfil é como os outros alunos e a equipe de suporte vão te reconhecer na comunidade.
-            </p>
+          {step === 1 && (
+            <>
+              <h1 className={styles.title}>
+                Bem-vindo ao Código Zero{userName ? `, ${userName}` : ""}.
+              </h1>
+              <p className={styles.text}>
+                Você entrou na plataforma que transforma como criar e vender micronegócios de IA.
+                Aqui você aprende a gerar seus primeiros 50.000 MT/mês com automações inteligentes — sem escrever uma linha de código.
+              </p>
+              <div className={cx(styles.callout, styles.calloutAccent)}>
+                Vamos configurar tudo em menos de 2 minutos.
+              </div>
+            </>
+          )}
 
-            <div className={styles.inputGroup}>
-              <label className={styles.inputLabel}>Seu nome</label>
-              <input className={styles.input} value={userName} readOnly
-                style={{ opacity: 0.6 }} />
-              <span style={{ fontSize: 11, color: "#666", marginTop: 4, display: "block" }}>
-                Para alterar, acesse Meu Perfil após o onboarding
-              </span>
-            </div>
+          {step === 2 && (
+            <>
+              <h1 className={styles.title}>Configure seu perfil</h1>
+              <p className={styles.text}>
+                É como os outros alunos e o time de suporte vão te reconhecer na comunidade.
+              </p>
+              <Input label="Seu nome" value={userName} readOnly hint="Para alterar, acesse Meu Perfil após o onboarding." />
+              <div className={cx(styles.callout, styles.calloutAccent)}>
+                Depois de finalizar, vá em <strong>Perfil</strong> para adicionar sua foto — ela aparece no sidebar e na comunidade.
+              </div>
+            </>
+          )}
 
-            <div style={{ padding: 16, borderRadius: 12, background: "rgba(45,212,191,0.04)", border: "1px solid rgba(45,212,191,0.1)", fontSize: 13, color: "#aaa", lineHeight: 1.6 }}>
-              <strong style={{ color: "#2DD4BF" }}>💡 Dica:</strong> Depois de finalizar, vá em <strong>Meu Perfil</strong> para adicionar sua foto, que aparecerá no sidebar e na comunidade.
-            </div>
-          </div>
-        )}
+          {step === 3 && (
+            <>
+              <h1 className={styles.title}>Conecte o WhatsApp</h1>
+              <p className={styles.text}>
+                O <strong style={{ color: "var(--accent)" }}>Komunika</strong> é o motor de automação de WhatsApp. Com ele você pode:
+              </p>
+              <div className={styles.featureList}>
+                <div className={styles.featureItem}>📨 Enviar mensagens em massa para leads</div>
+                <div className={styles.featureItem}>🤖 Automatizar prospecção e remarketing</div>
+                <div className={styles.featureItem}>📊 Rastrear todas as conversas no histórico</div>
+              </div>
+              <div className={cx(styles.callout, styles.calloutWarning)}>
+                Pode configurar depois em <strong>Integrações</strong>, sem perder o acesso a nada.
+              </div>
+              <button type="button" className={styles.skipLink} onClick={() => router.push("/integracoes")}>
+                Ir para Integrações agora →
+              </button>
+            </>
+          )}
 
-        {/* Step 3: Komunika */}
-        {step === 3 && (
-          <div className={styles.cardBody} key="s3">
-            <div className={styles.stepLabel}>Passo 3 de {TOTAL_STEPS}</div>
-            <h1 className={styles.stepTitle}>🔗 Conecte o WhatsApp</h1>
-            <p className={styles.stepText}>
-              O <strong style={{ color: "#2DD4BF" }}>Komunika</strong> é nosso sistema de automação de WhatsApp. Com ele, você pode:
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-              {[
-                "📨 Enviar mensagens em massa para leads",
-                "🤖 Automatizar prospecção e remarketing",
-                "📊 Rastrear todas as conversas no histórico",
-              ].map((item, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "#ccc" }}>
-                  <span>{item}</span>
+          {step === 4 && (
+            <>
+              <h1 className={styles.title}>Instale o app</h1>
+              <p className={styles.text}>
+                Adicione o Código Zero à tela inicial para acesso rápido e notificações push.
+              </p>
+              <div className={styles.platformRow}>
+                <button
+                  type="button"
+                  className={cx(styles.platformBtn, platform === "ios" && styles.platformBtnActive)}
+                  onClick={() => setPlatform("ios")}
+                >
+                  <span className={styles.platformEmoji}>🍎</span>
+                  <span className={styles.platformLabel}>iPhone</span>
+                </button>
+                <button
+                  type="button"
+                  className={cx(styles.platformBtn, platform === "android" && styles.platformBtnActive)}
+                  onClick={() => setPlatform("android")}
+                >
+                  <span className={styles.platformEmoji}>🤖</span>
+                  <span className={styles.platformLabel}>Android</span>
+                </button>
+              </div>
+              {platform && (
+                <div className={styles.miniSteps} key={platform}>
+                  {(platform === "ios" ? iosSteps : androidSteps).map((s, i) => (
+                    <div key={i} className={styles.miniStep}>
+                      <span className={styles.miniStepNum}>{i + 1}</span>
+                      <span className={styles.miniStepText}>{s}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-
-            <div style={{ padding: 14, borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.12)", fontSize: 12, color: "#f59e0b", lineHeight: 1.5 }}>
-              ⚡ Não se preocupe se não tiver agora. Pode configurar depois em <strong>Integrações</strong>.
-            </div>
-
-            <button className={styles.skipBtn} onClick={() => router.push("/integracoes")}>
-              Ir para Integrações agora →
-            </button>
-          </div>
-        )}
-
-        {/* Step 4: Install App */}
-        {step === 4 && (
-          <div className={styles.cardBody} key="s4">
-            <div className={styles.stepLabel}>Passo 4 de {TOTAL_STEPS}</div>
-            <h1 className={styles.stepTitle}>📲 Instale o App</h1>
-            <p className={styles.stepText}>
-              Adicione o Código Zero à sua tela inicial para ter acesso rápido e receber notificações push.
-            </p>
-
-            <div className={styles.platformRow}>
-              <button className={`${styles.platformBtn} ${platform === "ios" ? styles.platformBtnActive : ""}`}
-                onClick={() => setPlatform("ios")}>
-                <span style={{ fontSize: "1.8rem" }}>🍎</span>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginTop: 4 }}>iPhone</div>
+              )}
+              <button type="button" className={styles.skipLink} onClick={next}>
+                Fazer isso depois →
               </button>
-              <button className={`${styles.platformBtn} ${platform === "android" ? styles.platformBtnActive : ""}`}
-                onClick={() => setPlatform("android")}>
-                <span style={{ fontSize: "1.8rem" }}>🤖</span>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginTop: 4 }}>Android</div>
-              </button>
-            </div>
+            </>
+          )}
 
-            {platform && (
-              <div style={{ animation: "fadeIn 0.3s ease" }}>
-                {(platform === "ios" ? iosSteps : androidSteps).map((s, i) => (
-                  <div key={i} className={styles.miniStep}>
-                    <div className={styles.miniStepNum}>{i + 1}</div>
-                    <div className={styles.miniStepText}>{s}</div>
+          {step === 5 && (
+            <>
+              <h1 className={styles.title}>Tudo pronto.</h1>
+              <p className={styles.text}>
+                Aqui está o que você tem à disposição:
+              </p>
+              <div className={styles.featureGrid}>
+                {features.map((f) => (
+                  <div key={f.name} className={styles.featureCard}>
+                    <span className={styles.featureIcon}>{f.icon}</span>
+                    <span className={styles.featureName}>{f.name}</span>
+                    <span className={styles.featureDesc}>{f.desc}</span>
                   </div>
                 ))}
               </div>
-            )}
+              <p className={styles.text} style={{ textAlign: "center", fontSize: "var(--type-small)" }}>
+                Comece pelo <strong style={{ color: "var(--accent)" }}>Dashboard</strong> para a visão geral, ou vá direto ao <strong style={{ color: "var(--accent)" }}>Radar</strong> para os primeiros leads.
+              </p>
+            </>
+          )}
+        </div>
 
-            <button className={styles.skipBtn} onClick={next}>
-              Fazer isso depois →
-            </button>
-          </div>
-        )}
-
-        {/* Step 5: Tour */}
-        {step === 5 && (
-          <div className={styles.cardBody} key="s5">
-            <div className={styles.stepLabel}>Passo 5 de {TOTAL_STEPS}</div>
-            <h1 className={styles.stepTitle}>🎯 Tudo Pronto!</h1>
-            <p className={styles.stepText}>
-              Aqui está o que você tem à disposição na plataforma:
-            </p>
-
-            <div className={styles.featureGrid}>
-              {features.map((f, i) => (
-                <div key={i} className={styles.featureCard}>
-                  <span className={styles.featureIcon}>{f.icon}</span>
-                  <div className={styles.featureName}>{f.name}</div>
-                  <div className={styles.featureDesc}>{f.desc}</div>
-                </div>
-              ))}
-            </div>
-
-            <p style={{ fontSize: 13, color: "#888", textAlign: "center", lineHeight: 1.5 }}>
-              Comece pelo <strong style={{ color: "#2DD4BF" }}>Dashboard</strong> para ver sua visão geral, ou vá direto ao <strong style={{ color: "#2DD4BF" }}>Radar</strong> para encontrar seus primeiros leads! 🚀
-            </p>
-          </div>
-        )}
-
-        {/* Footer */}
         <div className={styles.footer}>
-          {step > 1 && step < TOTAL_STEPS && (
-            <button className={styles.btnSecondary} onClick={prev}>← Voltar</button>
-          )}
-          {step < TOTAL_STEPS ? (
-            <button className={styles.btnPrimary} onClick={next}>
-              {step === 1 ? "Vamos lá! 🚀" : "Próximo →"}
-            </button>
-          ) : (
-            <button className={styles.btnPrimary} onClick={finish} disabled={finishing}>
-              {finishing ? "Finalizando..." : "Começar! 🎉"}
-            </button>
-          )}
+          <span className={styles.footerLeft}>
+            {step}/{TOTAL_STEPS}
+          </span>
+          <div className={styles.footerRight}>
+            {step > 1 && step < TOTAL_STEPS && (
+              <Button variant="secondary" onClick={prev}>← Voltar</Button>
+            )}
+            {step < TOTAL_STEPS ? (
+              <Button variant="primary" onClick={next}>
+                {step === 1 ? "Vamos lá" : "Próximo"}
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={finish} loading={finishing}>
+                Começar
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

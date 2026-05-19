@@ -1,24 +1,41 @@
 {
-  "name": "Código Zero - Aluno",
+  "name": "Código Zero",
   "short_name": "Código Zero",
-  "description": "Plataforma de Micronegócios de IA — Área do Aluno",
+  "description": "Sua plataforma de prospecção, scripts, aulas e comunidade para criar micronegócios de IA.",
+  "id": "/",
+  "scope": "/",
   "start_url": "/dashboard",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#0A0A0A",
   "theme_color": "#0A0A0A",
+  "lang": "pt-BR",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icons/apple-touch-icon.png",
@@ -26,5 +43,29 @@
       "type": "image/png"
     }
   ],
-  "categories": ["education", "business"]
+  "shortcuts": [
+    {
+      "name": "Radar",
+      "short_name": "Radar",
+      "description": "Encontrar leads agora",
+      "url": "/radar",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Forja",
+      "short_name": "Aulas",
+      "description": "Continuar aulas",
+      "url": "/forja",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Cofre",
+      "short_name": "Scripts",
+      "description": "Biblioteca de scripts",
+      "url": "/cofre",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false,
+  "categories": ["education", "business", "productivity"]
 }

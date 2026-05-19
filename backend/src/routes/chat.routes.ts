@@ -106,14 +106,16 @@ router.delete('/messages/:id', async (req: AuthRequest, res: Response) => {
     const message = await prisma.chatMessage.findUnique({ where: { id: req.params.id } });
     if (!message) return res.status(404).json({ error: 'Mensagem não encontrada' });
 
-    const isAdmin = req.user!.role === 'admin';
+    const role = req.user!.role;
+    const isAdmin = role === 'admin' || role === 'superadmin';
     const isOwner = message.senderId === req.user!.id;
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ error: 'Sem permissão para deletar esta mensagem' });
     }
 
-    // 15-minute window for non-admins
+    // Owners (non-admin) only have a 15-minute window. Admins/superadmins
+    // can delete any message at any time.
     if (isOwner && !isAdmin) {
       const ageMs = Date.now() - new Date(message.createdAt).getTime();
       const fifteenMin = 15 * 60 * 1000;

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { sendPushToSuperAdmins, sendPushToUser } from '../routes/auth.routes';
 import { lojouService } from '../services/lojou.service';
 import { env } from '../config/env';
+import { processDueDispatches, processDispatch } from '../services/dispatch.service';
 
 const prisma = new PrismaClient();
 
@@ -564,4 +565,45 @@ export function startCronJobs() {
   });
 
   console.log('[CRON] ⏰ Inactivity reminder scheduled (10:00 daily)');
+
+  // ── Scheduled WhatsApp dispatches (every 30 seconds) ──
+  cron.schedule('*/30 * * * * *', async () => {
+    try {
+      const picked = await processDueDispatches();
+      if (picked > 0) console.log(`[CRON] 📤 Picked up ${picked} due dispatch(es)`);
+    } catch (error) {
+      console.error('[CRON] Dispatch tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Scheduled dispatches tick (every 30s)');
+
+  // ── Recover orphaned dispatches on boot ──
+  // Any 'running' rows left over from a previous process crash, plus any
+  // 'pending' rows whose scheduledAt is already in the past, get picked
+  // up immediately so the user doesn't have to wait for the next tick.
+  recoverOrphanedDispatches().catch((e) => console.error('[BOOT] Dispatch recovery failed:', e));
+}
+
+async function recoverOrphanedDispatches() {
+  const now = new Date();
+  // Reset 'running' rows to 'pending' so processDispatch can re-claim them.
+  const stalled = await prisma.scheduledDispatch.updateMany({
+    where: { status: 'running' },
+    data: { status: 'pending' },
+  });
+  if (stalled.count > 0) {
+    console.log(`[BOOT] 🩹 Reset ${stalled.count} stalled dispatch(es) from 'running' → 'pending'`);
+  }
+
+  const due = await prisma.scheduledDispatch.findMany({
+    where: { status: 'pending', scheduledAt: { lte: now } },
+    select: { id: true },
+    take: 50,
+  });
+  for (const { id } of due) {
+    processDispatch(id).catch((e) => console.error('[BOOT] Dispatch resume error', id, e));
+  }
+  if (due.length > 0) {
+    console.log(`[BOOT] 📤 Resumed ${due.length} due dispatch(es)`);
+  }
 }

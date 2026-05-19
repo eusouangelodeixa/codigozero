@@ -52,6 +52,20 @@ interface KomunikaInfo {
   funnels?: KomunikaFunnel[];
 }
 
+interface ScheduleSummary {
+  id: string;
+  scheduledAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: string;
+  total: number;
+  sent: number;
+  failed: number;
+  error: string | null;
+  preview: string;
+  mode: string;
+}
+
 const ChevronDown = (p: { size?: number; className?: string }) => (
   <svg className={p.className} width={p.size ?? 14} height={p.size ?? 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="6 9 12 15 18 9" />
@@ -128,6 +142,13 @@ export default function DisparadorPage() {
   const [mediaUrl, setMediaUrl] = useState("");
   const [selectedFunnel, setSelectedFunnel] = useState("");
 
+  // Anti-block: random interval between sends + optional scheduling
+  const [delayMinSec, setDelayMinSec] = useState<number>(5);
+  const [delayMaxSec, setDelayMaxSec] = useState<number>(15);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledLocal, setScheduledLocal] = useState("");
+  const [schedules, setSchedules] = useState<ScheduleSummary[]>([]);
+
   const [history, setHistory] = useState<DispatchLog[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -187,9 +208,47 @@ export default function DisparadorPage() {
       .catch(() => {});
   }, [hdr]);
 
+  const loadSchedules = useCallback(() => {
+    fetch(`${API}/api/radar/scheduled-dispatches`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((data) => setSchedules(data.schedules || []))
+      .catch(() => {});
+  }, [hdr]);
+
   useEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+    loadSchedules();
+  }, [loadHistory, loadSchedules]);
+
+  // Poll schedules while any are pending/running so the UI tracks progress.
+  useEffect(() => {
+    const hasActive = schedules.some((s) => s.status === "pending" || s.status === "running");
+    if (!hasActive) return;
+    const id = setInterval(() => {
+      loadSchedules();
+      loadHistory();
+    }, 4000);
+    return () => clearInterval(id);
+  }, [schedules, loadSchedules, loadHistory]);
+
+  const cancelSchedule = async (id: string) => {
+    if (!confirm("Cancelar este agendamento?")) return;
+    try {
+      const res = await fetch(`${API}/api/radar/scheduled-dispatches/${id}`, {
+        method: "DELETE",
+        headers: hdr(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success("Agendamento cancelado");
+        loadSchedules();
+      } else {
+        toast.error("Falha ao cancelar", data.error);
+      }
+    } catch {
+      toast.error("Erro de conexão");
+    }
+  };
 
   useEffect(() => {
     const leadPhone = searchParams.get("lead");
@@ -377,6 +436,29 @@ export default function DisparadorPage() {
       }
     } catch {}
 
+    if (delayMaxSec < delayMinSec) {
+      toast.error("Intervalo inválido", "O máximo precisa ser ≥ ao mínimo.");
+      return;
+    }
+
+    let scheduledAt: string | undefined = undefined;
+    if (scheduleEnabled) {
+      if (!scheduledLocal) {
+        toast.error("Defina data e hora do agendamento");
+        return;
+      }
+      const localDate = new Date(scheduledLocal);
+      if (isNaN(localDate.getTime())) {
+        toast.error("Data inválida");
+        return;
+      }
+      if (localDate.getTime() < Date.now() - 30_000) {
+        toast.error("A data agendada já passou");
+        return;
+      }
+      scheduledAt = localDate.toISOString();
+    }
+
     setDispatching(true);
     setProgress({ current: 0, total: selectedContacts.length });
     setDispatchResult(null);
@@ -396,14 +478,24 @@ export default function DisparadorPage() {
           type: msgType,
           mediaUrl: msgType !== "text" ? mediaUrl : undefined,
           funnelId: dispatchMode === "funnel" ? selectedFunnel : undefined,
+          delayMinSec,
+          delayMaxSec,
+          scheduledAt,
         }),
       });
       const data = await res.json();
 
-      if (res.ok) {
-        setDispatchResult({ sent: data.sent, failed: data.failed });
-        setProgress({ current: data.total, total: data.total });
-        toast.success(`${data.sent} mensagem(ns) enviada(s)`);
+      if (res.ok && data.scheduled) {
+        toast.success(
+          "Disparo agendado",
+          `${data.total} contato(s) — sai em ${formatScheduleLabel(data.scheduledAt)}.`
+        );
+        setScheduleEnabled(false);
+        setScheduledLocal("");
+        loadSchedules();
+      } else if (res.ok && data.queued) {
+        toast.success("Disparo iniciado", `${data.total} contato(s) na fila. Acompanhe o histórico.`);
+        loadSchedules();
         loadHistory();
       } else if (data.error === "KOMUNIKA_NOT_CONFIGURED") {
         toast.warning("Configure o Komunika primeiro");
@@ -416,6 +508,28 @@ export default function DisparadorPage() {
     }
     setDispatching(false);
   };
+
+  const formatScheduleLabel = (iso?: string) => {
+    if (!iso) return "agora";
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    return sameDay
+      ? `hoje às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+      : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+
+  // Default the date input to "now + 10 min" in the user's local timezone.
+  const datetimeMin = (() => {
+    const d = new Date(Date.now() + 60_000);
+    const tz = d.getTimezoneOffset() * 60_000;
+    return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+  })();
+  const defaultScheduledLocal = (() => {
+    const d = new Date(Date.now() + 10 * 60_000);
+    const tz = d.getTimezoneOffset() * 60_000;
+    return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+  })();
 
   const isConnected = komunikaInfo?.instanceStatus?.status === "connected";
 
@@ -760,6 +874,166 @@ export default function DisparadorPage() {
         </Card>
       </div>
 
+      {/* ══ Anti-block: intervalo entre envios + agendamento ══ */}
+      <Card padding="lg">
+        <div className={styles.col}>
+          <span className={styles.cardTitle}>Intervalo e agendamento</span>
+          <p style={{ fontSize: "var(--type-small)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+            Envios simultâneos aumentam o risco de bloqueio do WhatsApp. Espalhe os envios usando
+            um intervalo aleatório entre o mínimo e o máximo. Você também pode programar todo o
+            disparo para um momento futuro.
+          </p>
+
+          <div className={styles.manualRow}>
+            <Input
+              label="Intervalo mínimo (s)"
+              type="number"
+              min={0}
+              max={600}
+              value={String(delayMinSec)}
+              onChange={(e) => setDelayMinSec(Math.max(0, parseInt(e.target.value) || 0))}
+            />
+            <Input
+              label="Intervalo máximo (s)"
+              type="number"
+              min={delayMinSec}
+              max={600}
+              value={String(delayMaxSec)}
+              onChange={(e) => setDelayMaxSec(Math.max(delayMinSec, parseInt(e.target.value) || 0))}
+              hint="Sugestão: 5–15s para listas pequenas; 30–120s para listas longas."
+            />
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={scheduleEnabled}
+              onChange={(e) => {
+                setScheduleEnabled(e.target.checked);
+                if (e.target.checked && !scheduledLocal) setScheduledLocal(defaultScheduledLocal);
+              }}
+            />
+            <span style={{ fontSize: "var(--type-small)" }}>Agendar para mais tarde</span>
+          </label>
+
+          {scheduleEnabled && (
+            <Input
+              label="Data e hora do disparo"
+              type="datetime-local"
+              min={datetimeMin}
+              value={scheduledLocal}
+              onChange={(e) => setScheduledLocal(e.target.value)}
+              hint={`Fuso do seu dispositivo (${Intl.DateTimeFormat().resolvedOptions().timeZone}). O sistema dispara automaticamente nesse horário.`}
+            />
+          )}
+
+          {schedules.length > 0 && (
+            <div className={styles.col} style={{ gap: 8, marginTop: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Disparos agendados / em andamento
+              </span>
+              {schedules.map((s) => {
+                const pct = s.total > 0 ? Math.round(((s.sent + s.failed) / s.total) * 100) : 0;
+                const when = formatScheduleLabel(s.scheduledAt);
+                return (
+                  <div
+                    key={s.id}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 6,
+                      padding: "10px 12px",
+                      background: "var(--bg-glass)",
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "var(--radius-md)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <Badge
+                        variant={
+                          s.status === "pending"
+                            ? "warning"
+                            : s.status === "running"
+                            ? "info"
+                            : s.status === "completed"
+                            ? "success"
+                            : s.status === "cancelled"
+                            ? "neutral"
+                            : "error"
+                        }
+                        size="sm"
+                      >
+                        {s.status === "pending"
+                          ? "Agendado"
+                          : s.status === "running"
+                          ? "Enviando"
+                          : s.status === "completed"
+                          ? "Concluído"
+                          : s.status === "cancelled"
+                          ? "Cancelado"
+                          : "Falhou"}
+                      </Badge>
+                      <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{when}</span>
+                      <span
+                        style={{ fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}
+                      >
+                        {s.sent}/{s.total} {s.failed > 0 ? `· ${s.failed} falhas` : ""}
+                      </span>
+                      {(s.status === "pending" || s.status === "running") && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => cancelSchedule(s.id)}
+                          style={{ marginLeft: "auto" }}
+                        >
+                          Cancelar
+                        </Button>
+                      )}
+                    </div>
+                    {s.preview && (
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: "var(--text-tertiary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {s.preview}
+                      </span>
+                    )}
+                    {(s.status === "pending" || s.status === "running") && s.total > 0 && (
+                      <span
+                        style={{
+                          height: 3,
+                          background: "rgba(255,255,255,0.06)",
+                          borderRadius: 9999,
+                          overflow: "hidden",
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: "block",
+                            height: "100%",
+                            width: `${pct}%`,
+                            background: "var(--accent)",
+                            transition: "width 240ms ease-out",
+                          }}
+                        />
+                      </span>
+                    )}
+                    {s.error && (
+                      <span style={{ fontSize: 11, color: "var(--color-error)" }}>{s.error}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* ══ Dispatch footer ══ */}
       <div className={styles.dispatchFooter}>
         <Button
@@ -775,24 +1049,10 @@ export default function DisparadorPage() {
             (dispatchMode === "funnel" && !selectedFunnel)
           }
         >
-          Disparar ({selectedContacts.length} contato{selectedContacts.length !== 1 ? "s" : ""})
+          {scheduleEnabled
+            ? `Agendar (${selectedContacts.length} contato${selectedContacts.length !== 1 ? "s" : ""})`
+            : `Disparar (${selectedContacts.length} contato${selectedContacts.length !== 1 ? "s" : ""})`}
         </Button>
-
-        {dispatching && (
-          <div className={styles.progressGroup}>
-            <span className={styles.progressTrack}>
-              <span
-                className={styles.progressFill}
-                style={{
-                  width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
-                }}
-              />
-            </span>
-            <span className={styles.progressText}>
-              {progress.current}/{progress.total}
-            </span>
-          </div>
-        )}
 
         {dispatchResult && !dispatching && (
           <div className={styles.resultsSummary}>

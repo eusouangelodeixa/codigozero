@@ -190,8 +190,18 @@ export default function AdminConfig() {
     setTimeout(() => setCopied((c) => (c === kind ? null : c)), 1800);
   };
 
-  // Pre-format selected datetime-local from ISO
-  const datetimeValue = config.mentoriaSchedule ? config.mentoriaSchedule.slice(0, 16) : "";
+  // datetime-local works with naive (timezone-less) strings. The DB stores
+  // UTC ISO, so we convert UTC -> local for display and local -> UTC on change.
+  // Slicing the raw ISO would render the UTC clock time as if it were local,
+  // which is why typing "16:00" used to come back as a different value.
+  const toLocalDatetime = (iso?: string | null): string => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const offsetMs = d.getTimezoneOffset() * 60_000;
+    return new Date(d.getTime() - offsetMs).toISOString().slice(0, 16);
+  };
+  const datetimeValue = toLocalDatetime(config.mentoriaSchedule);
 
   return (
     <div className={styles.page}>
@@ -236,7 +246,10 @@ export default function AdminConfig() {
         }
       >
         <div className={styles.formGrid}>
-          <Field label="Data e hora">
+          <Field
+            label="Data e hora"
+            hint={`Fuso do seu dispositivo (${Intl.DateTimeFormat().resolvedOptions().timeZone}). Cada aluno verá o horário convertido para o fuso dele.`}
+          >
             <input
               className={styles.input}
               type="datetime-local"

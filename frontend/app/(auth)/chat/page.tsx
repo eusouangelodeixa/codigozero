@@ -42,6 +42,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [userId, setUserId] = useState("");
+  const [userRole, setUserRole] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -50,8 +51,11 @@ export default function ChatPage() {
     try {
       const u = JSON.parse(localStorage.getItem("cz_user") || "{}");
       setUserId(u.id || "");
+      setUserRole(u.role || "");
     } catch {}
   }, []);
+
+  const viewerIsAdmin = userRole === "admin" || userRole === "superadmin";
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -120,6 +124,9 @@ export default function ChatPage() {
   };
 
   const canDelete = (msg: Message) => {
+    // Admins/superadmins can delete any message regardless of age.
+    if (viewerIsAdmin) return true;
+    // Owners only within a 15-minute window.
     if (msg.sender.id !== userId) return false;
     const ageMs = Date.now() - new Date(msg.createdAt).getTime();
     return ageMs < 15 * 60 * 1000;
@@ -199,7 +206,7 @@ export default function ChatPage() {
             <div className={styles.dateDivider}><span>{group.date}</span></div>
             {group.msgs.map((msg) => {
               const isMine = msg.sender.id === userId;
-              const isAdmin = msg.sender.role === "admin";
+              const isAdmin = msg.sender.role === "admin" || msg.sender.role === "superadmin";
               return (
                 <div
                   key={msg.id}
@@ -232,12 +239,13 @@ export default function ChatPage() {
                     <p className={styles.bubbleText}>{msg.content}</p>
                     <div className={styles.bubbleFooter}>
                       <span className={styles.bubbleTime}>{formatTime(msg.createdAt)}</span>
-                      {isMine && canDelete(msg) && (
+                      {canDelete(msg) && (
                         <button
                           type="button"
                           className={styles.deleteBtn}
                           onClick={() => handleDelete(msg.id)}
-                          aria-label="Apagar"
+                          aria-label={isMine ? "Apagar" : "Moderar e apagar"}
+                          title={isMine ? "Apagar" : "Moderar (apagar mensagem)"}
                         >
                           <TrashIcon />
                         </button>

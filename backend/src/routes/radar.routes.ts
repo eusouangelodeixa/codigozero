@@ -4,6 +4,11 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 import { env } from '../config/env';
 import { scraperQueue, redisConnection } from '../queues/scraper.queue';
+import {
+  createScheduledDispatch,
+  processDispatch,
+  DispatchPayload,
+} from '../services/dispatch.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -196,7 +201,19 @@ router.get('/leads', authMiddleware, subscriptionMiddleware, async (req: AuthReq
 router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { phone, content, contacts, message, dispatchMode = 'message', type = 'text', mediaUrl, funnelId } = req.body;
+    const {
+      phone,
+      content,
+      contacts,
+      message,
+      dispatchMode = 'message',
+      type = 'text',
+      mediaUrl,
+      funnelId,
+      delayMinSec,
+      delayMaxSec,
+      scheduledAt,
+    } = req.body;
 
     // Normalize to batch format
     const contactList: { phone: string; name?: string; variables?: Record<string, string> }[] = contacts
@@ -225,79 +242,134 @@ router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: Aut
       return res.status(400).json({ error: 'KOMUNIKA_NOT_CONFIGURED', message: 'Configure suas credenciais do Komunika na aba Integrações.' });
     }
 
-    const results: { phone: string; name?: string; success: boolean; error?: string }[] = [];
-    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+    // Clamp delay window — protect both UX (very short) and WhatsApp (very long block risk if 0)
+    const minSec = Math.max(0, Math.min(600, Number(delayMinSec ?? 5)));
+    const maxSec = Math.max(minSec, Math.min(600, Number(delayMaxSec ?? 15)));
 
-    for (const contact of contactList) {
-      const cleanPhone = contact.phone.replace(/\D/g, '');
-
-      let personalizedMsg = '';
-      if (msgContent) {
-        personalizedMsg = msgContent
-          .replace(/\{\{nome\}\}/gi, contact.name || contact.variables?.nome || '')
-          .replace(/\{\{telefone\}\}/gi, contact.phone || '')
-          .replace(/\{\{negocio\}\}/gi, contact.variables?.negocio || contact.name || '');
-
-        if (contact.variables) {
-          Object.entries(contact.variables).forEach(([key, val]) => {
-            personalizedMsg = personalizedMsg.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), val || '');
-          });
-        }
+    let when = new Date();
+    if (scheduledAt) {
+      const parsed = new Date(scheduledAt);
+      if (isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'Data de agendamento inválida' });
       }
-
-      try {
-        let response;
-        if (dispatchMode === 'funnel') {
-           response = await fetch(`${apiUrl}/api/v1/funnels/${funnelId}/add-lead`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json', 'X-API-Key': user.komunikaApiKey },
-             body: JSON.stringify({ phone: cleanPhone, name: contact.name, customFields: contact.variables || {} })
-           });
-           personalizedMsg = `[Injetado no Funil: ${funnelId}]`;
-        } else {
-           response = await fetch(`${apiUrl}/api/v1/messages/send`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json', 'X-API-Key': user.komunikaApiKey },
-             body: JSON.stringify({ instanceId: user.komunikaInstanceId, to: cleanPhone, type, mediaUrl, fileName: mediaUrl ? mediaUrl.split('/').pop() : undefined, ...(personalizedMsg ? { content: personalizedMsg } : {}) })
-           });
-        }
-
-        const data = await response.json().catch(() => null);
-
-        if (response.ok) {
-          results.push({ phone: contact.phone, name: contact.name, success: true });
-          await prisma.dispatchLog.create({
-            data: { userId, phone: contact.phone, contactName: contact.name, message: personalizedMsg, status: 'sent' },
-          });
-        } else {
-          const errMsg = data?.error || data?.message || 'Erro Komunika';
-          results.push({ phone: contact.phone, name: contact.name, success: false, error: errMsg });
-          await prisma.dispatchLog.create({
-            data: { userId, phone: contact.phone, contactName: contact.name, message: personalizedMsg, status: 'failed', error: errMsg },
-          });
-        }
-      } catch (err: any) {
-        results.push({ phone: contact.phone, name: contact.name, success: false, error: err.message });
-        await prisma.dispatchLog.create({
-          data: { userId, phone: contact.phone, contactName: contact.name, message: personalizedMsg, status: 'failed', error: err.message },
-        });
+      // Allow 30s slack so "now" clicks aren't rejected
+      const earliest = new Date(Date.now() - 30_000);
+      if (parsed < earliest) {
+        return res.status(400).json({ error: 'A data agendada já passou' });
       }
-
-      // Delay between messages to avoid rate limiting
-      if (contactList.length > 1) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      when = parsed;
     }
 
-    const sent = results.filter(r => r.success).length;
-    const failed = results.filter(r => !r.success).length;
+    const payload: DispatchPayload = {
+      contacts: contactList,
+      message: msgContent,
+      dispatchMode,
+      type,
+      mediaUrl,
+      funnelId,
+      delayMinSec: minSec,
+      delayMaxSec: maxSec,
+    };
 
-    console.log(`[DISPATCH] User ${user.email}: ${sent} sent, ${failed} failed out of ${contactList.length}`);
+    const row = await createScheduledDispatch(userId, when, payload);
+    const immediate = when.getTime() <= Date.now() + 1_000;
 
-    return res.json({ success: true, sent, failed, total: contactList.length, results });
+    if (immediate) {
+      // Fire-and-forget: run in background. Response returns now.
+      processDispatch(row.id).catch((err) => console.error('[DISPATCH] background error:', err));
+      console.log(
+        `[DISPATCH] queued immediate id=${row.id} user=${user.email} total=${contactList.length} delay=${minSec}-${maxSec}s`,
+      );
+      return res.json({
+        success: true,
+        queued: true,
+        scheduled: false,
+        id: row.id,
+        total: contactList.length,
+      });
+    }
+
+    console.log(
+      `[DISPATCH] scheduled id=${row.id} user=${user.email} for=${when.toISOString()} total=${contactList.length}`,
+    );
+    return res.json({
+      success: true,
+      queued: true,
+      scheduled: true,
+      id: row.id,
+      total: contactList.length,
+      scheduledAt: when.toISOString(),
+    });
   } catch (error) {
     console.error('[DISPATCH] Error:', error);
     return res.status(500).json({ error: 'Erro ao disparar mensagens' });
+  }
+});
+
+/**
+ * GET /api/radar/scheduled-dispatches
+ * Returns the user's pending/running and recent (last 24h) scheduled dispatches.
+ */
+router.get('/scheduled-dispatches', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const rows = await prisma.scheduledDispatch.findMany({
+      where: {
+        userId: req.user!.id,
+        OR: [{ status: { in: ['pending', 'running'] } }, { createdAt: { gte: since } }],
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take: 50,
+    });
+    return res.json({
+      schedules: rows.map((r) => ({
+        id: r.id,
+        scheduledAt: r.scheduledAt,
+        startedAt: r.startedAt,
+        completedAt: r.completedAt,
+        status: r.status,
+        total: r.total,
+        sent: r.sent,
+        failed: r.failed,
+        error: r.error,
+        preview:
+          typeof r.payload === 'object' && r.payload !== null && 'message' in (r.payload as any)
+            ? String((r.payload as any).message ?? '').slice(0, 120)
+            : '',
+        mode:
+          typeof r.payload === 'object' && r.payload !== null
+            ? ((r.payload as any).dispatchMode ?? 'message')
+            : 'message',
+      })),
+    });
+  } catch (error) {
+    console.error('[DISPATCH] List error:', error);
+    return res.status(500).json({ error: 'Erro ao listar agendamentos' });
+  }
+});
+
+/**
+ * DELETE /api/radar/scheduled-dispatches/:id
+ * Cancels a pending dispatch. Running dispatches are marked cancelled and stop
+ * at the next contact boundary.
+ */
+router.delete('/scheduled-dispatches/:id', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const row = await prisma.scheduledDispatch.findUnique({ where: { id: req.params.id } });
+    if (!row || row.userId !== req.user!.id) {
+      return res.status(404).json({ error: 'Agendamento não encontrado' });
+    }
+    if (row.status === 'completed' || row.status === 'failed' || row.status === 'cancelled') {
+      return res.status(400).json({ error: `Não é possível cancelar (${row.status})` });
+    }
+    await prisma.scheduledDispatch.update({
+      where: { id: row.id },
+      data: { status: 'cancelled', completedAt: new Date() },
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('[DISPATCH] Cancel error:', error);
+    return res.status(500).json({ error: 'Erro ao cancelar agendamento' });
   }
 });
 

@@ -54,6 +54,16 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       .catch(() => {});
   }, [router]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ user?: User }>;
+      const next = ce.detail?.user;
+      if (next) setUser((prev) => ({ ...(prev ?? {}), ...next }));
+    };
+    window.addEventListener("cz-user-updated", handler);
+    return () => window.removeEventListener("cz-user-updated", handler);
+  }, []);
+
   const logout = () => {
     localStorage.removeItem("cz_token");
     localStorage.removeItem("cz_user");

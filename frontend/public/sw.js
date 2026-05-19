@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cz-aluno-v2';
+const CACHE_NAME = 'cz-aluno-v3';
 
 // Install — activate immediately, cache in background
 self.addEventListener('install', (event) => {
@@ -39,6 +39,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.url.includes('/api/')) return; // Don't cache API calls
+  // Skip user-uploaded content: avatars and other uploads should always come
+  // fresh from the network so a new upload replaces the old one immediately.
+  if (event.request.url.includes('/uploads/')) return;
 
   event.respondWith(
     fetch(event.request)

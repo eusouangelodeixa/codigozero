@@ -69,9 +69,14 @@ export default function PerfilPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setForm((f) => ({ ...f, avatarUrl: data.avatarUrl }));
-        setUser((u) => ({ ...(u || {}), avatarUrl: data.avatarUrl }));
-        localStorage.setItem("cz_user", JSON.stringify({ ...(user || {}), avatarUrl: data.avatarUrl }));
+        const newAvatarUrl: string = data.avatarUrl;
+        const nextUser: UserData = { ...(user ?? {}), avatarUrl: newAvatarUrl };
+        setForm((f) => ({ ...f, avatarUrl: newAvatarUrl }));
+        setUser(nextUser);
+        localStorage.setItem("cz_user", JSON.stringify(nextUser));
+        window.dispatchEvent(
+          new CustomEvent("cz-user-updated", { detail: { user: nextUser } })
+        );
         toast.success("Foto atualizada");
       } else {
         toast.error("Falha no upload", data.error);
@@ -92,8 +97,12 @@ export default function PerfilPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setUser((u) => ({ ...(u || {}), ...data.user }));
-        localStorage.setItem("cz_user", JSON.stringify({ ...(user || {}), ...data.user }));
+        const nextUser: UserData = { ...(user ?? {}), ...data.user };
+        setUser(nextUser);
+        localStorage.setItem("cz_user", JSON.stringify(nextUser));
+        window.dispatchEvent(
+          new CustomEvent("cz-user-updated", { detail: { user: nextUser } })
+        );
         toast.success("Perfil atualizado");
       } else {
         toast.error("Falha ao salvar", data.error);

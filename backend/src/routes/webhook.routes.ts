@@ -318,14 +318,47 @@ router.post('/lojou', async (req: Request, res: Response) => {
 
               const instanceId = sysConfig?.komunikaInstanceId;
               if (instanceId) {
-                await fetch(`${komunikaUrl}/api/v1/messages/send`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'X-API-Key': komunikaKey },
-                  body: JSON.stringify({ instanceId, to: cleanPhone, type: 'text', content: credentialMsg }),
-                });
+                // Send with retry + real status check. The previous
+                // implementation logged "sent" unconditionally, masking
+                // 401/429/500 from Komunika and giving false confidence
+                // that customers had received their credentials.
+                let delivered = false;
+                let lastStatus: number | string = 'no-attempt';
+                let lastBody = '';
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                  try {
+                    const res = await fetch(`${komunikaUrl}/api/v1/messages/send`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'X-API-Key': komunikaKey },
+                      body: JSON.stringify({ instanceId, to: cleanPhone, type: 'text', content: credentialMsg }),
+                    });
+                    lastStatus = res.status;
+                    lastBody = await res.text().catch(() => '');
+                    if (res.ok) {
+                      delivered = true;
+                      console.log(`[WEBHOOK] ✅ Credentials delivered via WhatsApp to ${cleanPhone} (status=${res.status}, attempt=${attempt})`);
+                      break;
+                    }
+                    console.warn(`[WEBHOOK] ⚠️ Komunika attempt ${attempt} failed: status=${res.status} body=${lastBody.slice(0, 200)}`);
+                  } catch (e: any) {
+                    lastStatus = `throw:${e?.message || 'unknown'}`;
+                    console.warn(`[WEBHOOK] ⚠️ Komunika attempt ${attempt} threw:`, e?.message || e);
+                  }
+                  // Brief backoff between attempts
+                  if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * attempt));
+                }
+                if (!delivered) {
+                  console.error(`[WEBHOOK] 🚨 CREDENTIALS NOT DELIVERED to ${cleanPhone} after 3 attempts. lastStatus=${lastStatus} body=${lastBody.slice(0, 200)}`);
+                  // Notify superadmins so manual recovery (resend from admin) can happen
+                  sendPushToSuperAdmins({
+                    title: '🚨 Entrega de acesso falhou',
+                    body: `${user.email} pagou mas não recebeu credenciais. Status Komunika: ${lastStatus}`,
+                    url: '/admin/users',
+                  }).catch(() => {});
+                }
+              } else {
+                console.warn(`[WEBHOOK] ⚠️ Komunika instanceId missing — credentials NOT sent via WhatsApp`);
               }
-
-              console.log(`[WEBHOOK] 📱 Credentials sent via WhatsApp to ${cleanPhone}`);
             } else {
               console.warn(`[WEBHOOK] ⚠️ Komunika not configured — credentials NOT sent via WhatsApp`);
             }

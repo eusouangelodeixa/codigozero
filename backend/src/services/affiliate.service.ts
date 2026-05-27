@@ -4,8 +4,12 @@ import crypto from 'crypto';
 const prisma = new PrismaClient();
 
 // ── Money / rule constants (per the affiliate program brief) ──────────────
+// salePrice is the gross sale value used by quoteCommission() when no
+// explicit amount is passed. It mirrors the Lojou plan price for the
+// affiliate-dedicated product (nrUnJ / O Codigo Zero / zEJP6), currently
+// aligned with the main plan at 497 MZN.
 export const AFFILIATE_RULES = {
-  salePrice: 797,
+  salePrice: 497,
   commissionRate: 0.60,          // affiliate gets 60% of the sale (gross)
   platformPercent: 0.10,          // platform fee = 10% of sale amount...
   platformFixed: 10,              // ...+ 10 MZN, deducted from gross commission

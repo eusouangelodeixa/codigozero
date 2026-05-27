@@ -234,13 +234,17 @@ export default function AfiliacaoPage() {
   }
 
   // ── Not enrolled state ────────────────────────────────────────────────
+  const netRounded = Math.round(netCommissionPerSale);
+  const dynamicDesc = rules
+    ? `Indique e ganhe até ${netRounded} MT líquidos por venda recorrente. Apenas para alunos ativos.`
+    : "Indique e ganhe por cada venda recorrente. Apenas para alunos ativos.";
   if (!enrolled) {
     return (
       <div className={styles.page}>
         <PageHeader
           label="Conta · Afiliação"
           title="Programa de Afiliados Código Zero"
-          description="Indique e ganhe até 478 MT por venda recorrente. Apenas para alunos ativos."
+          description={dynamicDesc}
         />
 
         <Card padding="lg">
@@ -248,8 +252,15 @@ export default function AfiliacaoPage() {
             <h2 className={styles.heroTitle}>Como funciona</h2>
             <ul className={styles.bullets}>
               <li>
-                <strong>Sua comissão:</strong> 60% de cada mensalidade de 797 MT
-                {rules && <> · <em>≈ {fmtMzn(netCommissionPerSale)} MZN líquido por venda</em></>}
+                <strong>Sua comissão:</strong>{" "}
+                {rules ? (
+                  <>
+                    {Math.round(rules.commissionRate * 100)}% de cada mensalidade de {fmtMzn(rules.salePrice)} MT
+                    · <em>≈ {fmtMzn(netCommissionPerSale)} MZN líquido por venda</em>
+                  </>
+                ) : (
+                  <>uma fatia de cada venda recorrente</>
+                )}
               </li>
               <li><strong>Receba via:</strong> M-Pesa ou eMola</li>
               <li><strong>Prazo:</strong> Saque disponível em D+7 após venda aprovada</li>
@@ -288,7 +299,7 @@ export default function AfiliacaoPage() {
       <PageHeader
         label="Conta · Afiliação"
         title="Programa de Afiliados Código Zero"
-        description="Indique e ganhe até 478 MT por venda recorrente. Apenas para alunos ativos."
+        description={dynamicDesc}
       />
 
       {/* ── Link card ── */}

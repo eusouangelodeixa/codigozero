@@ -1,76 +1,151 @@
 "use client";
 import { useState, useEffect } from "react";
+import Image from "next/image";
+import { motion, useReducedMotion } from "motion/react";
 import { Logo } from "@/components/Logo";
 import styles from "./landing.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 // ── Default texts (fallback when admin hasn't customized) ──
+// Copy is direct, no PT-PT formality, no inflated "investor" tropes — every
+// claim maps to something the product actually does (Radar/Disparador/Cofre/
+// Forja/QG/Chat) or to verifiable network state (143 members on the Whop).
 const DEFAULTS = {
-  heroTitle: "Como gerar os seus primeiros 50.000 MT/mês com Inteligência Artificial",
-  heroSubtitle: "Sem digitar uma única linha de código",
-  heroDesc: "O ecossistema que te entrega a tecnologia, os clientes e o método exato para <strong>fechares contratos B2B de 3.000 MT recorrentes</strong>, conquistando a liberdade de trabalhar a partir de casa apenas com um computador simples em Moçambique.",
-  ctaText: "Entrar no Codigo Zero",
-  trustText: "🚀 O atalho definitivo para conquistares a tua independência financeira sem precisares de saber programar.",
-  stat1Value: "2M+ MT", stat1Label: "Processados",
-  stat2Value: "50", stat2Label: "Vagas",
-  stat3Value: "30 dias", stat3Label: "Garantia",
+  // ── Hero ─────────────────────────────────────────────────────────────
+  heroTitle: "O ecossistema completo pra criar micronegócios de IA em Moçambique.",
+  heroSubtitle: "Sem código. Sem barreiras.",
+  heroDesc: "Radar de leads, Disparador de WhatsApp, biblioteca de scripts e a network privada que se encontra <strong>todos os domingos</strong>. Tudo num lugar só.",
+  ctaText: "Entrar no Código Zero",
+  trustText: "143 membros · Call toda semana · 6 ferramentas integradas",
+  stat1Value: "143", stat1Label: "Membros na network",
+  stat2Value: "Domingo", stat2Label: "Call ao vivo toda semana",
+  stat3Value: "30 dias", stat3Label: "Garantia condicional",
+
+  // ── VSL ──────────────────────────────────────────────────────────────
   vslTitle: "Código Zero — Apresentação",
-  vslSubtitle: "Assista a apresentação completa",
-  vslHint: "Clique para ouvir",
-  painLabel: "O Problema",
-  painTitle: "O mercado digital antigo exige muito de você.",
-  painTitleHighlight: "O jogo mudou.",
-  painDesc: "Você sabe que a internet é o veículo para não ficar estagnado, mas provavelmente já travou na execução e <strong>vê o dinheiro desaparecer rápido todos os meses</strong>:",
-  painItems: [
-    "Consome horas no TikTok/YouTube sobre Marketing Digital, mas <strong>nunca aplica nem monetiza nada</strong>.",
-    "Tenta vender e-books para pessoas comuns e frustra-se com <strong>vácuos ou respostas negativas</strong>.",
-    "Fica paralisado pela <strong>síndrome do impostor</strong>, achando que precisa ser um génio da programação.",
-    "Fica preso em cursinhos teóricos que só vendem teorias, mas <strong>nunca entregam as ferramentas</strong>.",
-    "Sente que está a ser <strong>engolido pela revolução tecnológica</strong> enquanto outros prosperam.",
+  vslSubtitle: "Assiste à apresentação completa",
+  vslHint: "Clica para ouvir",
+
+  // ── Stack (6 ferramentas reais) ─────────────────────────────────────
+  stackLabel: "O ecossistema por dentro",
+  stackTitle: "Seis ferramentas que",
+  stackTitleHighlight: "trabalham juntas.",
+  stackDesc: "Cada peça faz uma coisa só, e faz bem. Tudo conectado à mesma conta, ao mesmo histórico de leads, à mesma comunidade.",
+  stackTools: [
+    {
+      key: "radar",
+      name: "Radar",
+      verb: "Encontra os clientes.",
+      desc: "Scanner de leads que varre o Google Maps por cidade e categoria. Devolve nome, telefone, Instagram, website e status de cada empresa. Sem CSV, sem trabalho manual.",
+      bullets: ["Busca por cidade + categoria", "Telefone e Instagram dos donos", "Recomenda script do Cofre"],
+    },
+    {
+      key: "disparador",
+      name: "Disparador",
+      verb: "Envia em massa.",
+      desc: "Automação de WhatsApp ligada à API. Seleciona os leads do Radar, escolhe o script, dispara com variáveis personalizadas e log de cada envio para não bloquear o número.",
+      bullets: ["Anti-block com intervalos", "Variáveis por contacto", "Histórico de envios"],
+    },
+    {
+      key: "cofre",
+      name: "Cofre",
+      verb: "Guarda o que funciona.",
+      desc: "Biblioteca privada de scripts de WhatsApp e prompts de IA, organizados em pastas. Copia, cola e usa. Atualizado com o que está convertendo agora na network.",
+      bullets: ["Scripts de outbound testados", "Prompts para Make/n8n/ChatGPT", "Cópia rápida com 1 clique"],
+    },
+    {
+      key: "forja",
+      name: "Forja",
+      verb: "Ensina a construir.",
+      desc: "Aulas práticas — não teoria. Da landing page ao SaaS, passando por automações no Make, n8n e ChatGPT. Cada lição com link direto pra ferramenta usada.",
+      bullets: ["Módulos práticos passo-a-passo", "Vídeos curtos sem enrolação", "Rastreio de progresso por lição"],
+    },
+    {
+      key: "qg",
+      name: "QG",
+      verb: "Conecta a network.",
+      desc: "Hub da comunidade: link direto da network privada, agenda da próxima call ao vivo de domingo, e o botão de entrar quando começar. Sem precisar entrar em vários grupos.",
+      bullets: ["Countdown da próxima call", "Link permanente da network", "Entrada com 1 toque"],
+    },
+    {
+      key: "chat",
+      name: "Chat",
+      verb: "Tira dúvidas em tempo real.",
+      desc: "Dois canais: o feed aberto com todos os membros pra trocar ideia, e suporte 1:1 com a equipa pra quando travar em algo específico. Notificação push direto no celular.",
+      bullets: ["Feed aberto da network", "Suporte 1:1 com equipa", "Push notifications no celular"],
+    },
   ],
-  painConclusion: "O seu problema não é falta de vontade. É tentar vender a <strong>quem não tem poder de compra</strong>, usando os métodos errados.",
-  painConclusionSub: "Hoje, donos de negócios não querem saber se você sabe programar. Eles querem soluções. E nós construímos a máquina para você entregar isso.",
-  solutionLabel: "A Solução",
-  solutionTitle: "Apresentando: O Ecossistema",
-  solutionTitleHighlight: "Código Zero",
-  solutionDesc: "Donos de negócios não querem saber se sabes programar — <strong>eles pagam por quem resolve os problemas deles</strong>. Apresentamos a máquina que faz isso por ti, do primeiro lead ao contrato assinado.",
-  solutionCards: [
-    { title: "Prospecção no Piloto Automático", desc: "Nosso Scraper varre a internet e te entrega o contato de empresas prontas para comprar. Sem pesquisa manual, sem perda de tempo." },
-    { title: "O Que Falar — Scripts Validados", desc: "Acesso imediato ao nosso banco com mensagens de WhatsApp de alta conversão. É só copiar, colar e enviar." },
-    { title: "O Que Entregar — Zero Código", desc: "Aulas práticas mostrando como criar SaaS, landing pages e automações em minutos usando IAs visuais." },
-    { title: "O Acompanhamento", desc: "Mentorias semanais ao vivo e uma comunidade no Discord para você nunca travar." },
+
+  // ── Network / Comunidade ─────────────────────────────────────────────
+  networkLabel: "A network",
+  networkTitle: "Onde acontece",
+  networkTitleHighlight: "de verdade.",
+  networkMembersCount: "143",
+  networkMembersLabel: "membros ativos",
+  networkDesc: "A network privada do Código Zero — onde quem está construindo de verdade troca ideia. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
+  networkPillars: [
+    { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
+    { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },
+    { title: "Construção de SaaS em conjunto", desc: "Projetos coletivos: alguém começa, a network ajuda a finalizar. Quem participa, divide." },
+    { title: "Irmandade, não audiência", desc: "Não é um grupo de Discord com 5 mil pessoas mudas. É 143 que se conhecem pelo nome." },
   ],
-  valueLabel: "O que está incluído",
-  valueTitle: "Tudo o que você precisa em",
-  valueTitleHighlight: "uma única infraestrutura.",
-  valueDesc: "Se você fosse assinar essas ferramentas e consultorias separadamente, este seria o custo:",
-  valueItems: [
-    { name: "Acesso ao Scraper de Leads Ilimitado", value: "5.000 MT/mês" },
-    { name: "Banco de Scripts e Prompts Profissionais", value: "4.500 MT" },
-    { name: "Treinamento Prático: Do Zero ao Deploy (4 Módulos)", value: "7.000 MT" },
-    { name: "Mentorias ao Vivo Semanais Direto da Trincheira", value: "10.000 MT/mês" },
-    { name: "Acesso à Comunidade Fechada (Networking)", value: "2.000 MT" },
+
+  // ── Como funciona ────────────────────────────────────────────────────
+  flowLabel: "Como funciona",
+  flowTitle: "Quatro passos do",
+  flowTitleHighlight: "pagamento à primeira call.",
+  flowSteps: [
+    { num: "01", title: "Pagas a assinatura", desc: "M-Pesa, e-Mola ou cartão. Aprovação na hora." },
+    { num: "02", title: "Recebes acesso no WhatsApp", desc: "Email e senha enviados no número que cadastraste. Em segundos." },
+    { num: "03", title: "Entras na network", desc: "Link direto da network privada no QG. Apresentas-te e começas a interagir." },
+    { num: "04", title: "Próxima call de domingo", desc: "Aparece no Zoom no horário marcado e começa a executar o método na semana seguinte." },
   ],
-  valueTotalLabel: "Valor Total do Ecossistema",
-  valueTotalAmount: "28.500 MT",
-  valuePunchline: "Mas você não vai pagar isso hoje.",
-  scarcityLabel: "Escassez Real",
-  scarcityTitle: "Por que apenas 50 vagas para a Turma 1?",
-  scarcityDesc: "Nós levamos tecnologia a sério. O nosso Scraper de leads exige alta capacidade de processamento dos nossos servidores para rodar rápido para todos. Para garantir que o sistema não fique lento, a trava de segurança bloqueará novos cadastros assim que 50 pagamentos forem confirmados.",
-  priceFrom: "28.500 MT",
-  priceAmount: "797",
+
+  // ── Pricing ──────────────────────────────────────────────────────────
+  scarcityLabel: "Acesso atual",
+  scarcityTitle: "Network em construção.",
+  scarcityDesc: "143 membros e crescendo. Quem entra agora pega a network ainda pequena — onde dá pra conhecer todo mundo pelo nome e a tua voz na call ainda tem peso.",
+  priceFrom: "",
+  priceAmount: "497",
   pricePeriod: "MT/mês",
-  priceSub: "O seu primeiro passo para conquistar a segurança de um negócio digital próprio e trabalhar de onde quiser.",
-  priceCtaText: "Garantir Minha Vaga (797 MT)",
-  guaranteeLabel: "Garantia Condicional",
-  guaranteeTitle: "Risco Zero Absoluto",
-  guaranteeText1: "Eu confio tanto na tecnologia que construí que vou colocar todo o risco nas minhas costas.",
-  guaranteeText2: "Entre no Código Zero. Use o nosso Scraper de Leads e envie os scripts validados do nosso banco por 30 dias.",
-  guaranteeHighlight: "Se você fizer isso e não fechar pelo menos 1 contrato de 3.000 MT, eu não apenas devolvo 100% do seu dinheiro em dobro, como também te dou 1 hora de consultoria individual totalmente de graça para consertarmos o seu negócio.",
-  guaranteeConclusion: "O único risco que você corre é ficar de fora.",
-  guaranteeCtaText: "Aceitar o Desafio e Entrar no Código Zero",
+  priceSub: "Cancelas quando quiseres, sem multa. Pagamento mensal, acesso a tudo.",
+  priceCtaText: "Entrar no Código Zero — 497 MT/mês",
+
+  // ── Close Friends (upsell exibido na pricing section) ──────────────
+  closeFriendsLabel: "Close Friends",
+  closeFriendsTitle: "Opcional: Close Friends",
+  closeFriendsDesc: "Add-on de 1.297 MT, pagamento único no checkout. Dá <strong>3 meses corridos</strong> de acesso (em vez de 1), badge dourado na conta e prioridade nas calls de domingo.",
+
+  // ── Garantia ────────────────────────────────────────────────────────
+  guaranteeLabel: "Garantia",
+  guaranteeTitle: "30 dias, risco do nosso lado.",
+  guaranteeText1: "Entras, usas o Radar, envias com o Disparador, assistes à primeira call de domingo.",
+  guaranteeText2: "",
+  guaranteeHighlight: "Se em 30 dias não fechares pelo menos 1 contrato de 3.000 MT usando o sistema, devolvemos o dobro do que pagaste — e ainda dou 1 hora 1:1 contigo pra entender o que travou.",
+  guaranteeConclusion: "A única forma de sair perdendo aqui é não entrando.",
+  guaranteeCtaText: "Aceitar e entrar agora",
+
+  // ── FAQ ──────────────────────────────────────────────────────────────
+  faqLabel: "Perguntas frequentes",
+  faqTitle: "O que costumam perguntar.",
+  faqItems: [
+    { q: "Preciso saber programar?", a: "Não. O Código Zero foi feito pra quem nunca abriu uma IDE. Tudo é visual: o Radar tem botões, o Disparador tem botões, a Forja ensina a usar IAs visuais (Make, n8n, ChatGPT). Se aparece código, é só pra copiar e colar." },
+    { q: "Quanto tempo até ver o primeiro resultado?", a: "Depende de quanto tempo dedicas. A maior parte da network fecha o primeiro contrato entre a segunda e a quarta semana. A garantia condicional é desenhada em cima desse prazo (30 dias)." },
+    { q: "O número de WhatsApp que vou usar bloqueia?", a: "O Disparador tem intervalo configurável entre envios pra simular comportamento humano. Recomendamos um número dedicado, mas o teu pessoal funciona se respeitar o limite diário." },
+    { q: "Cancelar é fácil?", a: "Sim. Pelo painel, em /assinatura, em 2 cliques. Sem ligação, sem retenção forçada. Se cancelares, o acesso vai até o fim do mês pago." },
+    { q: "Já tentei vender curso de IA e não funcionou. Aqui é diferente?", a: "Aqui não estás vendendo curso. Estás vendendo automações e SaaS pra empresas que pagam recorrente. É outro mercado: B2B com leads quentes, não info-produto pra pessoa física." },
+  ],
+
+  // ── Footer ───────────────────────────────────────────────────────────
   footerDesc: "O ecossistema de tecnologia para criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",
+
+  // ── Legacy fields (kept for backwards-compat with stored sections JSON) ──
+  painLabel: "", painTitle: "", painTitleHighlight: "", painDesc: "", painItems: [],
+  painConclusion: "", painConclusionSub: "",
+  solutionLabel: "", solutionTitle: "", solutionTitleHighlight: "", solutionDesc: "", solutionCards: [],
+  valueLabel: "", valueTitle: "", valueTitleHighlight: "", valueDesc: "", valueItems: [],
+  valueTotalLabel: "", valueTotalAmount: "", valuePunchline: "",
 };
 
 // When loaded via /r/[code], the affiliate landing variant overrides the VSL
@@ -307,16 +382,36 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
 
 
   // Dynamic arrays with fallbacks
-  const painItems = (sec.painItems || DEFAULTS.painItems) as string[];
-  const solutionCards = (sec.solutionCards || DEFAULTS.solutionCards) as { title: string; desc: string }[];
-  const valueItems = (sec.valueItems || DEFAULTS.valueItems) as { name: string; value: string }[];
+  const stackTools = (sec.stackTools || DEFAULTS.stackTools) as { key: string; name: string; verb: string; desc: string; bullets: string[] }[];
+  const networkPillars = (sec.networkPillars || DEFAULTS.networkPillars) as { title: string; desc: string }[];
+  const flowSteps = (sec.flowSteps || DEFAULTS.flowSteps) as { num: string; title: string; desc: string }[];
+  const faqItems = (sec.faqItems || DEFAULTS.faqItems) as { q: string; a: string }[];
 
-  const solutionIcons = [
-    <svg key={0} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 12L12 3" /><path d="M12 12L19.5 16.5" /><circle cx="12" cy="12" r="3" /></svg>,
-    <svg key={1} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="12" cy="12" r="3" /><path d="M3 9h18" /></svg>,
-    <svg key={2} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>,
-    <svg key={3} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" /></svg>,
-  ];
+  // Icon per tool — keyed by the tool's `key` field so admin reorders don't
+  // desync icons from names.
+  const TOOL_ICONS: Record<string, React.ReactNode> = {
+    radar: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 3 L12 12 L19 7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>,
+    disparador: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 L11 13" /><path d="M22 2 L15 22 L11 13 L2 9 L22 2 z" /></svg>,
+    cofre: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="12" cy="12" r="3.5" /><path d="M16 12 h2 M6 12 h2" /></svg>,
+    forja: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4 L20 10 L10 20 L4 14 z" /><path d="M14 4 L4 14" /><circle cx="17" cy="7" r="1.6" fill="currentColor" stroke="none" /></svg>,
+    qg: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21 V8 L12 3 L21 8 V21 z" /><path d="M9 21 V13 H15 V21" /></svg>,
+    chat: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12 a8 8 0 1 1 -3.2 -6.4 L21 4 v6 h-6" transform="scale(-1 1) translate(-22 0)" /><path d="M8 11 h.01 M12 11 h.01 M16 11 h.01" /></svg>,
+  };
+
+  // FAQ toggle state — only one open at a time keeps the page tidy.
+  const [faqOpen, setFaqOpen] = useState<number | null>(0);
+
+  // Respect prefers-reduced-motion: motion lib gives null on SSR, so we
+  // gate all animations through this and fall back to fully-visible state.
+  const reduceMotion = useReducedMotion();
+  const reveal = reduceMotion
+    ? { initial: false, animate: { opacity: 1, y: 0 } }
+    : {
+        initial: { opacity: 0, y: 24 },
+        whileInView: { opacity: 1, y: 0 },
+        viewport: { once: true, margin: "-80px" },
+        transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+      };
 
   return (
     <>
@@ -448,22 +543,46 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
               <Logo size={24} />
               <span className={styles.navBrand}>Código Zero</span>
             </div>
+            <div className={styles.navMeta}>
+              <span className={styles.navDot} />
+              <span className={styles.navMetaText}>{t("stat1Value")} {t("stat1Label")}</span>
+            </div>
           </div>
         </nav>
 
         {/* HERO */}
         <section className={styles.hero}>
-          <div className={styles.heroContent}>
-            <h1 className={styles.heroTitle}>
-              {t("heroTitle").replace("Inteligência Artificial", "").trim()}{" "}
-              <span className={styles.heroHighlight}>Inteligência Artificial</span>
-            </h1>
+          <motion.div className={styles.heroContent} {...reveal}>
+            <span className={styles.heroEyebrow}>{t("trustText")}</span>
+            <h1 className={styles.heroTitle}>{t("heroTitle")}</h1>
             <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
             <p className={styles.heroDesc} dangerouslySetInnerHTML={{ __html: t("heroDesc") }} />
-          </div>
+            <div className={styles.heroActions}>
+              <CtaLink className={styles.heroCta}>{t("ctaText")}</CtaLink>
+              <a href="#ferramentas" className={styles.heroGhost}>Ver o ecossistema</a>
+            </div>
+            <div className={styles.heroStats}>
+              {[
+                { v: t("stat1Value"), l: t("stat1Label") },
+                { v: t("stat2Value"), l: t("stat2Label") },
+                { v: t("stat3Value"), l: t("stat3Label") },
+              ].map((s, i) => (
+                <div key={i} className={styles.heroStat}>
+                  <span className={styles.heroStatV}>{s.v}</span>
+                  <span className={styles.heroStatL}>{s.l}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
 
           {/* VSL */}
-          <div className={styles.heroMedia}>
+          <motion.div
+            className={styles.heroMedia}
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
             <div className={styles.vslWrapper}>
               <div className={styles.vslBar}>
                 <span className={`${styles.vslDot} ${styles.vslDotR}`} />
@@ -471,7 +590,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                 <span className={`${styles.vslDot} ${styles.vslDotG}`} />
                 <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
-              
+
               {(affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml) ? (
                 <div
                   className={styles.vslEmbed}
@@ -489,99 +608,191 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                 </div>
               )}
             </div>
+          </motion.div>
+        </section>
 
+        {/* STACK — 6 ferramentas reais */}
+        <section id="ferramentas" className={styles.section}>
+          <motion.div {...reveal} className={styles.sectionHead}>
+            <span className={styles.sectionLabel}>{t("stackLabel")}</span>
+            <h2 className={styles.sectionTitle}>
+              {t("stackTitle")}{" "}
+              <span className={styles.sectionTitleHighlight}>{t("stackTitleHighlight")}</span>
+            </h2>
+            <p className={styles.sectionDesc}>{t("stackDesc")}</p>
+          </motion.div>
+
+          <div className={styles.stackList}>
+            {stackTools.map((tool, i) => (
+              <motion.article
+                key={tool.key}
+                className={`${styles.stackRow} ${i % 2 === 1 ? styles.stackRowReverse : ""}`}
+                initial={reduceMotion ? false : { opacity: 0, y: 32 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.6, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <div className={styles.stackText}>
+                  <div className={styles.stackIcon}>
+                    {TOOL_ICONS[tool.key] || TOOL_ICONS.radar}
+                  </div>
+                  <h3 className={styles.stackName}>{tool.name}</h3>
+                  <p className={styles.stackVerb}>{tool.verb}</p>
+                  <p className={styles.stackDesc}>{tool.desc}</p>
+                  <ul className={styles.stackBullets}>
+                    {tool.bullets.map((b, j) => (
+                      <li key={j}><span className={styles.stackBulletDot} />{b}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className={styles.stackVisual}>
+                  {/* Mockup placeholder — admin pode substituir com screenshot real */}
+                  <div className={styles.mockFrame}>
+                    <div className={styles.mockBar}>
+                      <span className={`${styles.vslDot} ${styles.vslDotR}`} />
+                      <span className={`${styles.vslDot} ${styles.vslDotY}`} />
+                      <span className={`${styles.vslDot} ${styles.vslDotG}`} />
+                      <span className={styles.mockUrl}>czero.sbs/{tool.key}</span>
+                    </div>
+                    <div className={styles.mockBody}>
+                      <div className={styles.mockHero}>
+                        <div className={styles.mockIcon}>{TOOL_ICONS[tool.key]}</div>
+                        <div className={styles.mockHeroText}>
+                          <span className={styles.mockHeroTitle}>{tool.name}</span>
+                          <span className={styles.mockHeroSub}>{tool.verb}</span>
+                        </div>
+                      </div>
+                      <div className={styles.mockRows}>
+                        {tool.bullets.map((_, j) => (
+                          <div key={j} className={styles.mockRow}>
+                            <span className={styles.mockRowDot} />
+                            <span className={styles.mockRowBar} style={{ width: `${65 + (j * 7) % 25}%` }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.article>
+            ))}
           </div>
         </section>
 
-        {/* PAIN */}
-        <section id="problema" className={styles.section}>
-          <span className={styles.sectionLabel}>{t("painLabel")}</span>
-          <h2 className={styles.sectionTitle}>
-            {t("painTitle")}{" "}
-            <span className={styles.sectionTitleHighlight}>{t("painTitleHighlight")}</span>
-          </h2>
-          <p className={styles.sectionDesc} dangerouslySetInnerHTML={{ __html: t("painDesc") }} />
-          <div className={styles.painGrid}>
-            {painItems.map((item, i) => (
-              <div key={i} className={styles.painItem}>
-                <span className={styles.painX}>✕</span>
-                <span dangerouslySetInnerHTML={{ __html: item }} />
-              </div>
-            ))}
-          </div>
-          <div className={styles.painConclusion}>
-            <p className={styles.painConclusionText} dangerouslySetInnerHTML={{ __html: t("painConclusion") }} />
-            <p className={styles.painConclusionSub}>{t("painConclusionSub")}</p>
-          </div>
-        </section>
+        {/* NETWORK */}
+        <section id="network" className={styles.networkSection}>
+          <motion.div {...reveal} className={styles.networkInner}>
+            <div className={styles.networkText}>
+              <span className={styles.sectionLabel}>{t("networkLabel")}</span>
+              <h2 className={styles.sectionTitle}>
+                {t("networkTitle")}{" "}
+                <span className={styles.sectionTitleHighlight}>{t("networkTitleHighlight")}</span>
+              </h2>
+              <p className={styles.sectionDesc}>{t("networkDesc")}</p>
 
-        {/* SOLUTION */}
-        <section id="solucao" className={styles.section}>
-          <span className={styles.sectionLabel}>{t("solutionLabel")}</span>
-          <h2 className={styles.sectionTitle}>
-            {t("solutionTitle")}{" "}
-            <span className={styles.sectionTitleHighlight}>{t("solutionTitleHighlight")}</span>
-          </h2>
-          <p className={styles.sectionDesc} dangerouslySetInnerHTML={{ __html: t("solutionDesc") }} />
-          <div className={styles.solutionGrid}>
-            {solutionCards.map((card, i) => (
-              <div key={i} className={styles.solutionCard}>
-                <div className={styles.solutionIcon}>{solutionIcons[i] || solutionIcons[0]}</div>
-                <h3 className={styles.solutionTitle}>{card.title}</h3>
-                <p className={styles.solutionText}>{card.desc}</p>
+              <div className={styles.networkCount}>
+                <span className={styles.networkCountValue}>{t("networkMembersCount")}</span>
+                <span className={styles.networkCountLabel}>{t("networkMembersLabel")}</span>
+                <span className={styles.networkLiveDot} />
+                <span className={styles.networkLiveText}>ao vivo agora</span>
               </div>
-            ))}
-          </div>
-        </section>
 
-        {/* VALUE STACK */}
-        <section id="conteudo" className={styles.section}>
-          <span className={styles.sectionLabel}>{t("valueLabel")}</span>
-          <h2 className={styles.sectionTitle}>
-            {t("valueTitle")}{" "}
-            <span className={styles.sectionTitleHighlight}>{t("valueTitleHighlight")}</span>
-          </h2>
-          <p className={styles.sectionDesc}>{t("valueDesc")}</p>
-          <div className={styles.stackGrid}>
-            {valueItems.map((item, i) => (
-              <div key={i} className={styles.stackItem}>
-                <div className={styles.stackCheck}>✓</div>
-                <span className={styles.stackName}>{item.name}</span>
-                <span className={styles.stackValue}>{item.value}</span>
-              </div>
-            ))}
-            <div className={styles.stackTotal}>
-              <span>{t("valueTotalLabel")}</span>
-              <span className={styles.stackTotalValue}>{t("valueTotalAmount")}</span>
+              <ul className={styles.networkPillars}>
+                {networkPillars.map((p, i) => (
+                  <li key={i} className={styles.networkPillar}>
+                    <span className={styles.networkPillarNum}>0{i + 1}</span>
+                    <div>
+                      <h4 className={styles.networkPillarTitle}>{p.title}</h4>
+                      <p className={styles.networkPillarDesc}>{p.desc}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <p className={styles.stackPunchline}>{t("valuePunchline")}</p>
+
+            <motion.div
+              className={styles.networkImageWrap}
+              initial={reduceMotion ? false : { opacity: 0, x: 32 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <div className={styles.networkImageGlow} aria-hidden />
+              <Image
+                src="/comunidade.jpg"
+                alt="Network privada do Código Zero: 143 membros ativos"
+                width={1180}
+                height={1100}
+                className={styles.networkImage}
+                priority={false}
+              />
+            </motion.div>
+          </motion.div>
+        </section>
+
+        {/* FLOW */}
+        <section className={styles.section}>
+          <motion.div {...reveal} className={styles.sectionHead}>
+            <span className={styles.sectionLabel}>{t("flowLabel")}</span>
+            <h2 className={styles.sectionTitle}>
+              {t("flowTitle")}{" "}
+              <span className={styles.sectionTitleHighlight}>{t("flowTitleHighlight")}</span>
+            </h2>
+          </motion.div>
+
+          <div className={styles.flowGrid}>
+            {flowSteps.map((step, i) => (
+              <motion.div
+                key={i}
+                className={styles.flowStep}
+                initial={reduceMotion ? false : { opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.5, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <span className={styles.flowNum}>{step.num}</span>
+                <h3 className={styles.flowTitle}>{step.title}</h3>
+                <p className={styles.flowDesc}>{step.desc}</p>
+              </motion.div>
+            ))}
           </div>
         </section>
 
-        {/* PRICING */}
+        {/* PRICING + CLOSE FRIENDS */}
         <section id="preco" className={styles.pricingSection}>
-          <div className={styles.scarcityBlock}>
+          <motion.div {...reveal} className={styles.scarcityBlock}>
             <span className={styles.sectionLabel}>{t("scarcityLabel")}</span>
             <h3 className={styles.scarcityTitle}>{t("scarcityTitle")}</h3>
             <p className={styles.scarcityText}>{t("scarcityDesc")}</p>
-          </div>
-          <div className={styles.pricingCard}>
-            <p className={styles.priceFrom}>
-              De <span className={styles.priceOld}>{t("priceFrom")}</span> por apenas:
-            </p>
+          </motion.div>
+
+          <motion.div
+            className={styles.pricingCard}
+            initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
             <div className={styles.priceBig}>
               {t("priceAmount")} <span className={styles.priceAccent}>{t("pricePeriod")}</span>
             </div>
             <p className={styles.priceSub}>{t("priceSub")}</p>
-            <CtaLink className={styles.priceCta}>
-              {t("priceCtaText")}
-            </CtaLink>
-          </div>
+            <CtaLink className={styles.priceCta}>{t("priceCtaText")}</CtaLink>
+
+            <div className={styles.cfCallout}>
+              <span className={styles.cfBadge}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.39 6.95H22l-6.19 4.5L18.18 22 12 17.27 5.82 22l2.37-8.55L2 8.95h7.61L12 2z" /></svg>
+                {t("closeFriendsLabel")}
+              </span>
+              <h4 className={styles.cfTitle}>{t("closeFriendsTitle")}</h4>
+              <p className={styles.cfDesc} dangerouslySetInnerHTML={{ __html: t("closeFriendsDesc") }} />
+            </div>
+          </motion.div>
         </section>
 
         {/* GUARANTEE */}
         <section className={styles.guaranteeSection}>
-          <div className={styles.guaranteeCard}>
+          <motion.div {...reveal} className={styles.guaranteeCard}>
             <div className={styles.guaranteeShield}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -589,14 +800,58 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
             </div>
             <span className={styles.guaranteeLabel}>{t("guaranteeLabel")}</span>
             <h2 className={styles.guaranteeTitle}>{t("guaranteeTitle")}</h2>
-            <p className={styles.guaranteeText}>{t("guaranteeText1")}</p>
-            <p className={styles.guaranteeText}>{t("guaranteeText2")}</p>
+            {t("guaranteeText1") && <p className={styles.guaranteeText}>{t("guaranteeText1")}</p>}
+            {t("guaranteeText2") && <p className={styles.guaranteeText}>{t("guaranteeText2")}</p>}
             <p className={styles.guaranteeHighlight}>{t("guaranteeHighlight")}</p>
             <p className={styles.guaranteeConclusion}>{t("guaranteeConclusion")}</p>
-            <CtaLink className={styles.guaranteeCta}>
-              {t("guaranteeCtaText")}
-            </CtaLink>
+            <CtaLink className={styles.guaranteeCta}>{t("guaranteeCtaText")}</CtaLink>
+          </motion.div>
+        </section>
+
+        {/* FAQ */}
+        <section className={styles.section}>
+          <motion.div {...reveal} className={styles.sectionHead}>
+            <span className={styles.sectionLabel}>{t("faqLabel")}</span>
+            <h2 className={styles.sectionTitle}>{t("faqTitle")}</h2>
+          </motion.div>
+
+          <div className={styles.faqList}>
+            {faqItems.map((item, i) => {
+              const open = faqOpen === i;
+              return (
+                <div key={i} className={`${styles.faqItem} ${open ? styles.faqItemOpen : ""}`}>
+                  <button
+                    type="button"
+                    className={styles.faqQ}
+                    onClick={() => setFaqOpen(open ? null : i)}
+                    aria-expanded={open}
+                  >
+                    <span>{item.q}</span>
+                    <span className={styles.faqChev} aria-hidden>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                    </span>
+                  </button>
+                  <motion.div
+                    initial={false}
+                    animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
+                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <p className={styles.faqA}>{item.a}</p>
+                  </motion.div>
+                </div>
+              );
+            })}
           </div>
+        </section>
+
+        {/* FINAL CTA */}
+        <section className={styles.finalCta}>
+          <motion.div {...reveal}>
+            <h2 className={styles.finalCtaTitle}>Pronto para entrar?</h2>
+            <p className={styles.finalCtaDesc}>O acesso é imediato. A próxima call é no domingo.</p>
+            <CtaLink className={styles.heroCta}>{t("priceCtaText")}</CtaLink>
+          </motion.div>
         </section>
 
         {/* FOOTER */}

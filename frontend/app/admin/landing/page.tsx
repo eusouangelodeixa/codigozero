@@ -6,81 +6,106 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
 
 // ── ALL default landing page texts ──
+// Stays in sync with frontend/app/page.tsx DEFAULTS — admin edits these via
+// the JSON `sections` blob on LandingConfig.
 const DEFAULTS: Record<string, any> = {
-  heroTitle: "Como gerar os seus primeiros 50.000 MT/mês com Inteligência Artificial",
-  heroSubtitle: "Sem digitar uma única linha de código",
-  heroDesc: "O ecossistema completo que te entrega a ferramenta, os clientes e o conhecimento para você criar micronegócios lucrativos em Moçambique.",
-  ctaText: "Quero Garantir 1 das 50 Vagas Agora",
-  trustText: "🔒 Plataforma validada com mais de 2 Milhões de MT já processados.",
-  stat1Value: "2M+ MT", stat1Label: "Processados",
-  stat2Value: "50", stat2Label: "Vagas",
-  stat3Value: "30 dias", stat3Label: "Garantia",
+  heroTitle: "O ecossistema completo pra criar micronegócios de IA em Moçambique.",
+  heroSubtitle: "Sem código. Sem barreiras.",
+  heroDesc: "Radar de leads, Disparador de WhatsApp, biblioteca de scripts e a network privada que se encontra <strong>todos os domingos</strong>. Tudo num lugar só.",
+  ctaText: "Entrar no Código Zero",
+  trustText: "143 membros · Call toda semana · 6 ferramentas integradas",
+  stat1Value: "143", stat1Label: "Membros na network",
+  stat2Value: "Domingo", stat2Label: "Call ao vivo toda semana",
+  stat3Value: "30 dias", stat3Label: "Garantia condicional",
   vslTitle: "Código Zero — Apresentação",
-  vslSubtitle: "Assista a apresentação completa",
-  vslHint: "Clique para ouvir",
-  painLabel: "O Problema",
-  painTitle: "O mercado digital antigo exige muito de você.",
-  painTitleHighlight: "O jogo mudou.",
-  painDesc: "Você sabe que a internet é o caminho, mas provavelmente já travou na execução:",
-  painItems: [
-    "Tentou vender e-books ou ser afiliado, e ninguém comprou.",
-    "Acha que precisa de um computador de última geração.",
-    "Pensa que aprender a programar vai levar anos.",
-    'Tem vergonha de prospectar clientes e receber "nãos".',
-    "Fica preso em cursinhos teóricos que não te dão as ferramentas para trabalhar.",
+  vslSubtitle: "Assiste à apresentação completa",
+  vslHint: "Clica para ouvir",
+
+  // Stack — 6 ferramentas
+  stackLabel: "O ecossistema por dentro",
+  stackTitle: "Seis ferramentas que",
+  stackTitleHighlight: "trabalham juntas.",
+  stackDesc: "Cada peça faz uma coisa só, e faz bem. Tudo conectado à mesma conta, ao mesmo histórico de leads, à mesma comunidade.",
+  stackTools: [
+    { key: "radar", name: "Radar", verb: "Encontra os clientes.", desc: "Scanner de leads que varre o Google Maps por cidade e categoria. Devolve nome, telefone, Instagram, website e status de cada empresa. Sem CSV, sem trabalho manual.", bullets: ["Busca por cidade + categoria", "Telefone e Instagram dos donos", "Recomenda script do Cofre"] },
+    { key: "disparador", name: "Disparador", verb: "Envia em massa.", desc: "Automação de WhatsApp ligada à API. Seleciona os leads do Radar, escolhe o script, dispara com variáveis personalizadas e log de cada envio para não bloquear o número.", bullets: ["Anti-block com intervalos", "Variáveis por contacto", "Histórico de envios"] },
+    { key: "cofre", name: "Cofre", verb: "Guarda o que funciona.", desc: "Biblioteca privada de scripts de WhatsApp e prompts de IA, organizados em pastas. Copia, cola e usa. Atualizado com o que está convertendo agora na network.", bullets: ["Scripts de outbound testados", "Prompts para Make/n8n/ChatGPT", "Cópia rápida com 1 clique"] },
+    { key: "forja", name: "Forja", verb: "Ensina a construir.", desc: "Aulas práticas — não teoria. Da landing page ao SaaS, passando por automações no Make, n8n e ChatGPT. Cada lição com link direto pra ferramenta usada.", bullets: ["Módulos práticos passo-a-passo", "Vídeos curtos sem enrolação", "Rastreio de progresso por lição"] },
+    { key: "qg", name: "QG", verb: "Conecta a network.", desc: "Hub da comunidade: link direto da network privada, agenda da próxima call ao vivo de domingo, e o botão de entrar quando começar. Sem precisar entrar em vários grupos.", bullets: ["Countdown da próxima call", "Link permanente da network", "Entrada com 1 toque"] },
+    { key: "chat", name: "Chat", verb: "Tira dúvidas em tempo real.", desc: "Dois canais: o feed aberto com todos os membros pra trocar ideia, e suporte 1:1 com a equipa pra quando travar em algo específico. Notificação push direto no celular.", bullets: ["Feed aberto da network", "Suporte 1:1 com equipa", "Push notifications no celular"] },
   ],
-  painConclusion: "O seu problema não é falta de vontade. É falta da tecnologia certa.",
-  painConclusionSub: "Hoje, donos de negócios não querem saber se você sabe programar. Eles querem soluções. E nós construímos a máquina para você entregar isso.",
-  solutionLabel: "A Solução",
-  solutionTitle: "Apresentando: O Ecossistema",
-  solutionTitleHighlight: "Código Zero",
-  solutionDesc: "Muito mais que aulas. Um ambiente de tecnologia que trabalha por você, do primeiro lead ao contrato assinado.",
-  solutionCards: [
-    { title: "Prospecção no Piloto Automático", desc: "Nosso Scraper varre a internet e te entrega o contato de empresas prontas para comprar. Sem pesquisa manual, sem perda de tempo." },
-    { title: "O Que Falar — Scripts Validados", desc: "Acesso imediato ao nosso banco com mensagens de WhatsApp de alta conversão. É só copiar, colar e enviar." },
-    { title: "O Que Entregar — Zero Código", desc: "Aulas práticas mostrando como criar SaaS, landing pages e automações em minutos usando IAs visuais." },
-    { title: "O Acompanhamento", desc: "Mentorias semanais ao vivo e uma comunidade no Discord para você nunca travar." },
+
+  // Network
+  networkLabel: "A network",
+  networkTitle: "Onde acontece",
+  networkTitleHighlight: "de verdade.",
+  networkMembersCount: "143",
+  networkMembersLabel: "membros ativos",
+  networkDesc: "A network privada do Código Zero — onde quem está construindo de verdade troca ideia. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
+  networkPillars: [
+    { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
+    { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },
+    { title: "Construção de SaaS em conjunto", desc: "Projetos coletivos: alguém começa, a network ajuda a finalizar. Quem participa, divide." },
+    { title: "Irmandade, não audiência", desc: "Não é um grupo de Discord com 5 mil pessoas mudas. É 143 que se conhecem pelo nome." },
   ],
-  valueLabel: "O que está incluído",
-  valueTitle: "Tudo o que você precisa em",
-  valueTitleHighlight: "uma única infraestrutura.",
-  valueDesc: "Se você fosse assinar essas ferramentas e consultorias separadamente, este seria o custo:",
-  valueItems: [
-    { name: "Acesso ao Scraper de Leads Ilimitado", value: "5.000 MT/mês" },
-    { name: "Banco de Scripts e Prompts Profissionais", value: "4.500 MT" },
-    { name: "Treinamento Prático: Do Zero ao Deploy (4 Módulos)", value: "7.000 MT" },
-    { name: "Mentorias ao Vivo Semanais Direto da Trincheira", value: "10.000 MT/mês" },
-    { name: "Acesso à Comunidade Fechada (Networking)", value: "2.000 MT" },
+
+  // Flow
+  flowLabel: "Como funciona",
+  flowTitle: "Quatro passos do",
+  flowTitleHighlight: "pagamento à primeira call.",
+  flowSteps: [
+    { num: "01", title: "Pagas a assinatura", desc: "M-Pesa, e-Mola ou cartão. Aprovação na hora." },
+    { num: "02", title: "Recebes acesso no WhatsApp", desc: "Email e senha enviados no número que cadastraste. Em segundos." },
+    { num: "03", title: "Entras na network", desc: "Link direto da network privada no QG. Apresentas-te e começas a interagir." },
+    { num: "04", title: "Próxima call de domingo", desc: "Aparece no Zoom no horário marcado e começa a executar o método na semana seguinte." },
   ],
-  valueTotalLabel: "Valor Total do Ecossistema",
-  valueTotalAmount: "28.500 MT",
-  valuePunchline: "Mas você não vai pagar isso hoje.",
-  scarcityLabel: "Escassez Real",
-  scarcityTitle: "Por que apenas 50 vagas para a Turma 1?",
-  scarcityDesc: "Nós levamos tecnologia a sério. O nosso Scraper de leads exige alta capacidade de processamento dos nossos servidores para rodar rápido para todos. Para garantir que o sistema não fique lento, a trava de segurança bloqueará novos cadastros assim que 50 pagamentos forem confirmados.",
-  priceFrom: "28.500 MT",
-  priceAmount: "797",
+
+  // Pricing
+  scarcityLabel: "Acesso atual",
+  scarcityTitle: "Network em construção.",
+  scarcityDesc: "143 membros e crescendo. Quem entra agora pega a network ainda pequena — onde dá pra conhecer todo mundo pelo nome e a tua voz na call ainda tem peso.",
+  priceFrom: "",
+  priceAmount: "497",
   pricePeriod: "MT/mês",
-  priceSub: "Você está a apenas 1 cliente de 3.000 MT de empatar meses da sua assinatura",
-  priceCtaText: "Garantir Minha Vaga (797 MT)",
-  guaranteeLabel: "Garantia Condicional",
-  guaranteeTitle: "Risco Zero Absoluto",
-  guaranteeText1: "Eu confio tanto na tecnologia que construí que vou colocar todo o risco nas minhas costas.",
-  guaranteeText2: "Entre no Código Zero. Use o nosso Scraper de Leads e envie os scripts validados do nosso banco por 30 dias.",
-  guaranteeHighlight: "Se você fizer isso e não fechar pelo menos 1 contrato de 3.000 MT, eu não apenas devolvo 100% do seu dinheiro em dobro, como também te dou 1 hora de consultoria individual totalmente de graça para consertarmos o seu negócio.",
-  guaranteeConclusion: "O único risco que você corre é ficar de fora.",
-  guaranteeCtaText: "Aceitar o Desafio e Entrar no Código Zero",
+  priceSub: "Cancelas quando quiseres, sem multa. Pagamento mensal, acesso a tudo.",
+  priceCtaText: "Entrar no Código Zero — 497 MT/mês",
+  closeFriendsLabel: "Close Friends",
+  closeFriendsTitle: "Opcional: Close Friends",
+  closeFriendsDesc: "Add-on de 1.297 MT, pagamento único no checkout. Dá <strong>3 meses corridos</strong> de acesso (em vez de 1), badge dourado na conta e prioridade nas calls de domingo.",
+
+  // Guarantee
+  guaranteeLabel: "Garantia",
+  guaranteeTitle: "30 dias, risco do nosso lado.",
+  guaranteeText1: "Entras, usas o Radar, envias com o Disparador, assistes à primeira call de domingo.",
+  guaranteeText2: "",
+  guaranteeHighlight: "Se em 30 dias não fechares pelo menos 1 contrato de 3.000 MT usando o sistema, devolvemos o dobro do que pagaste — e ainda dou 1 hora 1:1 contigo pra entender o que travou.",
+  guaranteeConclusion: "A única forma de sair perdendo aqui é não entrando.",
+  guaranteeCtaText: "Aceitar e entrar agora",
+
+  // FAQ
+  faqLabel: "Perguntas frequentes",
+  faqTitle: "O que costumam perguntar.",
+  faqItems: [
+    { q: "Preciso saber programar?", a: "Não. O Código Zero foi feito pra quem nunca abriu uma IDE. Tudo é visual: o Radar tem botões, o Disparador tem botões, a Forja ensina a usar IAs visuais (Make, n8n, ChatGPT). Se aparece código, é só pra copiar e colar." },
+    { q: "Quanto tempo até ver o primeiro resultado?", a: "Depende de quanto tempo dedicas. A maior parte da network fecha o primeiro contrato entre a segunda e a quarta semana. A garantia condicional é desenhada em cima desse prazo (30 dias)." },
+    { q: "O número de WhatsApp que vou usar bloqueia?", a: "O Disparador tem intervalo configurável entre envios pra simular comportamento humano. Recomendamos um número dedicado, mas o teu pessoal funciona se respeitar o limite diário." },
+    { q: "Cancelar é fácil?", a: "Sim. Pelo painel, em /assinatura, em 2 cliques. Sem ligação, sem retenção forçada. Se cancelares, o acesso vai até o fim do mês pago." },
+    { q: "Já tentei vender curso de IA e não funcionou. Aqui é diferente?", a: "Aqui não estás vendendo curso. Estás vendendo automações e SaaS pra empresas que pagam recorrente. É outro mercado: B2B com leads quentes, não info-produto pra pessoa física." },
+  ],
+
+  // Footer
   footerDesc: "O ecossistema de tecnologia para criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",
 };
 
 const TABS = [
   { id: "vsl", label: "🎬 VSL" },
   { id: "hero", label: "🏠 Hero" },
-  { id: "pain", label: "😰 Dor" },
-  { id: "solution", label: "💡 Solução" },
-  { id: "value", label: "📦 Value Stack" },
-  { id: "pricing", label: "💰 Preço" },
+  { id: "stack", label: "🧩 Stack (6 ferramentas)" },
+  { id: "network", label: "🤝 Network" },
+  { id: "flow", label: "🪜 Como funciona" },
+  { id: "pricing", label: "💰 Preço + Close Friends" },
   { id: "guarantee", label: "🛡️ Garantia" },
+  { id: "faq", label: "❓ FAQ" },
   { id: "footer", label: "📄 Footer" },
   { id: "tracking", label: "📈 Tracking" },
   { id: "affiliate", label: "🤝 Afiliados" },
@@ -285,54 +310,97 @@ export default function AdminLanding() {
         </div>
       )}
 
-      {/* ═══ Pain ═══ */}
-      {activeTab === "pain" && (
+      {/* ═══ Stack — 6 ferramentas ═══ */}
+      {activeTab === "stack" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>😰 Seção de Dor</h3>
+          <h3 className={styles.cardTitle}>🧩 Stack — as 6 ferramentas reais</h3>
           <div className={styles.formGrid}>
-            <Field label="Label (tag)" field="painLabel" />
-            <Field label="Título" field="painTitle" />
-            <Field label="Título — Destaque" field="painTitleHighlight" />
-            <Field label="Descrição" field="painDesc" />
+            <Field label="Label (tag)" field="stackLabel" />
+            <Field label="Título" field="stackTitle" />
+            <Field label="Título — Destaque" field="stackTitleHighlight" />
+            <Field label="Descrição" field="stackDesc" multiline />
           </div>
-          <div className={`${styles.formGroup} ${styles.formGroupFull}`} style={{ marginTop: 16 }}>
-            <label className={styles.formLabel}>Itens de Dor (um por linha)</label>
-            <textarea className={styles.formTextarea} style={{ minHeight: 160 }}
-              value={(sec.painItems || []).join("\n")}
-              onChange={e => u("painItems", e.target.value.split("\n").filter((s: string) => s.trim()))} />
-          </div>
-          <div className={styles.formGrid} style={{ marginTop: 16 }}>
-            <Field label="Conclusão" field="painConclusion" />
-            <Field label="Sub-Conclusão" field="painConclusionSub" multiline />
-          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Cards das ferramentas (key não deve mudar — controla o ícone)
+          </h4>
+          {(sec.stackTools || []).map((tool: any, i: number) => (
+            <div key={i} style={{ marginBottom: 16, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div className={styles.formGrid}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Key #{i + 1} (slug interno)</label>
+                  <input className={styles.formInput} value={tool.key} onChange={e => {
+                    const c = [...sec.stackTools]; c[i] = { ...tool, key: e.target.value };
+                    u("stackTools", c);
+                  }} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Nome (ex: Radar)</label>
+                  <input className={styles.formInput} value={tool.name} onChange={e => {
+                    const c = [...sec.stackTools]; c[i] = { ...tool, name: e.target.value };
+                    u("stackTools", c);
+                  }} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Verbo (ex: Encontra os clientes.)</label>
+                  <input className={styles.formInput} value={tool.verb} onChange={e => {
+                    const c = [...sec.stackTools]; c[i] = { ...tool, verb: e.target.value };
+                    u("stackTools", c);
+                  }} />
+                </div>
+                <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                  <label className={styles.formLabel}>Descrição</label>
+                  <textarea className={styles.formTextarea} style={{ minHeight: 70 }} value={tool.desc} onChange={e => {
+                    const c = [...sec.stackTools]; c[i] = { ...tool, desc: e.target.value };
+                    u("stackTools", c);
+                  }} />
+                </div>
+                <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                  <label className={styles.formLabel}>Bullets (um por linha — 3 ideal)</label>
+                  <textarea className={styles.formTextarea} style={{ minHeight: 80 }}
+                    value={(tool.bullets || []).join("\n")}
+                    onChange={e => {
+                      const c = [...sec.stackTools]; c[i] = { ...tool, bullets: e.target.value.split("\n").filter((s: string) => s.trim()) };
+                      u("stackTools", c);
+                    }} />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* ═══ Solution ═══ */}
-      {activeTab === "solution" && (
+      {/* ═══ Network ═══ */}
+      {activeTab === "network" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>💡 Seção de Solução</h3>
+          <h3 className={styles.cardTitle}>🤝 Network — comunidade privada</h3>
           <div className={styles.formGrid}>
-            <Field label="Label (tag)" field="solutionLabel" />
-            <Field label="Título" field="solutionTitle" />
-            <Field label="Título — Destaque" field="solutionTitleHighlight" />
-            <Field label="Descrição" field="solutionDesc" multiline />
+            <Field label="Label (tag)" field="networkLabel" />
+            <Field label="Título" field="networkTitle" />
+            <Field label="Título — Destaque" field="networkTitleHighlight" />
+            <Field label="Descrição" field="networkDesc" multiline />
+            <Field label='Contagem (ex: "143")' field="networkMembersCount" />
+            <Field label='Label da contagem (ex: "membros ativos")' field="networkMembersLabel" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>Cards de Solução</h4>
-          {(sec.solutionCards || []).map((card: any, i: number) => (
+          <p style={{ fontSize: 12, color: "#888", marginTop: 12 }}>
+            A imagem mostrada vem de <code>/public/comunidade.jpg</code> — substitua o arquivo direto pra trocar.
+          </p>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Pilares da network (4 ideais)
+          </h4>
+          {(sec.networkPillars || []).map((p: any, i: number) => (
             <div key={i} className={styles.formGrid} style={{ marginBottom: 12, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
               <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Título Card {i + 1}</label>
-                <input className={styles.formInput} value={card.title} onChange={e => {
-                  const c = [...sec.solutionCards]; c[i] = { ...card, title: e.target.value };
-                  u("solutionCards", c);
+                <label className={styles.formLabel}>Pilar {i + 1} — Título</label>
+                <input className={styles.formInput} value={p.title} onChange={e => {
+                  const arr = [...sec.networkPillars]; arr[i] = { ...p, title: e.target.value };
+                  u("networkPillars", arr);
                 }} />
               </div>
               <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                <label className={styles.formLabel}>Descrição Card {i + 1}</label>
-                <textarea className={styles.formTextarea} style={{ minHeight: 60 }} value={card.desc} onChange={e => {
-                  const c = [...sec.solutionCards]; c[i] = { ...card, desc: e.target.value };
-                  u("solutionCards", c);
+                <label className={styles.formLabel}>Pilar {i + 1} — Descrição</label>
+                <textarea className={styles.formTextarea} style={{ minHeight: 60 }} value={p.desc} onChange={e => {
+                  const arr = [...sec.networkPillars]; arr[i] = { ...p, desc: e.target.value };
+                  u("networkPillars", arr);
                 }} />
               </div>
             </div>
@@ -340,65 +408,119 @@ export default function AdminLanding() {
         </div>
       )}
 
-      {/* ═══ Value Stack ═══ */}
-      {activeTab === "value" && (
+      {/* ═══ Flow — Como funciona ═══ */}
+      {activeTab === "flow" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>📦 Value Stack</h3>
+          <h3 className={styles.cardTitle}>🪜 Como funciona</h3>
           <div className={styles.formGrid}>
-            <Field label="Label (tag)" field="valueLabel" />
-            <Field label="Título" field="valueTitle" />
-            <Field label="Título — Destaque" field="valueTitleHighlight" />
-            <Field label="Descrição" field="valueDesc" multiline />
+            <Field label="Label (tag)" field="flowLabel" />
+            <Field label="Título" field="flowTitle" />
+            <Field label="Título — Destaque" field="flowTitleHighlight" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>Itens de Valor</h4>
-          {(sec.valueItems || []).map((item: any, i: number) => (
-            <div key={i} className={styles.formGrid} style={{ marginBottom: 8 }}>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Item {i + 1}</label>
-                <input className={styles.formInput} value={item.name} onChange={e => {
-                  const items = [...sec.valueItems]; items[i] = { ...item, name: e.target.value };
-                  u("valueItems", items);
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Passos (4 ideais)
+          </h4>
+          {(sec.flowSteps || []).map((s: any, i: number) => (
+            <div key={i} className={styles.formGrid} style={{ marginBottom: 12, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div className={styles.formGroup} style={{ maxWidth: 120 }}>
+                <label className={styles.formLabel}>Nº</label>
+                <input className={styles.formInput} value={s.num} onChange={e => {
+                  const arr = [...sec.flowSteps]; arr[i] = { ...s, num: e.target.value };
+                  u("flowSteps", arr);
                 }} />
               </div>
-              <div className={styles.formGroup} style={{ maxWidth: 200 }}>
-                <label className={styles.formLabel}>Preço</label>
-                <input className={styles.formInput} value={item.value} onChange={e => {
-                  const items = [...sec.valueItems]; items[i] = { ...item, value: e.target.value };
-                  u("valueItems", items);
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Título</label>
+                <input className={styles.formInput} value={s.title} onChange={e => {
+                  const arr = [...sec.flowSteps]; arr[i] = { ...s, title: e.target.value };
+                  u("flowSteps", arr);
+                }} />
+              </div>
+              <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                <label className={styles.formLabel}>Descrição</label>
+                <textarea className={styles.formTextarea} style={{ minHeight: 50 }} value={s.desc} onChange={e => {
+                  const arr = [...sec.flowSteps]; arr[i] = { ...s, desc: e.target.value };
+                  u("flowSteps", arr);
                 }} />
               </div>
             </div>
           ))}
-          <button className={styles.btnSecondary} style={{ marginTop: 8, fontSize: 12 }} onClick={() => {
-            u("valueItems", [...(sec.valueItems || []), { name: "", value: "" }]);
-          }}>+ Adicionar Item</button>
-          <div className={styles.formGrid} style={{ marginTop: 16 }}>
-            <Field label="Label Total" field="valueTotalLabel" />
-            <Field label="Valor Total" field="valueTotalAmount" />
-            <Field label="Frase de Impacto" field="valuePunchline" />
-          </div>
         </div>
       )}
 
-      {/* ═══ Pricing ═══ */}
+      {/* ═══ FAQ ═══ */}
+      {activeTab === "faq" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>❓ FAQ</h3>
+          <div className={styles.formGrid}>
+            <Field label="Label (tag)" field="faqLabel" />
+            <Field label="Título da seção" field="faqTitle" />
+          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Perguntas e respostas
+          </h4>
+          {(sec.faqItems || []).map((item: any, i: number) => (
+            <div key={i} className={styles.formGrid} style={{ marginBottom: 12, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                <label className={styles.formLabel}>Pergunta {i + 1}</label>
+                <input className={styles.formInput} value={item.q} onChange={e => {
+                  const arr = [...sec.faqItems]; arr[i] = { ...item, q: e.target.value };
+                  u("faqItems", arr);
+                }} />
+              </div>
+              <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                <label className={styles.formLabel}>Resposta {i + 1}</label>
+                <textarea className={styles.formTextarea} style={{ minHeight: 80 }} value={item.a} onChange={e => {
+                  const arr = [...sec.faqItems]; arr[i] = { ...item, a: e.target.value };
+                  u("faqItems", arr);
+                }} />
+              </div>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                style={{ fontSize: 11 }}
+                onClick={() => {
+                  const arr = [...sec.faqItems]; arr.splice(i, 1);
+                  u("faqItems", arr);
+                }}
+              >Remover</button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className={styles.btnSecondary}
+            style={{ marginTop: 8, fontSize: 12 }}
+            onClick={() => u("faqItems", [...(sec.faqItems || []), { q: "", a: "" }])}
+          >+ Adicionar pergunta</button>
+        </div>
+      )}
+
+      {/* ═══ Pricing + Close Friends ═══ */}
       {activeTab === "pricing" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>💰 Preço & Escassez</h3>
+          <h3 className={styles.cardTitle}>💰 Preço & Close Friends</h3>
           <div className={styles.formGrid}>
-            <Field label="Label de Escassez" field="scarcityLabel" />
-            <Field label="Título de Escassez" field="scarcityTitle" />
-            <Field label="Descrição de Escassez" field="scarcityDesc" multiline />
-            <Field label='Preço "De" (riscado)' field="priceFrom" />
+            <Field label="Label de contexto (ex: Acesso atual)" field="scarcityLabel" />
+            <Field label="Título de contexto" field="scarcityTitle" />
+            <Field label="Descrição de contexto" field="scarcityDesc" multiline />
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>Preço Atual</label>
-              <input className={styles.formInput} value={sec.priceAmount || "797"} onChange={e => u("priceAmount", e.target.value)} />
+              <input className={styles.formInput} value={sec.priceAmount || "497"} onChange={e => u("priceAmount", e.target.value)} />
             </div>
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>Período</label>
               <input className={styles.formInput} value={sec.pricePeriod || "MT/mês"} onChange={e => u("pricePeriod", e.target.value)} />
             </div>
-            <Field label="Texto abaixo do preço" field="priceSub" />
+            <Field label="Texto abaixo do preço" field="priceSub" multiline />
             <Field label="Texto do CTA do Preço" field="priceCtaText" />
+          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "24px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Close Friends (order bump exibido no card de preço)
+          </h4>
+          <div className={styles.formGrid}>
+            <Field label="Badge label (ex: Close Friends)" field="closeFriendsLabel" />
+            <Field label="Título" field="closeFriendsTitle" />
+            <Field label="Descrição (suporta <strong>)" field="closeFriendsDesc" multiline />
           </div>
         </div>
       )}

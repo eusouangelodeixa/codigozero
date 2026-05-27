@@ -192,9 +192,18 @@ export default function AdminAulas() {
                   <label className={styles.formLabel}>Descrição Curta</label>
                   <textarea className={styles.formTextarea} style={{ minHeight: 80 }} value={editLesson.description || ""} onChange={e => setEditLesson({ ...editLesson, description: e.target.value })} />
                 </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>URL do Vídeo</label>
-                  <input className={styles.formInput} placeholder="https://..." value={editLesson.videoUrl} onChange={e => setEditLesson({ ...editLesson, videoUrl: e.target.value })} />
+                <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                  <label className={styles.formLabel}>Vídeo (URL ou Embed completo)</label>
+                  <p style={{ fontSize: 12, color: "#666", margin: "4px 0 8px" }}>
+                    Cola aqui o código de embed da Kilax/YouTube/Vimeo (algo como <code>&lt;iframe src="..."&gt;</code>) ou só a URL. O player aplica fullscreen automaticamente.
+                  </p>
+                  <textarea
+                    className={styles.formTextarea}
+                    style={{ minHeight: 110, fontFamily: "monospace", fontSize: 12 }}
+                    placeholder='<iframe src="https://player.kilax.com/embed/..." ...></iframe>'
+                    value={editLesson.videoUrl}
+                    onChange={e => setEditLesson({ ...editLesson, videoUrl: e.target.value })}
+                  />
                 </div>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Duração (segundos)</label>

@@ -605,11 +605,14 @@
    ───────────────────────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
-  /* Mocks share the same canvas constraints as the parent .mockBody. */
+  /* Mocks share the same canvas constraints as the parent .mockBody.
+     min-height:0 + height:100% lets them fill exactly the room the
+     parent grid cell gave them, no more (otherwise the 280px default
+     min-height of the desktop layout forces overflow). */
   .radar, .disp, .cofre, .forja, .qg, .chat {
     min-height: 0;
     height: 100%;
-    gap: 8px;
+    gap: 6px;
   }
 
   /* RADAR — shrink map cell and trim leads list to 3 */

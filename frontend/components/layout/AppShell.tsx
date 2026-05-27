@@ -133,6 +133,8 @@ export interface AppShellUser {
   email?: string;
   role?: string;
   avatarUrl?: string;
+  closeFriends?: boolean;
+  closeFriendsUntil?: string | null;
 }
 
 export function AppShell({
@@ -174,6 +176,10 @@ export function AppShell({
       ? `${apiUrl}${user.avatarUrl}`
       : user.avatarUrl
     : null;
+  const isCloseFriends = !!user?.closeFriends;
+  const cfTitle = user?.closeFriendsUntil
+    ? `Membro Close Friends até ${new Date(user.closeFriendsUntil).toLocaleDateString("pt-PT")}`
+    : "Membro Close Friends";
 
   const go = (href: string) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -222,7 +228,7 @@ export function AppShell({
             className={styles.userCard}
             aria-label="Abrir perfil"
           >
-            <div className={styles.avatar}>
+            <div className={cx(styles.avatar, isCloseFriends && styles.avatarCF)}>
               {avatarSrc ? <img src={avatarSrc} alt="" /> : initial}
             </div>
             <div className={styles.userMeta}>
@@ -230,6 +236,14 @@ export function AppShell({
               <span className={cx(styles.userRole, isAdmin && styles.userRoleAdmin)}>
                 {user?.role === "superadmin" ? "Super Admin" : isAdmin ? "Admin" : "Membro"}
               </span>
+              {isCloseFriends && (
+                <span className={styles.cfBadge} title={cfTitle}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 2l2.39 6.95H22l-6.19 4.5L18.18 22 12 17.27 5.82 22l2.37-8.55L2 8.95h7.61L12 2z" />
+                  </svg>
+                  Close Friends
+                </span>
+              )}
             </div>
           </a>
 
@@ -274,8 +288,9 @@ export function AppShell({
           <a
             href="/perfil"
             onClick={go("/perfil")}
-            className={styles.topbarAvatar}
-            aria-label="Perfil"
+            className={cx(styles.topbarAvatar, isCloseFriends && styles.topbarAvatarCF)}
+            aria-label={isCloseFriends ? "Perfil — Close Friends" : "Perfil"}
+            title={isCloseFriends ? cfTitle : undefined}
           >
             {avatarSrc ? <img src={avatarSrc} alt="" /> : initial}
           </a>
@@ -336,7 +351,7 @@ export function AppShell({
             className={styles.drawerUser}
             aria-label="Abrir perfil"
           >
-            <div className={styles.avatar}>
+            <div className={cx(styles.avatar, isCloseFriends && styles.avatarCF)}>
               {avatarSrc ? <img src={avatarSrc} alt="" /> : initial}
             </div>
             <div className={styles.userMeta}>
@@ -344,6 +359,14 @@ export function AppShell({
               <span className={cx(styles.userRole, isAdmin && styles.userRoleAdmin)}>
                 {user?.role === "superadmin" ? "Super Admin" : isAdmin ? "Admin" : "Membro"}
               </span>
+              {isCloseFriends && (
+                <span className={styles.cfBadge} title={cfTitle}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 2l2.39 6.95H22l-6.19 4.5L18.18 22 12 17.27 5.82 22l2.37-8.55L2 8.95h7.61L12 2z" />
+                  </svg>
+                  Close Friends
+                </span>
+              )}
             </div>
           </a>
           <button

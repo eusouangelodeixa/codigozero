@@ -95,6 +95,7 @@ export default function AdminConfig() {
   const [testPhone, setTestPhone] = useState("");
   const [testType, setTestType] = useState<"visitor" | "checkout">("visitor");
   const [testing, setTesting] = useState(false);
+  const [pushTesting, setPushTesting] = useState<"sale" | "bump" | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
   const setField = <K extends keyof SystemConfig>(key: K, value: SystemConfig[K]) =>
@@ -171,6 +172,35 @@ export default function AdminConfig() {
       toast.error("Falha de conexão");
     }
     setTesting(false);
+  };
+
+  const runPushTest = async (kind: "sale" | "bump") => {
+    setPushTesting(kind);
+    try {
+      const path = kind === "bump" ? "push-test/sale-with-bump" : "push-test/sale";
+      const res = await fetch(`${API}/api/admin/${path}`, {
+        method: "POST",
+        headers: hdr(),
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error("Falha ao enviar push", data.error);
+      } else if (data.delivered === 0) {
+        toast.error(
+          "Nenhum dispositivo recebeu",
+          "Nenhum superadmin tem push ativo. Ative as notificações no seu /perfil primeiro.",
+        );
+      } else {
+        toast.success(
+          "Push enviado",
+          `${data.delivered}/${data.attempted} dispositivo(s) notificado(s).`,
+        );
+      }
+    } catch {
+      toast.error("Falha de conexão");
+    }
+    setPushTesting(null);
   };
 
   const copyPrompt = async (kind: "visitor" | "checkout") => {
@@ -435,6 +465,38 @@ export default function AdminConfig() {
               Disparar teste
             </Button>
           </div>
+        </div>
+      </Section>
+
+      {/* ── Push de teste (notificação de venda) ── */}
+      <Section
+        title="Notificações push de teste"
+        subtitle="Dispara o mesmo push que os superadmins recebem quando uma venda é aprovada. Útil para conferir formato e entrega sem esperar uma compra real."
+        icon={<IconBeaker />}
+        defaultOpen={false}
+      >
+        <div className={styles.testPanel}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            <Button
+              variant="accent"
+              onClick={() => runPushTest("sale")}
+              loading={pushTesting === "sale"}
+              disabled={pushTesting !== null}
+            >
+              Compra do produto principal
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => runPushTest("bump")}
+              loading={pushTesting === "bump"}
+              disabled={pushTesting !== null}
+            >
+              Compra principal + Close Friends 🥂
+            </Button>
+          </div>
+          <p className={styles.fieldHint} style={{ marginTop: 12 }}>
+            Os pushes vão para todos os superadmins com notificações ativas. Se nada chegar, confirme que ativou as notificações em <strong>/perfil</strong> deste dispositivo.
+          </p>
         </div>
       </Section>
 

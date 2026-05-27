@@ -8,6 +8,7 @@ import fs from 'fs';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { lojouService } from '../services/lojou.service';
+import { getActivePrice } from '../lib/pricing';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -106,6 +107,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         komunikaInstanceId: true,
         avatarUrl: true,
         hasCompletedOnboarding: true,
+        closeFriends: true,
+        closeFriendsUntil: true,
       },
     });
 
@@ -220,32 +223,43 @@ router.post('/retention-offer', authMiddleware, async (req: AuthRequest, res: Re
       return res.json({ offer: null, message: 'Não elegível para nova oferta' });
     }
 
-    const LOJOU_API = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
-    const LOJOU_KEY = process.env.LOJOU_API_KEY;
-
-    if (!LOJOU_KEY) {
+    if (!env.LOJOU_API_KEY) {
       return res.json({ offer: null, message: 'Gateway não configurado' });
     }
 
     // 2. Criar cupão na Lojou
     const code = `FICA10_${user.id.slice(0, 6).toUpperCase()}`;
     let checkoutUrl = '';
+    let couponReady = false;
 
     try {
-      const discountRes = await fetch(`${LOJOU_API}/discounts`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${LOJOU_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, type: 'percentage', value: 10, uses_limit: 1, active: true }),
+      await lojouService.createDiscount({
+        code,
+        type: 'percentage',
+        value: 10,
+        uses_limit: 1,
+        single_use: true,
+        status: 'active',
       });
+      couponReady = true;
+      console.log(`[RETENTION] ✅ Coupon ${code} created for ${user.email}`);
+    } catch (e: any) {
+      // 409 means the coupon already exists — treat as ready.
+      if (typeof e?.message === 'string' && e.message.includes('(409)')) {
+        couponReady = true;
+        console.log(`[RETENTION] ↩ Coupon ${code} already existed, reusing for ${user.email}`);
+      } else {
+        console.warn('[RETENTION] Lojou discount API error:', e?.message || e);
+      }
+    }
 
-      if (discountRes.ok || discountRes.status === 409) {
-        console.log(`[RETENTION] ✅ Coupon ${code} ready for ${user.email} (Status: ${discountRes.status})`);
-        
+    if (couponReady) {
+      try {
         // 3. Gerar novo Checkout Link com o cupão aplicado
         const orderData = await lojouService.createOrder({
-          amount: 797,
-          product_pid: process.env.LOJOU_PRODUCT_PID || 'uoEHz',
-          plan_id: process.env.LOJOU_PLAN_ID || 'tbo8f',
+          amount: await getActivePrice(),
+          product_pid: env.LOJOU_PRODUCT_PID,
+          plan_id: env.LOJOU_PLAN_ID,
           coupon_code: code,
           customer: {
             name: user.name,
@@ -283,11 +297,9 @@ router.post('/retention-offer', authMiddleware, async (req: AuthRequest, res: Re
             }).catch(console.error);
           }
         }
-      } else {
-        console.warn(`[RETENTION] Coupon creation failed: ${discountRes.status}`);
+      } catch (e: any) {
+        console.warn('[RETENTION] Lojou createOrder error:', e?.message || e);
       }
-    } catch (e) {
-      console.warn('[RETENTION] Lojou discount API error:', e);
     }
 
     return res.json({

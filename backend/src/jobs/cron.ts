@@ -5,6 +5,7 @@ import { lojouService } from '../services/lojou.service';
 import { env } from '../config/env';
 import { processDueDispatches, processDispatch } from '../services/dispatch.service';
 import { transitionDuePending } from '../services/affiliate.service';
+import { getActivePrice } from '../lib/pricing';
 
 const prisma = new PrismaClient();
 
@@ -149,9 +150,9 @@ export function startCronJobs() {
         if (!currentRenewalUrl && env.LOJOU_API_KEY) {
           try {
             const orderData = await lojouService.createOrder({
-              amount: 797,
-              product_pid: process.env.LOJOU_PRODUCT_PID || 'uoEHz',
-              plan_id: process.env.LOJOU_PLAN_ID || 'tbo8f',
+              amount: await getActivePrice(),
+              product_pid: env.LOJOU_PRODUCT_PID,
+              plan_id: env.LOJOU_PLAN_ID,
               customer: {
                 name: user.name,
                 email: user.email,
@@ -453,7 +454,7 @@ export function startCronJobs() {
               userEmail: email,
               userPhone: phone,
               userName: order.customer?.name || 'Conciliation',
-              amount: order.amount || 797,
+              amount: order.amount || (await getActivePrice()),
               status: 'approved',
               paymentMethod: 'conciliation',
               metadata: order,

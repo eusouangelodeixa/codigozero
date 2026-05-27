@@ -10,6 +10,15 @@ export const env = {
   LOJOU_API_KEY: process.env.LOJOU_API_KEY || '',
   LOJOU_API_URL: process.env.LOJOU_API_URL || 'https://api.lojou.app',
   LOJOU_WEBHOOK_SECRET: process.env.LOJOU_WEBHOOK_SECRET || '',
+  LOJOU_PLAN_ID: process.env.LOJOU_PLAN_ID || 'tbo8f',
+  LOJOU_PRODUCT_PID: process.env.LOJOU_PRODUCT_PID || 'uoEHz',
+  // Numeric product id from Lojou — used to scope coupons via discount.product_ids.
+  // Left empty by default so coupons created in admin are unrestricted.
+  LOJOU_PRODUCT_ID: process.env.LOJOU_PRODUCT_ID || '',
+  // Close Friends order bump product — when this pid is detected in a webhook
+  // payload alongside the main product, the buyer gets +2 months (3 total) and
+  // the closeFriends flag set on their account.
+  LOJOU_CLOSE_FRIENDS_PID: process.env.LOJOU_CLOSE_FRIENDS_PID || 'JQQWc',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   NODE_ENV: process.env.NODE_ENV || 'development',
   MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '10', 10),

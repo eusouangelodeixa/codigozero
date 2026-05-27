@@ -33,6 +33,13 @@ model User {
   avatarUrl          String?
   hasCompletedOnboarding Boolean @default(false)
   lastExpirationAlert DateTime?
+
+  // ── Close Friends (order bump JQQWc): grants +2 months on top of the
+  // standard subscription, expires together with subscriptionEnd, and is
+  // automatically dropped on a renewal payment that doesn't include the bump.
+  closeFriends              Boolean   @default(false)
+  closeFriendsUntil         DateTime?
+  closeFriendsPurchaseCount Int       @default(0)
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -135,11 +142,17 @@ model Transaction {
   userEmail     String?
   userPhone     String?
   userName      String?
+  // amount is always the TOTAL charged (principal + any order bumps).
+  // Faturamento/MRR reports keep reading this field as-is.
   amount        Float
   currency      String   @default("MZN")
   status        String   // pending, approved, failed, refunded
   paymentMethod String?
   metadata      Json?
+  // ── Order bump audit fields ──────────────────────────────────────────
+  orderBumpPid    String?  // e.g. "JQQWc" for Close Friends
+  orderBumpAmount Float?   // bump amount only, so reports can split principal vs bump
+  isCloseFriends  Boolean  @default(false)
   createdAt     DateTime @default(now())
 }
 

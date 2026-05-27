@@ -9,6 +9,9 @@ import {
   markWithdrawalPaid,
   rejectWithdrawal,
 } from '../services/affiliate.service';
+import { env } from '../config/env';
+import { lojouService, LojouService } from '../services/lojou.service';
+import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -33,7 +36,7 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
     ]);
 
     const totalRevenue = transactions.reduce((sum, t) => sum + t.amount, 0);
-    const mrr = paidUsers * 797;
+    const mrr = paidUsers * (await getActivePrice());
     const vagasRestantes = "Ilimitado";
 
     const totalScripts = await prisma.script.count();
@@ -572,12 +575,46 @@ router.patch('/landing-config', async (req: AuthRequest, res: Response) => {
       affiliateVslEmbedHtml,
       affiliateCreativesUrl,
     };
+    // Capture the prior price so we only call Lojou when it actually changes.
+    const prior = await prisma.landingConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { priceAmount: true },
+    });
+
     const config = await prisma.landingConfig.upsert({
       where: { id: 'singleton' },
       update: data,
       create: { id: 'singleton', ...data },
     });
-    res.json({ config });
+
+    // Always invalidate the in-process price cache so the next checkout/cron
+    // sees the new value within milliseconds, not 30s.
+    invalidatePriceCache();
+
+    // Push the new price upstream to Lojou (PATCH /v1/plans/{id}) so that
+    // every checkout — including ones opened directly via pay.lojou.app —
+    // charges the value set in the admin. Failure is non-fatal: the local
+    // change is already saved and our checkouts read getActivePrice().
+    let lojouSync: { ok: boolean; error?: string } | null = null;
+    if (
+      priceAmount !== undefined &&
+      priceAmount !== null &&
+      Number.isFinite(Number(priceAmount)) &&
+      Number(priceAmount) !== prior?.priceAmount &&
+      env.LOJOU_API_KEY &&
+      env.LOJOU_PLAN_ID
+    ) {
+      try {
+        await lojouService.updatePlan(env.LOJOU_PLAN_ID, { price: Number(priceAmount) });
+        lojouSync = { ok: true };
+        console.log(`[ADMIN] 💰 Lojou plan ${env.LOJOU_PLAN_ID} price updated to ${priceAmount}`);
+      } catch (e: any) {
+        lojouSync = { ok: false, error: e?.message || 'unknown' };
+        console.warn('[ADMIN] Lojou updatePlan failed:', e?.message || e);
+      }
+    }
+
+    res.json({ config, lojouSync });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar config da landing' });
   }
@@ -859,29 +896,24 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
         // Generate per-user coupon if enabled
         if (generateCoupons && message.includes('{{cupom}}')) {
           const couponCode = `CZ${couponDiscount || 10}_${user.id.slice(0, 6).toUpperCase()}`;
-          try {
-            const lojouApi = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
-            const lojouKey = process.env.LOJOU_API_KEY;
-            if (lojouKey) {
-              const discRes = await fetch(`${lojouApi}/discounts`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${lojouKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  code: couponCode,
-                  type: 'percentage',
-                  value: parseInt(couponDiscount) || 10,
-                  uses_limit: parseInt(couponMaxUses) || 1,
-                  active: true,
-                }),
+          if (env.LOJOU_API_KEY) {
+            try {
+              await lojouService.createDiscount({
+                code: couponCode,
+                type: 'percentage',
+                value: parseInt(couponDiscount) || 10,
+                uses_limit: parseInt(couponMaxUses) || 1,
+                status: 'active',
               });
-              if (discRes.ok) {
-                console.log(`[BROADCAST] 🎟️ Coupon ${couponCode} created for ${user.email}`);
+              console.log(`[BROADCAST] 🎟️ Coupon ${couponCode} created for ${user.email}`);
+            } catch (couponErr: any) {
+              const msg = String(couponErr?.message || couponErr);
+              if (msg.includes('(409)')) {
+                console.log(`[BROADCAST] ↩ Coupon ${couponCode} already exists, reusing for ${user.email}`);
               } else {
-                console.warn(`[BROADCAST] Coupon creation failed for ${user.email}: ${discRes.status}`);
+                console.warn(`[BROADCAST] Coupon error for ${user.email}:`, msg);
               }
             }
-          } catch (couponErr) {
-            console.warn(`[BROADCAST] Coupon error for ${user.email}:`, couponErr);
           }
           personalizedMsg = personalizedMsg.replace(/\{\{cupom\}\}/gi, couponCode);
         }
@@ -1347,17 +1379,28 @@ router.post('/cupons', async (req: AuthRequest, res: Response) => {
     if (existing) return res.status(400).json({ error: 'Cupom com este código já existe' });
 
     let lojouId: string | null = null;
-    if (LOJOU_KEY) {
+    let lojouError: string | null = null;
+    if (env.LOJOU_API_KEY) {
       try {
-        const r = await fetch(`${LOJOU_API}/discounts`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${LOJOU_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: upperCode, type, value, uses_limit: max_uses || 1, active: active !== false, product_pid: process.env.LOJOU_PRODUCT_PID || 'uoEHz' }),
+        // product_ids is optional: when empty the coupon applies to every product.
+        // Set LOJOU_PRODUCT_ID env var to scope coupons to the Código Zero product.
+        const product_ids = env.LOJOU_PRODUCT_ID
+          ? [Number.isNaN(Number(env.LOJOU_PRODUCT_ID)) ? env.LOJOU_PRODUCT_ID : Number(env.LOJOU_PRODUCT_ID)]
+          : undefined;
+        const resp = await lojouService.createDiscount({
+          code: upperCode,
+          type,
+          value: parseFloat(value),
+          uses_limit: parseInt(max_uses) || 1,
+          status: active !== false ? 'active' : 'inactive',
+          ...(product_ids ? { product_ids } : {}),
         });
-        const d = await r.json();
-        lojouId = d?.discount?.id?.toString() || d?.data?.id?.toString() || d?.id?.toString() || null;
-        console.log('[ADMIN] Lojou sync:', r.status, lojouId);
-      } catch (e) { console.warn('[ADMIN] Lojou sync failed:', e); }
+        lojouId = LojouService.extractDiscountId(resp);
+        console.log('[ADMIN] Lojou sync ok:', lojouId);
+      } catch (e: any) {
+        lojouError = e?.message || 'unknown';
+        console.warn('[ADMIN] Lojou sync failed:', lojouError);
+      }
     }
 
     let linkedUserEmail: string | null = null;
@@ -1371,7 +1414,7 @@ router.post('/cupons', async (req: AuthRequest, res: Response) => {
     });
 
     console.log(`[ADMIN] 🎟️ Coupon: ${upperCode} (${type} ${value})${lojouId ? ` [Lojou: ${lojouId}]` : ''}`);
-    return res.json({ coupon, success: true });
+    return res.json({ coupon, success: true, lojouError });
   } catch (error) {
     console.error('[ADMIN] Create coupon error:', error);
     return res.status(500).json({ error: 'Erro ao criar cupom' });
@@ -1406,16 +1449,18 @@ router.patch('/cupons/:id', async (req: AuthRequest, res: Response) => {
       } else { data.linkedUserEmail = null; }
     }
 
-    if (coupon.lojouId && LOJOU_KEY) {
+    if (coupon.lojouId && env.LOJOU_API_KEY) {
       try {
-        const lojouBody: any = {};
+        const lojouBody: Record<string, any> = {};
         if (code !== undefined) lojouBody.code = code.toUpperCase().trim();
         if (type !== undefined) lojouBody.type = type;
         if (value !== undefined) lojouBody.value = parseFloat(value);
         if (max_uses !== undefined) lojouBody.uses_limit = parseInt(max_uses);
-        if (active !== undefined) lojouBody.active = active;
-        await fetch(`${LOJOU_API}/discounts/${coupon.lojouId}`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${LOJOU_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(lojouBody) });
-      } catch {}
+        if (active !== undefined) lojouBody.status = active ? 'active' : 'inactive';
+        await lojouService.updateDiscount(coupon.lojouId, lojouBody);
+      } catch (e: any) {
+        console.warn(`[ADMIN] Lojou updateDiscount failed for ${coupon.code}:`, e?.message || e);
+      }
     }
 
     const updated = await prisma.coupon.update({ where: { id: req.params.id }, data });
@@ -1428,8 +1473,12 @@ router.delete('/cupons/:id', async (req: AuthRequest, res: Response) => {
     const coupon = await prisma.coupon.findUnique({ where: { id: req.params.id } });
     if (!coupon) return res.status(404).json({ error: 'Cupom não encontrado' });
 
-    if (coupon.lojouId && LOJOU_KEY) {
-      try { await fetch(`${LOJOU_API}/discounts/${coupon.lojouId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${LOJOU_KEY}` } }); } catch {}
+    if (coupon.lojouId && env.LOJOU_API_KEY) {
+      try {
+        await lojouService.deleteDiscount(coupon.lojouId);
+      } catch (e: any) {
+        console.warn(`[ADMIN] Lojou deleteDiscount failed for ${coupon.code}:`, e?.message || e);
+      }
     }
 
     await prisma.coupon.delete({ where: { id: req.params.id } });
@@ -1683,6 +1732,56 @@ router.post('/affiliate-withdrawals/:id/reject', async (req: AuthRequest, res: R
   } catch (error) {
     console.error('[ADMIN] withdrawal reject error:', error);
     return res.status(500).json({ error: 'Erro ao rejeitar saque' });
+  }
+});
+
+// ═══════════════════════════════════════
+// PUSH TEST — simulate the "new sale" notification superadmins receive
+// when a real order.approved webhook fires. Does NOT touch the database
+// (no fake user, no fake transaction) — purely a notification dry-run.
+// ═══════════════════════════════════════
+
+const CLOSE_FRIENDS_BUMP_PRICE_DEFAULT = 1297;
+
+async function dispatchSalePushTest(opts: { withBump: boolean; customerName?: string }) {
+  const principal = await getActivePrice();
+  const bumpPrice = opts.withBump
+    ? Number(process.env.LOJOU_CLOSE_FRIENDS_PRICE || CLOSE_FRIENDS_BUMP_PRICE_DEFAULT)
+    : 0;
+  const total = principal + bumpPrice;
+  const customerName = opts.customerName || 'Teste Compra';
+  const productName = 'Código Zero';
+  const currency = 'MZN';
+  const payMethodLabel = 'M-Pesa';
+  const amountFmt = new Intl.NumberFormat('pt-MZ', { minimumFractionDigits: 0 }).format(total);
+  const bumpLabel = opts.withBump ? ' 🥂 Close Friends' : '';
+
+  // Mirror the exact shape used in the webhook handler so what admins see
+  // here is what they'll see on a real sale.
+  return sendPushToSuperAdmins({
+    title: '🧪 (Teste) 💰 Nova Venda!',
+    body: `${customerName} — ${productName}${bumpLabel}\n${amountFmt} ${currency} via ${payMethodLabel}`,
+    url: '/admin/finance',
+  });
+}
+
+router.post('/push-test/sale', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await dispatchSalePushTest({ withBump: false, customerName: req.body?.customerName });
+    return res.json({ success: result.delivered > 0, withBump: false, ...result });
+  } catch (e: any) {
+    console.error('[ADMIN] push-test/sale error:', e);
+    return res.status(500).json({ error: e?.message || 'Falha ao enviar push de teste' });
+  }
+});
+
+router.post('/push-test/sale-with-bump', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await dispatchSalePushTest({ withBump: true, customerName: req.body?.customerName });
+    return res.json({ success: result.delivered > 0, withBump: true, ...result });
+  } catch (e: any) {
+    console.error('[ADMIN] push-test/sale-with-bump error:', e);
+    return res.status(500).json({ error: e?.message || 'Falha ao enviar push de teste' });
   }
 });
 

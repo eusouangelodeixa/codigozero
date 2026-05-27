@@ -8,9 +8,15 @@ import {
   creditCommissionForOrder,
   refundCommissionForOrder,
 } from '../services/affiliate.service';
+import { detectOrderBump } from '../lib/orderBump';
+import { getActivePrice } from '../lib/pricing';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BASE_SUBSCRIPTION_DAYS = 30;
+const CLOSE_FRIENDS_EXTRA_DAYS = 60; // +2 months on top of the base month
 
 /**
  * POST /api/webhooks/lojou
@@ -107,10 +113,46 @@ router.post('/lojou', async (req: Request, res: Response) => {
         const customerEmail = data.customer?.email;
         const customerPhone = data.customer?.phone || data.customer?.cellphone || data.customer?.mobile_number;
         const customerName = data.customer?.name || 'Membro CZ';
-        const amount = parseFloat(String(data.amount || data.total || data.product?.price || 797));
+        const totalAmount = parseFloat(
+          String(
+            data.amount ||
+              data.total ||
+              data.product?.price ||
+              (await getActivePrice()),
+          ),
+        );
         const productName = data.product?.name || 'Código Zero';
         const currency = data.currency || 'MZN';
         const paymentMethod = data.payment_method || 'mpesa';
+
+        // ── Close Friends order bump ─────────────────────────────────────
+        // The buyer either took the bump on this payment or didn't. We
+        // detect it by scanning the payload for the configured pid, and
+        // use that to (a) extend the subscription, (b) mark the badge,
+        // (c) save audit fields on the Transaction. Absence on a renewal
+        // payment downgrades the user (handled below where we update the
+        // existing row).
+        const bumpMatch = env.LOJOU_CLOSE_FRIENDS_PID
+          ? detectOrderBump(data, env.LOJOU_CLOSE_FRIENDS_PID)
+          : null;
+        if (bumpMatch) {
+          console.log(
+            `[WEBHOOK] 🥂 Close Friends bump detected at ${bumpMatch.matchedAt} (amount=${bumpMatch.amount})`,
+          );
+        }
+        const isCloseFriends = !!bumpMatch;
+        const bumpAmount = bumpMatch?.amount || 0;
+        // Prefer the explicit principal product price from the payload
+        // (data.product.price comes as a string in the Lojou format), with
+        // total-minus-bump as fallback. This keeps the affiliate commission
+        // honest even when the bump amount can't be parsed.
+        const productPriceFromPayload = parseFloat(String(data.product?.price || 0));
+        const principalAmount =
+          productPriceFromPayload > 0
+            ? productPriceFromPayload
+            : bumpAmount > 0
+              ? Math.max(0, totalAmount - bumpAmount)
+              : totalAmount;
 
         // Generate random password
         const rawPassword = uuidv4().slice(0, 8);
@@ -128,10 +170,26 @@ router.post('/lojou', async (req: Request, res: Response) => {
 
         const subscriber = data.plan_subscriber || {};
         const subscriptionStart = subscriber.start_date ? new Date(subscriber.start_date) : new Date();
-        const subscriptionEnd = subscriber.end_date ? new Date(subscriber.end_date) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+        // Lojou occasionally sends an explicit end_date; honor it. Otherwise
+        // compute it from base + close-friends extra. Renewals don't compound
+        // the bonus — each payment that includes the bump grants the full
+        // 3-month window starting "now".
+        const totalDays = BASE_SUBSCRIPTION_DAYS + (isCloseFriends ? CLOSE_FRIENDS_EXTRA_DAYS : 0);
+        const subscriptionEnd = subscriber.end_date
+          ? new Date(subscriber.end_date)
+          : new Date(Date.now() + totalDays * DAY_MS);
+
+        const closeFriendsUntil = isCloseFriends ? subscriptionEnd : null;
 
         if (user) {
-          // Reactivate existing user
+          // Reactivate existing user. If this is a renewal *without* the
+          // bump and they used to be Close Friends, the absence is a
+          // deliberate downgrade — we drop the flag.
+          const wasCloseFriends = user.closeFriends;
+          if (wasCloseFriends && !isCloseFriends) {
+            console.log(`[WEBHOOK] ⬇️ Close Friends downgrade for ${user.email} (renewed without bump)`);
+          }
           user = await prisma.user.update({
             where: { id: user.id },
             data: {
@@ -143,6 +201,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
               passwordHash, // Reset password on reactivation
               remarketingStage: 'none',
               paymentsSinceLastCoupon: { increment: 1 },
+              closeFriends: isCloseFriends,
+              closeFriendsUntil,
+              ...(isCloseFriends ? { closeFriendsPurchaseCount: { increment: 1 } } : {}),
             },
           });
         } else {
@@ -158,6 +219,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
               subscriptionEnd,
               lojouOrderId: String(orderId),
               paymentsSinceLastCoupon: 1,
+              closeFriends: isCloseFriends,
+              closeFriendsUntil,
+              closeFriendsPurchaseCount: isCloseFriends ? 1 : 0,
             },
           });
 
@@ -169,19 +233,30 @@ router.post('/lojou', async (req: Request, res: Response) => {
           });
         }
 
-        // Record transaction
+        // Record transaction. `amount` is always the gross total (principal +
+        // bump) so existing faturamento/MRR queries keep working. The bump
+        // breakdown is stored separately for audit.
         await prisma.transaction.upsert({
           where: { orderId: String(orderId) },
-          update: { status: 'approved', metadata: data },
+          update: {
+            status: 'approved',
+            metadata: data,
+            orderBumpPid: bumpMatch?.pid ?? null,
+            orderBumpAmount: bumpAmount || null,
+            isCloseFriends,
+          },
           create: {
             orderId: String(orderId),
             userEmail: customerEmail,
             userPhone: customerPhone,
             userName: customerName,
-            amount,
+            amount: totalAmount,
             status: 'approved',
             paymentMethod: data.payment_method || 'mpesa',
             metadata: data,
+            orderBumpPid: bumpMatch?.pid ?? null,
+            orderBumpAmount: bumpAmount || null,
+            isCloseFriends,
           },
         });
 
@@ -234,24 +309,27 @@ router.post('/lojou', async (req: Request, res: Response) => {
 
         // 🔔 Push notification to superadmin: NEW SALE
         const payMethodLabel = paymentMethod === 'mpesa' ? 'M-Pesa' : paymentMethod === 'emola' ? 'E-Mola' : paymentMethod;
-        const amountFmt = new Intl.NumberFormat('pt-MZ', { minimumFractionDigits: 0 }).format(amount);
+        const amountFmt = new Intl.NumberFormat('pt-MZ', { minimumFractionDigits: 0 }).format(totalAmount);
+        const bumpLabel = isCloseFriends ? ' 🥂 Close Friends' : '';
         sendPushToSuperAdmins({
           title: '💰 Nova Venda!',
-          body: `${customerName} — ${productName}\n${amountFmt} ${currency} via ${payMethodLabel}`,
+          body: `${customerName} — ${productName}${bumpLabel}\n${amountFmt} ${currency} via ${payMethodLabel}`,
           url: '/admin/finance',
         }).catch(() => {});
 
         // ── Affiliate commission credit ────────────────────────────────
         // Sales recovered via remarketing belong to the system per the
         // program rules; pre-remarketing sales attributed to an affiliate
-        // get a commission row.
+        // get a commission row. Commission is calculated on the principal
+        // only — the Close Friends order bump is an upsell that doesn't
+        // generate affiliate commission.
         try {
           if (user.referredByCode) {
             const credit = await creditCommissionForOrder({
               userId: user.id,
               affiliateCode: user.referredByCode,
               remarketingStage: user.remarketingStage,
-              saleAmount: amount,
+              saleAmount: principalAmount,
               lojouOrderId: String(orderId),
             });
             if (credit.credited) {
@@ -296,7 +374,15 @@ router.post('/lojou', async (req: Request, res: Response) => {
           if (user) {
             await prisma.user.update({
               where: { id: user.id },
-              data: { subscriptionStatus: 'canceled', isActive: false },
+              data: {
+                subscriptionStatus: 'canceled',
+                isActive: false,
+                // Refund implicitly invalidates the Close Friends grant tied
+                // to this order. Cancellation drops the badge regardless of
+                // whether the refunded order carried the bump.
+                closeFriends: false,
+                closeFriendsUntil: null,
+              },
             });
 
             await prisma.systemConfig.update({

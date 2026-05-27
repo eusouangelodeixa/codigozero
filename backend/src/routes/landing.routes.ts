@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
 import crypto from 'crypto';
 import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
+import { getActivePrice } from '../lib/pricing';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -11,9 +12,8 @@ const LOJOU_API = `${env.LOJOU_API_URL}/v1`;
 const LOJOU_KEY = env.LOJOU_API_KEY;
 
 // Código Zero product + plan on Lojou
-const PRODUCT_PID = process.env.LOJOU_PRODUCT_PID || 'uoEHz';
-const PLAN_ID = process.env.LOJOU_PLAN_ID || 'tbo8f';
-const PRODUCT_PRICE = 797;
+const PRODUCT_PID = env.LOJOU_PRODUCT_PID;
+const PLAN_ID = env.LOJOU_PLAN_ID;
 
 /**
  * POST /api/landing/lead
@@ -122,7 +122,7 @@ router.post('/lead', async (req: Request, res: Response) => {
           body: JSON.stringify({
             product_pid: PRODUCT_PID,
             plan_id: PLAN_ID,
-            amount: PRODUCT_PRICE,
+            amount: await getActivePrice(),
             customer: {
               name,
               email,

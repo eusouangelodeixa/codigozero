@@ -1112,13 +1112,29 @@
   margin: 0 0 var(--space-6);
 }
 
-/* ── Responsive ── */
+/* ── Flush section (sem padding lateral — usado pelo StackScrolly) ── */
+.sectionFlush {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: var(--space-12) 0 0;
+}
+.sectionFlush .sectionHead {
+  padding: 0 var(--space-6);
+}
+
+/* ── Responsive (v2 — para os novos blocos) ── */
+@media (max-width: 1024px) {
+  .networkSection { padding: var(--space-10) var(--space-5); }
+  .flowGrid { grid-template-columns: repeat(2, 1fr); }
+}
+
 @media (max-width: 900px) {
   .stackRow {
     grid-template-columns: 1fr;
     gap: var(--space-5);
   }
   .stackRowReverse { direction: ltr; }
+
   .networkInner {
     grid-template-columns: 1fr;
     gap: var(--space-6);
@@ -1126,11 +1142,44 @@
   .networkImageWrap { order: -1; }
   .networkImage { max-width: 320px; }
   .networkCountValue { font-size: 2rem; }
-}
-@media (max-width: 600px) {
   .networkSection { padding: var(--space-8) var(--space-4); }
+
   .heroActions { flex-direction: column; align-items: stretch; }
-  .heroCta, .heroGhost { width: 100%; text-align: center; }
-  .mockBody { min-height: 220px; padding: var(--space-4); }
-  .mockUrl { display: none; }
+  .heroCta, .heroGhost { width: 100%; text-align: center; justify-content: center; }
+  .hero { flex-direction: column; }
+  .heroContent { max-width: 100%; }
+  .heroTitle { font-size: clamp(1.85rem, 6vw, 2.4rem); }
 }
+
+@media (max-width: 768px) {
+  .sectionHead { padding: 0 var(--space-3); }
+  .sectionFlush .sectionHead { padding: 0 var(--space-4); }
+  .sectionFlush { padding-top: var(--space-8); }
+  .pricingCard { padding: var(--space-5); }
+  .priceBig { font-size: clamp(2.5rem, 12vw, 3.5rem); }
+  .cfCallout { padding: var(--space-3); }
+  .finalCta { padding: var(--space-8) var(--space-4); }
+  .finalCtaTitle { font-size: clamp(1.6rem, 7vw, 2.2rem); }
+  .faqList { padding: 0 var(--space-1); }
+  .faqQ { padding: var(--space-3) var(--space-4); font-size: 0.92rem; }
+  .faqA { padding: 0 var(--space-4) var(--space-4); font-size: 0.9rem; }
+  .flowGrid { grid-template-columns: 1fr; }
+  .footerInner { padding: 0 var(--space-3); }
+}
+
+@media (max-width: 600px) {
+  .nav { padding: var(--space-3) var(--space-4); }
+  .hero { padding: var(--space-6) var(--space-4) var(--space-7); }
+  .networkSection { padding: var(--space-6) var(--space-3); }
+  .networkImage { max-width: 280px; border-radius: 18px; }
+  .networkCountValue { font-size: 1.75rem; }
+  .networkPillar { padding: var(--space-2) 0; }
+  .networkPillarTitle { font-size: 0.95rem; }
+  .networkPillarDesc { font-size: 0.82rem; }
+  .vslWrapper { border-radius: 10px; }
+  .vslBarTitle { font-size: 0.7rem; }
+  .pricingCard { padding: var(--space-4); border-radius: 14px; }
+  .guaranteeCard { padding: var(--space-5); }
+  .guaranteeTitle { font-size: clamp(1.4rem, 6vw, 1.85rem); }
+}
+

@@ -17,7 +17,7 @@ import {
   ArrowRight as IconArrow,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { TOOL_MOCKS } from "@/components/landing/ToolMocks";
+import { StackScrolly } from "@/components/landing/StackScrolly";
 import styles from "./landing.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -93,12 +93,12 @@ const DEFAULTS = {
   ],
 
   // ── Network / Comunidade ─────────────────────────────────────────────
-  networkLabel: "A network",
-  networkTitle: "Onde acontece",
-  networkTitleHighlight: "de verdade.",
+  networkLabel: "Código Zero — Network",
+  networkTitle: "A comunidade privada",
+  networkTitleHighlight: "onde tudo acontece.",
   networkMembersCount: "143",
   networkMembersLabel: "membros ativos",
-  networkDesc: "A network privada do Código Zero — onde quem está construindo de verdade troca ideia. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
+  networkDesc: "Quem está construindo de verdade troca ideia aqui. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
   networkPillars: [
     { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
     { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },
@@ -558,17 +558,12 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
               <Logo size={24} />
               <span className={styles.navBrand}>Código Zero</span>
             </div>
-            <div className={styles.navMeta}>
-              <span className={styles.navDot} />
-              <span className={styles.navMetaText}>{t("stat1Value")} {t("stat1Label")}</span>
-            </div>
           </div>
         </nav>
 
         {/* HERO */}
         <section className={styles.hero}>
           <motion.div className={styles.heroContent} {...reveal}>
-            <span className={styles.heroEyebrow}>{t("trustText")}</span>
             <h1 className={styles.heroTitle}>{t("heroTitle")}</h1>
             <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
             <p className={styles.heroDesc} dangerouslySetInnerHTML={{ __html: t("heroDesc") }} />
@@ -580,18 +575,6 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                 </span>
               </CtaLink>
               <a href="#ferramentas" className={styles.heroGhost}>Ver o ecossistema</a>
-            </div>
-            <div className={styles.heroStats}>
-              {[
-                { v: t("stat1Value"), l: t("stat1Label") },
-                { v: t("stat2Value"), l: t("stat2Label") },
-                { v: t("stat3Value"), l: t("stat3Label") },
-              ].map((s, i) => (
-                <div key={i} className={styles.heroStat}>
-                  <span className={styles.heroStatV}>{s.v}</span>
-                  <span className={styles.heroStatL}>{s.l}</span>
-                </div>
-              ))}
             </div>
           </motion.div>
 
@@ -631,8 +614,8 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
           </motion.div>
         </section>
 
-        {/* STACK — 6 ferramentas reais */}
-        <section id="ferramentas" className={styles.section}>
+        {/* STACK — 6 ferramentas com pinning + scroll-triggered (desktop) */}
+        <section id="ferramentas" className={styles.sectionFlush}>
           <motion.div {...reveal} className={styles.sectionHead}>
             <span className={styles.sectionLabel}>{t("stackLabel")}</span>
             <h2 className={styles.sectionTitle}>
@@ -642,51 +625,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
             <p className={styles.sectionDesc}>{t("stackDesc")}</p>
           </motion.div>
 
-          <div className={styles.stackList}>
-            {stackTools.map((tool, i) => (
-              <motion.article
-                key={tool.key}
-                className={`${styles.stackRow} ${i % 2 === 1 ? styles.stackRowReverse : ""}`}
-                initial={reduceMotion ? false : { opacity: 0, y: 32 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.6, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <div className={styles.stackText}>
-                  <div className={styles.stackIcon}>
-                    {TOOL_ICONS[tool.key] || TOOL_ICONS.radar}
-                  </div>
-                  <h3 className={styles.stackName}>{tool.name}</h3>
-                  <p className={styles.stackVerb}>{tool.verb}</p>
-                  <p className={styles.stackDesc}>{tool.desc}</p>
-                  <ul className={styles.stackBullets}>
-                    {tool.bullets.map((b, j) => (
-                      <li key={j}><span className={styles.stackBulletDot} />{b}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className={styles.stackVisual}>
-                  {/* Mockup animado — cada ferramenta tem o seu (radar a varrer,
-                      disparador a enviar, chat a receber, etc). */}
-                  <div className={styles.mockFrame}>
-                    <div className={styles.mockBar}>
-                      <span className={`${styles.vslDot} ${styles.vslDotR}`} />
-                      <span className={`${styles.vslDot} ${styles.vslDotY}`} />
-                      <span className={`${styles.vslDot} ${styles.vslDotG}`} />
-                      <span className={styles.mockUrl}>czero.sbs/{tool.key}</span>
-                    </div>
-                    <div className={styles.mockBody}>
-                      {(() => {
-                        const Mock = TOOL_MOCKS[tool.key];
-                        return Mock ? <Mock /> : null;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              </motion.article>
-            ))}
-          </div>
+          <StackScrolly tools={stackTools} toolIcons={TOOL_ICONS} />
         </section>
 
         {/* NETWORK */}

@@ -36,12 +36,12 @@ const DEFAULTS: Record<string, any> = {
   ],
 
   // Network
-  networkLabel: "A network",
-  networkTitle: "Onde acontece",
-  networkTitleHighlight: "de verdade.",
+  networkLabel: "Código Zero — Network",
+  networkTitle: "A comunidade privada",
+  networkTitleHighlight: "onde tudo acontece.",
   networkMembersCount: "143",
   networkMembersLabel: "membros ativos",
-  networkDesc: "A network privada do Código Zero — onde quem está construindo de verdade troca ideia. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
+  networkDesc: "Quem está construindo de verdade troca ideia aqui. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
   networkPillars: [
     { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
     { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },

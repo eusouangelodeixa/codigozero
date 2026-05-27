@@ -1,0 +1,258 @@
+/* ─────────────────────────────────────────────────────────
+   StackScrolly — sticky-pinned scrollytelling (Apple/Stripe)
+   ───────────────────────────────────────────────────────── */
+
+/* The outer container is tall (height set inline = tools.length × 100vh).
+   The .sticky child stays pinned to the viewport while you scroll through it. */
+.container {
+  position: relative;
+  width: 100%;
+}
+.sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: var(--space-6, 32px);
+}
+
+.counter {
+  position: absolute;
+  top: var(--space-6, 32px);
+  right: var(--space-6, 32px);
+  z-index: 2;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--bg-glass, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(10px);
+  font-family: var(--font-mono, monospace);
+}
+.counterNum {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent, #2dd4bf);
+  font-variant-numeric: tabular-nums;
+}
+.counterSep, .counterTotal {
+  font-size: 13px;
+  color: var(--text-tertiary, #888);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  width: 100%;
+  max-width: var(--max-content, 1200px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.1fr);
+  gap: clamp(32px, 6vw, 80px);
+  align-items: center;
+}
+
+.textCol {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-width: 0;
+}
+
+/* Index list of tool names — current one highlighted */
+.index {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.indexItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  color: var(--text-tertiary, #888);
+  transition: color 0.4s ease;
+}
+.indexItemActive {
+  color: var(--text-primary, #fff);
+}
+.indexDot {
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1), background 0.45s;
+}
+.indexItemActive .indexDot {
+  width: 42px;
+  background: var(--accent, #2dd4bf);
+}
+.indexLabel {
+  font-weight: 600;
+}
+
+.textWrap {
+  position: relative;
+  min-height: 320px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.icon {
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.2), rgba(45, 212, 191, 0.05));
+  color: var(--accent, #2dd4bf);
+  border: 1px solid rgba(45, 212, 191, 0.25);
+  margin-bottom: 4px;
+}
+
+.name {
+  font-size: clamp(2rem, 4.5vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--text-primary, #fff);
+  margin: 0;
+}
+
+.verb {
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  color: var(--accent, #2dd4bf);
+  font-weight: 600;
+  margin: 0;
+}
+
+.desc {
+  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+  color: var(--text-secondary, #bbb);
+  line-height: 1.65;
+  margin: 8px 0 0;
+}
+
+.bullets {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bullets li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary, #bbb);
+  font-size: 0.9rem;
+}
+.bulletDot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent, #2dd4bf);
+  flex-shrink: 0;
+}
+
+/* Right column: mockup */
+.mockCol {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  perspective: 1200px;
+}
+
+.mockFrame {
+  width: 100%;
+  max-width: 560px;
+  background: var(--bg-elevated, #0a0a0a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 60px 100px -40px rgba(0, 0, 0, 0.7),
+    0 30px 60px -30px rgba(45, 212, 191, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+.mockBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid var(--border-default, rgba(255, 255, 255, 0.08));
+}
+.mockDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.mockDotR { background: #ff5f57; }
+.mockDotY { background: #febc2e; }
+.mockDotG { background: #28c840; }
+.mockUrl {
+  margin-left: 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+  letter-spacing: 0.02em;
+}
+.mockBody {
+  padding: 24px;
+  min-height: 360px;
+  background:
+    radial-gradient(800px circle at 10% 0%, rgba(45, 212, 191, 0.07), transparent 50%),
+    var(--bg-elevated, #0a0a0a);
+  position: relative;
+}
+
+/* ── Mobile fallback: vertical cards ── */
+.mobileStack {
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+  padding: 0 var(--space-4, 24px);
+}
+.mobileItem {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.mobileText { display: flex; flex-direction: column; gap: 10px; }
+.mobileText .name { font-size: clamp(1.5rem, 6vw, 1.85rem); }
+.mobileMock { display: flex; justify-content: center; }
+.mobileMock .mockFrame { max-width: 100%; }
+.mobileMock .mockBody { min-height: 280px; padding: 18px; }
+
+/* ── Tablet adjust (pin stays but mock shrinks) ── */
+@media (max-width: 1100px) {
+  .sticky { padding: 24px; }
+  .grid { gap: 36px; }
+  .mockBody { min-height: 320px; padding: 20px; }
+  .counter { top: 20px; right: 20px; }
+}
+
+@media (max-width: 640px) {
+  .mobileStack { gap: 48px; padding: 0 16px; }
+  .mockBody { min-height: 240px; padding: 14px; }
+  .mockUrl { display: none; }
+}

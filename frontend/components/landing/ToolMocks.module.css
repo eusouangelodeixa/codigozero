@@ -598,3 +598,81 @@
   50% { opacity: 0.45; }
   100% { opacity: 1; }
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Mobile compaction — drop the lowest-priority rows in each mock so
+   nothing overflows the constrained .mockBody on small viewports.
+   ───────────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  /* Mocks share the same canvas constraints as the parent .mockBody. */
+  .radar, .disp, .cofre, .forja, .qg, .chat {
+    min-height: 0;
+    height: 100%;
+    gap: 8px;
+  }
+
+  /* RADAR — shrink map cell and trim leads list to 3 */
+  .radarBody { grid-template-columns: 1.1fr 0.95fr; gap: 8px; }
+  .radarItem { padding: 5px 8px; gap: 7px; }
+  .radarItemName { font-size: 11px; }
+  .radarItemPhone { font-size: 9px; }
+  .radarList .radarItem:nth-child(n + 4) { display: none; }
+  .radarChip { font-size: 10px; padding: 3px 8px; }
+  .radarStatus { font-size: 10px; }
+
+  /* DISPARADOR — show only 4 contacts (still demonstrates the effect) */
+  .dispList .dispItem:nth-child(n + 5) { display: none; }
+  .dispItem { padding: 4px 8px; grid-template-columns: 20px 1fr auto; }
+  .dispAvatar { width: 20px; height: 20px; font-size: 9px; }
+  .dispName { font-size: 11px; }
+  .dispStatusOk, .dispStatusPending { font-size: 9px; }
+  .dispCounter { font-size: 18px; }
+  .dispTitle { font-size: 12px; }
+  .dispSub { font-size: 10px; }
+
+  /* COFRE — tighter padding, smaller mono */
+  .cofreCard { min-height: 0; }
+  .cofreBody { padding: 8px 10px; font-size: 10.5px; line-height: 1.5; gap: 2px; }
+  .cofreLineNum { font-size: 9px; }
+  .cofreName { font-size: 10px; }
+  .cofreCardHead { padding: 6px 10px; }
+  .cofreCopyBtn { padding: 3px 9px; font-size: 9.5px; }
+
+  /* FORJA — drop the last (5th) lesson */
+  .forjaList .forjaItem:nth-child(n + 5) { display: none; }
+  .forjaItem { padding: 6px 10px; gap: 8px; grid-template-columns: 22px 1fr; }
+  .forjaCheck { width: 18px; height: 18px; font-size: 9px; }
+  .forjaTitle { font-size: 11px; }
+  .forjaModule { font-size: 11.5px; }
+  .forjaProgress { font-size: 10px; }
+
+  /* QG — smaller countdown cells */
+  .qgTimer { gap: 4px; }
+  .qgCell { padding: 8px 2px; min-height: 56px; }
+  .qgCellV { font-size: 20px; }
+  .qgCellL { font-size: 8px; }
+  .qgCta { padding: 8px 12px; font-size: 11.5px; }
+  .qgChip { font-size: 10px; padding: 3px 8px; }
+  .qgAvatar { width: 18px; height: 18px; font-size: 9px; margin-left: -5px; border-width: 2px; }
+
+  /* CHAT — show only the last 3 messages */
+  .chatBubble:nth-child(n + 4) { display: none; }
+  .chatBubble { padding: 6px 10px; }
+  .chatText { font-size: 11px; line-height: 1.35; }
+  .chatWho { font-size: 9px; }
+  .chatTitle { font-size: 10.5px; }
+  .chatOnline { font-size: 9.5px; }
+  .chatTyping { padding: 6px 10px; }
+}
+
+@media (max-width: 480px) {
+  /* Even tighter for narrow phones */
+  .radarBody { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .radarList .radarItem:nth-child(n + 3) { display: none; }
+  .dispList .dispItem:nth-child(n + 4) { display: none; }
+  .forjaList .forjaItem:nth-child(n + 4) { display: none; }
+  .chatBubble:nth-child(n + 3) { display: none; }
+  .cofreBody { font-size: 10px; }
+  .qgCellV { font-size: 17px; }
+}

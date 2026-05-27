@@ -9,10 +9,14 @@
   width: 100%;
 }
 
+/* 100dvh respects the dynamic browser UI bar on mobile (URL bar coming
+   in/out), unlike 100vh which freezes at the larger value. Fallback to
+   100vh for older browsers. */
 .sticky {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -166,49 +170,64 @@
   .mockBody { min-height: 320px; padding: 20px; }
 }
 
-/* ── Phone: stack vertically, still pinned ── */
+/* ── Phone: stack vertically, still pinned ─────────────────────────────
+   The 100dvh viewport gets split between the mock (auto-fits content)
+   and the copy. We don't fix heights — flex + minmax constraints let
+   the grid breathe in any portrait/landscape combination.
+*/
 @media (max-width: 900px) {
   .sticky {
-    padding: 24px 16px;
+    padding: 14px 16px;
     align-items: stretch;
   }
   .grid {
     grid-template-columns: 1fr;
-    gap: 20px;
+    grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+    gap: 14px;
     align-content: center;
-    grid-auto-rows: min-content;
+    align-items: stretch;
   }
-  .mockCol { order: 0; }
-  .textCol { order: 1; }
-  .mockFrame { max-width: 100%; }
-  .mockBody { min-height: 200px; padding: 14px; }
+  .mockCol { order: 0; min-height: 0; }
+  .textCol { order: 1; min-height: 0; justify-content: flex-start; }
+
+  .mockFrame { max-width: 100%; border-radius: 12px; }
+  .mockBar { padding: 8px 12px; }
+  .mockBody {
+    min-height: 0;
+    padding: 12px;
+    /* Cap how tall the mock can grow so the text always has room.
+       45dvh fits comfortably on iPhone SE (~280px) up to large phones. */
+    max-height: 45dvh;
+    overflow: hidden;
+  }
   .mockUrl { display: none; }
 
   .icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 11px;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
     margin-bottom: 0;
   }
   .name { font-size: clamp(1.4rem, 7vw, 1.85rem); }
-  .verb { font-size: 0.95rem; }
-  .desc { font-size: 0.88rem; line-height: 1.55; }
-  .text { gap: 8px; }
-  .bullets { gap: 5px; margin-top: 6px; }
-  .bullets li { font-size: 0.8rem; gap: 8px; }
+  .verb { font-size: 0.9rem; }
+  .desc { font-size: 0.85rem; line-height: 1.5; }
+  .text { gap: 6px; }
+  .bullets { gap: 4px; margin-top: 6px; }
+  .bullets li { font-size: 0.78rem; gap: 8px; }
 }
 
-/* ── Narrow phones — drop bullets count and shrink mock further ── */
+/* ── Narrow phones (≤ 480px) — give a little more room to the mock ── */
 @media (max-width: 480px) {
-  .sticky { padding: 16px 12px; }
-  .mockBody { min-height: 170px; padding: 12px; }
-  .grid { gap: 14px; }
-  .name { font-size: clamp(1.25rem, 7vw, 1.6rem); }
+  .sticky { padding: 12px 12px; }
+  .mockBody { max-height: 42dvh; padding: 10px; }
+  .grid { gap: 12px; }
+  .name { font-size: clamp(1.2rem, 7vw, 1.5rem); }
+  .desc { font-size: 0.8rem; }
+  .bullets li { font-size: 0.75rem; }
 }
 
-/* ── Very short viewports (landscape phones, e.g. 380px tall) ─────────
-   Hide the bullets so the text doesn't push the mock off-screen. */
+/* ── Very short viewports (landscape phones) — hide bullets ── */
 @media (max-height: 620px) and (max-width: 900px) {
   .bullets { display: none; }
-  .mockBody { min-height: 150px; }
+  .mockBody { max-height: 55dvh; }
 }

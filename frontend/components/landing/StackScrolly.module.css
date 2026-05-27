@@ -2,21 +2,22 @@
    StackScrolly — sticky-pinned scrollytelling
    ───────────────────────────────────────────────────────── */
 
-/* Outer container height is set inline (tools.length × 100vh).
-   The .sticky child stays pinned while the user scrolls through. */
+/* The landing's <nav> is sticky at top: 0 with 56px of height, so the
+   pinned pane needs to start beneath it — otherwise the nav covers the
+   top of the mock. */
 .container {
   position: relative;
   width: 100%;
+  --nav-h: 56px;
 }
 
 /* 100dvh respects the dynamic browser UI bar on mobile (URL bar coming
-   in/out), unlike 100vh which freezes at the larger value. Fallback to
-   100vh for older browsers. */
+   in/out), unlike 100vh which freezes at the larger value. */
 .sticky {
   position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
+  top: var(--nav-h);
+  height: calc(100vh - var(--nav-h));
+  height: calc(100dvh - var(--nav-h));
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -179,8 +180,9 @@
 @media (max-width: 900px) {
   .sticky {
     /* svh = small viewport (URL bar visible). Guarantees content fits
-       even at the smallest browser state. */
-    height: 100svh;
+       even at the smallest browser state. Minus the nav so nothing is
+       hidden under the sticky top bar. */
+    height: calc(100svh - var(--nav-h));
     /* Use grid place-items to perfectly center the inner grid both
        horizontally and vertically inside the pinned pane. */
     display: grid;

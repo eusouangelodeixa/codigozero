@@ -1,6 +1,15 @@
 "use client";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Handshake,
+  Smartphone,
+  Menu as LucideMenu,
+  X as LucideX,
+  ShieldCheck,
+  LogOut,
+  Star,
+} from "lucide-react";
 import { Logo } from "@/components/Logo";
 import {
   DashboardIcon,
@@ -60,11 +69,8 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/afiliacao",
         label: "Afiliação",
-        icon: ({ size = 18 }: { size?: number; className?: string }) => (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
-          </svg>
+        icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+          <Handshake size={size} strokeWidth={1.6} className={className} />
         ),
       },
     ],
@@ -77,30 +83,20 @@ const NAV_GROUPS: NavGroup[] = [
       {
         href: "/instalar",
         label: "Instalar app",
-        icon: ({ size = 18 }: { size?: number; className?: string }) => (
-          <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2.5" />
-            <line x1="12" y1="18" x2="12" y2="18.01" />
-          </svg>
+        icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+          <Smartphone size={size} strokeWidth={1.6} className={className} />
         ),
       },
     ],
   },
 ];
 
-const MenuIcon = ({ size = 20 }: { size?: number; className?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="4" y1="7" x2="20" y2="7" />
-    <line x1="4" y1="12" x2="20" y2="12" />
-    <line x1="4" y1="17" x2="20" y2="17" />
-  </svg>
+const MenuIcon = ({ size = 20, className }: { size?: number; className?: string }) => (
+  <LucideMenu size={size} strokeWidth={1.6} className={className} />
 );
 
-const CloseIcon = ({ size = 18 }: { size?: number; className?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="6" y1="6" x2="18" y2="18" />
-    <line x1="18" y1="6" x2="6" y2="18" />
-  </svg>
+const CloseIcon = ({ size = 18, className }: { size?: number; className?: string }) => (
+  <LucideX size={size} strokeWidth={1.6} className={className} />
 );
 
 const BOTTOM_NAV: NavItem[] = [
@@ -238,9 +234,7 @@ export function AppShell({
               </span>
               {isCloseFriends && (
                 <span className={styles.cfBadge} title={cfTitle}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <path d="M12 2l2.39 6.95H22l-6.19 4.5L18.18 22 12 17.27 5.82 22l2.37-8.55L2 8.95h7.61L12 2z" />
-                  </svg>
+                  <Star size={10} fill="currentColor" strokeWidth={0} />
                   Close Friends
                 </span>
               )}
@@ -255,10 +249,7 @@ export function AppShell({
               aria-label="Painel admin"
               title="Painel admin"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0110 0v4" />
-              </svg>
+              <ShieldCheck size={15} strokeWidth={1.6} />
             </button>
           )}
           <button
@@ -268,11 +259,7 @@ export function AppShell({
             aria-label="Sair"
             title="Sair"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
+            <LogOut size={15} strokeWidth={1.6} />
           </button>
         </div>
       </aside>
@@ -361,9 +348,7 @@ export function AppShell({
               </span>
               {isCloseFriends && (
                 <span className={styles.cfBadge} title={cfTitle}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <path d="M12 2l2.39 6.95H22l-6.19 4.5L18.18 22 12 17.27 5.82 22l2.37-8.55L2 8.95h7.61L12 2z" />
-                  </svg>
+                  <Star size={10} fill="currentColor" strokeWidth={0} />
                   Close Friends
                 </span>
               )}
@@ -412,10 +397,7 @@ export function AppShell({
               aria-label="Painel admin"
               title="Painel admin"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0110 0v4" />
-              </svg>
+              <ShieldCheck size={15} strokeWidth={1.6} />
               <span>Admin</span>
             </button>
           )}
@@ -425,11 +407,7 @@ export function AppShell({
             className={cx(styles.iconButton, styles.logoutButton)}
             aria-label="Sair"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
+            <LogOut size={15} strokeWidth={1.6} />
             <span>Sair</span>
           </button>
         </footer>

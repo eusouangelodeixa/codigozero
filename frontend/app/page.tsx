@@ -2,7 +2,22 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
+import {
+  Radar as IconRadar,
+  Send as IconSend,
+  Library as IconLibrary,
+  Hammer as IconHammer,
+  Compass as IconCompass,
+  MessagesSquare as IconMessages,
+  ChevronDown as IconChevron,
+  Star as IconStar,
+  Shield as IconShield,
+  Instagram as IconInstagram,
+  Play as IconPlay,
+  ArrowRight as IconArrow,
+} from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { TOOL_MOCKS } from "@/components/landing/ToolMocks";
 import styles from "./landing.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -387,15 +402,15 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
   const flowSteps = (sec.flowSteps || DEFAULTS.flowSteps) as { num: string; title: string; desc: string }[];
   const faqItems = (sec.faqItems || DEFAULTS.faqItems) as { q: string; a: string }[];
 
-  // Icon per tool — keyed by the tool's `key` field so admin reorders don't
-  // desync icons from names.
+  // Icon per tool (lucide-react) — keyed by the tool's `key` field so admin
+  // reorders don't desync icons from names.
   const TOOL_ICONS: Record<string, React.ReactNode> = {
-    radar: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 3 L12 12 L19 7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none" /></svg>,
-    disparador: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 L11 13" /><path d="M22 2 L15 22 L11 13 L2 9 L22 2 z" /></svg>,
-    cofre: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="12" cy="12" r="3.5" /><path d="M16 12 h2 M6 12 h2" /></svg>,
-    forja: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 4 L20 10 L10 20 L4 14 z" /><path d="M14 4 L4 14" /><circle cx="17" cy="7" r="1.6" fill="currentColor" stroke="none" /></svg>,
-    qg: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21 V8 L12 3 L21 8 V21 z" /><path d="M9 21 V13 H15 V21" /></svg>,
-    chat: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12 a8 8 0 1 1 -3.2 -6.4 L21 4 v6 h-6" transform="scale(-1 1) translate(-22 0)" /><path d="M8 11 h.01 M12 11 h.01 M16 11 h.01" /></svg>,
+    radar: <IconRadar size={22} strokeWidth={1.6} />,
+    disparador: <IconSend size={22} strokeWidth={1.6} />,
+    cofre: <IconLibrary size={22} strokeWidth={1.6} />,
+    forja: <IconHammer size={22} strokeWidth={1.6} />,
+    qg: <IconCompass size={22} strokeWidth={1.6} />,
+    chat: <IconMessages size={22} strokeWidth={1.6} />,
   };
 
   // FAQ toggle state — only one open at a time keeps the page tidy.
@@ -558,7 +573,12 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
             <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
             <p className={styles.heroDesc} dangerouslySetInnerHTML={{ __html: t("heroDesc") }} />
             <div className={styles.heroActions}>
-              <CtaLink className={styles.heroCta}>{t("ctaText")}</CtaLink>
+              <CtaLink className={styles.heroCta}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  {t("ctaText")}
+                  <IconArrow size={16} strokeWidth={2.2} />
+                </span>
+              </CtaLink>
               <a href="#ferramentas" className={styles.heroGhost}>Ver o ecossistema</a>
             </div>
             <div className={styles.heroStats}>
@@ -601,7 +621,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
               ) : (
                 <div className={styles.vslPlaceholder}>
                   <div className={styles.vslPlayBtn}>
-                    <svg width="28" height="28" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                    <IconPlay size={28} fill="currentColor" strokeWidth={0} />
                   </div>
                   <p className={styles.vslText}>{t("vslSubtitle")}</p>
                   <p className={styles.vslHint}>{t("vslHint")}</p>
@@ -647,7 +667,8 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                 </div>
 
                 <div className={styles.stackVisual}>
-                  {/* Mockup placeholder — admin pode substituir com screenshot real */}
+                  {/* Mockup animado — cada ferramenta tem o seu (radar a varrer,
+                      disparador a enviar, chat a receber, etc). */}
                   <div className={styles.mockFrame}>
                     <div className={styles.mockBar}>
                       <span className={`${styles.vslDot} ${styles.vslDotR}`} />
@@ -656,21 +677,10 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                       <span className={styles.mockUrl}>czero.sbs/{tool.key}</span>
                     </div>
                     <div className={styles.mockBody}>
-                      <div className={styles.mockHero}>
-                        <div className={styles.mockIcon}>{TOOL_ICONS[tool.key]}</div>
-                        <div className={styles.mockHeroText}>
-                          <span className={styles.mockHeroTitle}>{tool.name}</span>
-                          <span className={styles.mockHeroSub}>{tool.verb}</span>
-                        </div>
-                      </div>
-                      <div className={styles.mockRows}>
-                        {tool.bullets.map((_, j) => (
-                          <div key={j} className={styles.mockRow}>
-                            <span className={styles.mockRowDot} />
-                            <span className={styles.mockRowBar} style={{ width: `${65 + (j * 7) % 25}%` }} />
-                          </div>
-                        ))}
-                      </div>
+                      {(() => {
+                        const Mock = TOOL_MOCKS[tool.key];
+                        return Mock ? <Mock /> : null;
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -781,7 +791,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
 
             <div className={styles.cfCallout}>
               <span className={styles.cfBadge}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.39 6.95H22l-6.19 4.5L18.18 22 12 17.27 5.82 22l2.37-8.55L2 8.95h7.61L12 2z" /></svg>
+                <IconStar size={12} fill="currentColor" strokeWidth={0} />
                 {t("closeFriendsLabel")}
               </span>
               <h4 className={styles.cfTitle}>{t("closeFriendsTitle")}</h4>
@@ -794,9 +804,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
         <section className={styles.guaranteeSection}>
           <motion.div {...reveal} className={styles.guaranteeCard}>
             <div className={styles.guaranteeShield}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
+              <IconShield size={40} strokeWidth={1.5} />
             </div>
             <span className={styles.guaranteeLabel}>{t("guaranteeLabel")}</span>
             <h2 className={styles.guaranteeTitle}>{t("guaranteeTitle")}</h2>
@@ -828,7 +836,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                   >
                     <span>{item.q}</span>
                     <span className={styles.faqChev} aria-hidden>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                      <IconChevron size={14} strokeWidth={2} />
                     </span>
                   </button>
                   <motion.div
@@ -861,7 +869,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
               <div className={styles.footerLogo}><Logo size={20} /><span className={styles.footerBrand}>Código Zero</span></div>
               <p className={styles.footerDesc}>{t("footerDesc")}</p>
               <a href="https://www.instagram.com/ocodigozero_/" target="_blank" rel="noopener noreferrer" className={styles.footerLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="5" /><circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" /></svg>
+                <IconInstagram size={16} strokeWidth={1.5} />
                 @ocodigozero_
               </a>
             </div>

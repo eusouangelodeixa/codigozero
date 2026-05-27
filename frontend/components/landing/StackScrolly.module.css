@@ -2,22 +2,25 @@
    StackScrolly — sticky-pinned scrollytelling
    ───────────────────────────────────────────────────────── */
 
-/* The landing's <nav> is sticky at top: 0 with 56px of height, so the
-   pinned pane needs to start beneath it — otherwise the nav covers the
-   top of the mock. */
+/* The landing's <nav> is sticky at top:0. Its height varies by
+   breakpoint (56px desktop, ~81px on phones because of vertical
+   padding), so StackScrolly.tsx measures it at runtime and writes the
+   real value into --nav-h. We add a small breathing gap (--gap) so the
+   mockup never kisses the bottom edge of the nav. */
 .container {
   position: relative;
   width: 100%;
   --nav-h: 56px;
+  --gap: 16px;
 }
 
 /* 100dvh respects the dynamic browser UI bar on mobile (URL bar coming
    in/out), unlike 100vh which freezes at the larger value. */
 .sticky {
   position: sticky;
-  top: var(--nav-h);
-  height: calc(100vh - var(--nav-h));
-  height: calc(100dvh - var(--nav-h));
+  top: calc(var(--nav-h) + var(--gap));
+  height: calc(100vh - var(--nav-h) - var(--gap));
+  height: calc(100dvh - var(--nav-h) - var(--gap));
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -180,9 +183,9 @@
 @media (max-width: 900px) {
   .sticky {
     /* svh = small viewport (URL bar visible). Guarantees content fits
-       even at the smallest browser state. Minus the nav so nothing is
-       hidden under the sticky top bar. */
-    height: calc(100svh - var(--nav-h));
+       even at the smallest browser state. Minus the nav (measured at
+       runtime) and a breathing gap so nothing is hidden under the bar. */
+    height: calc(100svh - var(--nav-h) - var(--gap));
     /* Use grid place-items to perfectly center the inner grid both
        horizontally and vertically inside the pinned pane. */
     display: grid;

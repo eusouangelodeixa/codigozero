@@ -15,7 +15,7 @@
  * Reduced-motion users land on the last frame and skip the AnimatePresence
  * transitions.
  */
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   motion,
   AnimatePresence,
@@ -25,6 +25,36 @@ import {
 } from "motion/react";
 import { TOOL_MOCKS } from "./ToolMocks";
 import styles from "./StackScrolly.module.css";
+
+/**
+ * Measure the landing nav and publish its height as a CSS var on the
+ * scrollytelling container. The CSS uses this var to offset the sticky
+ * pane (top + height) so the nav never covers the mockup.
+ *
+ * Falls back to 56px (desktop nav height) if no <nav> is mounted.
+ */
+function useNavOffset(containerRef: React.RefObject<HTMLDivElement | null>) {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const container = containerRef.current;
+    if (!container) return;
+    const nav = document.querySelector<HTMLElement>("body nav");
+    if (!nav) return;
+
+    const update = () => {
+      const h = nav.getBoundingClientRect().height;
+      if (h > 0) container.style.setProperty("--nav-h", `${Math.ceil(h)}px`);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(nav);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", update);
+    };
+  }, [containerRef]);
+}
 
 export interface ScrollyTool {
   key: string;
@@ -43,6 +73,8 @@ export function StackScrolly({ tools, toolIcons }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const reduce = useReducedMotion();
+
+  useNavOffset(containerRef);
 
   const { scrollYProgress } = useScroll({
     target: containerRef,

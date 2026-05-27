@@ -143,10 +143,15 @@ export default function AdminLanding() {
 
   const saveSection = async () => {
     setSaving(true);
+    // Mirror saveAll's price extraction so partial saves don't accidentally
+    // restore the previous LandingConfig.priceAmount (cfg.priceAmount holds
+    // the value loaded at mount, not what the user just typed).
     await fetch(`${API}/api/admin/landing-config`, {
       method: "PATCH", headers: hdr(),
       body: JSON.stringify({
         ...cfg,
+        priceAmount: parseInt(sec.priceAmount) || cfg.priceAmount || 797,
+        maxVagas: parseInt(sec.stat2Value) || cfg.maxVagas || 50,
         sections: sec,
       }),
     });

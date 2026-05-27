@@ -126,16 +126,43 @@ router.post('/lojou', async (req: Request, res: Response) => {
         const paymentMethod = data.payment_method || 'mpesa';
 
         // ── Close Friends order bump ─────────────────────────────────────
-        // The buyer either took the bump on this payment or didn't. We
-        // detect it by scanning the payload for the configured pid, and
-        // use that to (a) extend the subscription, (b) mark the badge,
-        // (c) save audit fields on the Transaction. Absence on a renewal
-        // payment downgrades the user (handled below where we update the
-        // existing row).
-        const bumpMatch = env.LOJOU_CLOSE_FRIENDS_PID
+        // Primary detection: scan the Lojou payload for the configured pid.
+        //
+        // Fallback: when a product has coproducer splits enabled, Lojou
+        // strips order_bump[] to an empty array even when the buyer took
+        // the bump (the gateway shows the seller-net amount instead of
+        // declaring the line items). To recover, we infer the bump from
+        // the net amount — if it's materially higher than the principal
+        // alone could ever produce, the bump was bought.
+        //
+        // Heuristic: principal-only net is capped by `principalPrice` (no
+        // upsell can come from below). A net amount > principalPrice ×
+        // BUMP_AMOUNT_THRESHOLD means an upsell was attached. Default
+        // ratio is 1.5, configurable via LOJOU_BUMP_DETECT_RATIO.
+        let bumpMatch = env.LOJOU_CLOSE_FRIENDS_PID
           ? detectOrderBump(data, env.LOJOU_CLOSE_FRIENDS_PID)
           : null;
-        if (bumpMatch) {
+
+        const activePrincipal = await getActivePrice();
+        const ratio = parseFloat(process.env.LOJOU_BUMP_DETECT_RATIO || '1.5');
+        const bumpInferredByAmount =
+          !bumpMatch &&
+          env.LOJOU_CLOSE_FRIENDS_PID &&
+          activePrincipal > 0 &&
+          totalAmount > activePrincipal * ratio;
+
+        if (bumpInferredByAmount) {
+          bumpMatch = {
+            pid: env.LOJOU_CLOSE_FRIENDS_PID,
+            // Gateway didn't tell us the bump line — use the configured
+            // gross price as the canonical value for audit.
+            amount: parseFloat(process.env.LOJOU_CLOSE_FRIENDS_PRICE || '1297'),
+            matchedAt: `inferred:amount>${(activePrincipal * ratio).toFixed(2)}`,
+          };
+          console.log(
+            `[WEBHOOK] 🥂 Close Friends inferred from amount (net=${totalAmount}, principal=${activePrincipal}, ratio>${ratio})`,
+          );
+        } else if (bumpMatch) {
           console.log(
             `[WEBHOOK] 🥂 Close Friends bump detected at ${bumpMatch.matchedAt} (amount=${bumpMatch.amount})`,
           );

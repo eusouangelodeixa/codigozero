@@ -55,12 +55,31 @@ function parseMapsUrl(url: string): {
   return out;
 }
 
-/** Build a stable maps.google.com link from a placeId, falling back to the raw URL. */
-function buildCanonicalMapsUrl(placeId: string | null, fallback: string): string {
-  if (placeId) {
-    return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(placeId)}`;
+/**
+ * Build a working maps.google.com link.
+ *
+ * The `!1s` placeId we extract from the URL is a hex FID
+ * (`0x...:0x...`), which is NOT accepted by `?q=place_id:` (only
+ * ChIJ-format CIDs are). So we never construct that link.
+ *
+ * Priority:
+ *   1. Canonical `/maps/place/` URL — stable and opens the right pin.
+ *   2. lat/lng search — works universally when we have coords.
+ *   3. text search by "name, city" — last resort when coords missing.
+ */
+function buildMapsUrl(
+  canonicalUrl: string,
+  latitude: number | null,
+  longitude: number | null,
+  name: string,
+  city: string,
+): string {
+  if (canonicalUrl && canonicalUrl.includes('/maps/place/')) return canonicalUrl;
+  if (latitude != null && longitude != null) {
+    return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
   }
-  return fallback;
+  const q = encodeURIComponent([name, city].filter(Boolean).join(', '));
+  return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
 
 /** Tri-state filter: 'any' passes, 'has' needs truthy, 'none' needs falsy. */
@@ -224,7 +243,7 @@ export const scraperWorker = new Worker<ScrapeJobData>(
             if (status === 'Website Bom')
               recommendedScriptId = findScriptIdFor('fechamento') || findScriptIdFor('geral');
 
-            const mapsUrl = buildCanonicalMapsUrl(placeId, finalUrl);
+            const mapsUrl = buildMapsUrl(finalUrl, latitude, longitude, details.name, city);
 
             const lead = await prisma.scrapedLead.create({
               data: {

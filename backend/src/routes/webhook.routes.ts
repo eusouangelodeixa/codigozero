@@ -304,6 +304,14 @@ router.post('/lojou', async (req: Request, res: Response) => {
           coproducerSharePct: coproducer?.sharePct ?? null,
         });
 
+        // Idempotency probe for the coupon-usage increment below — we only
+        // want to bump usesCount on the FIRST time this orderId is seen,
+        // not on Lojou webhook re-deliveries.
+        const txExistedBefore = await prisma.transaction.findUnique({
+          where: { orderId: String(orderId) },
+          select: { id: true },
+        });
+
         await prisma.transaction.upsert({
           where: { orderId: String(orderId) },
           update: {
@@ -337,6 +345,39 @@ router.post('/lojou', async (req: Request, res: Response) => {
             coproducerFee: fees.coproducerFee,
           },
         });
+
+        // ── Coupon usage tracking ────────────────────────────────────────
+        // Lojou puts the coupon code on the top-level webhook payload as
+        // `coupon_code` (also surfaced as `discount_amount`/`original_amount`
+        // on couponed orders). We only increment usesCount when this
+        // orderId is being seen for the first time — Lojou re-delivers
+        // webhooks on its own retry schedule, and a re-delivery should
+        // not double-count the use.
+        const couponCodeRaw = (data.coupon_code || data.coupon?.code || '').toString().trim();
+        if (couponCodeRaw && !txExistedBefore) {
+          try {
+            const couponCode = couponCodeRaw.toUpperCase();
+            const updated = await prisma.coupon.updateMany({
+              where: { code: couponCode, active: true },
+              data: { usesCount: { increment: 1 } },
+            });
+            if (updated.count > 0) {
+              // Re-read to check whether the cap was hit and we should
+              // disable the coupon (mirrors Lojou's own behavior).
+              const c = await prisma.coupon.findUnique({ where: { code: couponCode } });
+              if (c && c.usesCount >= c.maxUses) {
+                await prisma.coupon.update({ where: { id: c.id }, data: { active: false } });
+                console.log(`[WEBHOOK] 🎟️ Coupon ${couponCode} exhausted (${c.usesCount}/${c.maxUses}) → disabled`);
+              } else if (c) {
+                console.log(`[WEBHOOK] 🎟️ Coupon ${couponCode} used (${c.usesCount}/${c.maxUses})`);
+              }
+            } else {
+              console.warn(`[WEBHOOK] 🎟️ Coupon ${couponCode} on order ${orderId} not found locally (or already inactive)`);
+            }
+          } catch (e: any) {
+            console.error('[WEBHOOK] Coupon usage tracking failed (non-blocking):', e?.message || e);
+          }
+        }
 
         console.log(`[WEBHOOK] ✅ User created/reactivated: ${user.email}`);
         console.log(`[WEBHOOK] 🔑 Credentials — Email: ${user.email} | Password: ${rawPassword}`);

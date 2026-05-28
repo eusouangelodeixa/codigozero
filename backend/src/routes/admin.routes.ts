@@ -126,6 +126,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const search = ((req.query.search as string) || '').trim();
     const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
     const limit = Math.min(200, Math.max(5, parseInt((req.query.limit as string) || '25', 10)));
+    // Source filter: 'all' (default), 'principal' (coproducerId IS NULL),
+    // or a specific CoproducerAccount.id. Lets the admin see consolidated
+    // numbers OR drill into just the principal product OR a single
+    // coproducer without mixing them.
+    const source = ((req.query.source as string) || 'all').trim();
 
     const now = new Date();
     let startDate = new Date(now);
@@ -171,12 +176,21 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         }
       : {};
 
+    // Source filter clause
+    const sourceClause =
+      source === 'principal'
+        ? { coproducerId: null }
+        : source && source !== 'all'
+          ? { coproducerId: source }
+          : {};
+
     const [currentTransactions, previousTransactions] = await Promise.all([
       prisma.transaction.findMany({
         where: {
           status: 'approved',
           createdAt: { gte: startDate, lte: endDate },
           ...searchClause,
+          ...sourceClause,
         },
         orderBy: { createdAt: 'asc' },
       }),
@@ -185,6 +199,7 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           status: 'approved',
           createdAt: { gte: previousStartDate, lt: previousEndDate },
           ...searchClause,
+          ...sourceClause,
         },
       }),
     ]);
@@ -283,10 +298,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       renewal: v.renewal,
     }));
 
-    // ── Paginated transactions list (windowed + searched) ──────────────
+    // ── Paginated transactions list (windowed + searched + source) ─────
     const txWhere = {
       createdAt: { gte: startDate, lte: endDate },
       ...searchClause,
+      ...sourceClause,
     };
     const [txTotal, txItems] = await Promise.all([
       prisma.transaction.count({ where: txWhere }),
@@ -308,12 +324,14 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           isRenewal: true,
           isCloseFriends: true,
           orderBumpAmount: true,
+          coproducerId: true,
+          coproducer: { select: { id: true, code: true, displayName: true, user: { select: { name: true } } } },
         },
       }),
     ]);
 
     res.json({
-      window: { period, from: startDate.toISOString(), to: endDate.toISOString() },
+      window: { period, from: startDate.toISOString(), to: endDate.toISOString(), source },
       metrics: {
         revenue: currentRevenue,
         revenueGrowth,

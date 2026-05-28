@@ -145,14 +145,33 @@ export function startCronJobs() {
         let message = '';
         const name = user.name.split(' ')[0];
 
+        // Resolve which product to send the renewal for: if the user was
+        // referred by a coproducer, use *their* product/plan so the
+        // renewal sale gets attributed (and paid out) correctly. Falls
+        // back to the principal pid when no coproducer attribution.
+        let renewalPid = env.LOJOU_PRODUCT_PID;
+        let renewalPlanId: string | null = env.LOJOU_PLAN_ID;
+        let renewalFallbackPublic = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}`;
+        if (user.referredByCoproducer) {
+          const cop = await prisma.coproducerAccount.findUnique({
+            where: { code: user.referredByCoproducer },
+            select: { productPid: true, planId: true, publicCheckoutUrl: true, enabled: true },
+          });
+          if (cop && cop.enabled) {
+            renewalPid = cop.productPid;
+            renewalPlanId = cop.planId;
+            renewalFallbackPublic = cop.publicCheckoutUrl || `https://pay.lojou.app/p/${cop.productPid}`;
+          }
+        }
+
         // Generate dynamic renewal URL via Lojou if we don't have one
         let currentRenewalUrl = user.renewalUrl;
         if (!currentRenewalUrl && env.LOJOU_API_KEY) {
           try {
             const orderData = await lojouService.createOrder({
               amount: await getActivePrice(),
-              product_pid: env.LOJOU_PRODUCT_PID,
-              plan_id: env.LOJOU_PLAN_ID,
+              product_pid: renewalPid,
+              ...(renewalPlanId ? { plan_id: renewalPlanId } : {}),
               customer: {
                 name: user.name,
                 email: user.email,
@@ -170,7 +189,7 @@ export function startCronJobs() {
             console.error(`[CRON] Lojou API error for ${user.email}:`, e);
           }
         }
-        const finalLink = currentRenewalUrl || user.checkoutUrl || process.env.FRONTEND_URL || 'https://codigozero.app';
+        const finalLink = currentRenewalUrl || user.checkoutUrl || renewalFallbackPublic;
 
         if (alertTier === '3days') {
           message = `Olá ${name}! 👋\n\nSua assinatura do *Código Zero* expira em *${daysLeft} dia${daysLeft > 1 ? 's' : ''}*.\n\nRenove agora para não perder acesso às aulas, scripts e ferramentas:\n🔗 ${finalLink}\n\nQualquer dúvida, estamos aqui! 💪`;

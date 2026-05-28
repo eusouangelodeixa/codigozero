@@ -32,7 +32,10 @@ export default function LoginPage() {
 
       localStorage.setItem("cz_token", data.token);
       localStorage.setItem("cz_user", JSON.stringify(data.user));
-      window.location.href = "/dashboard";
+      // Coproducers go straight to their own dashboard — they don't have
+      // a member subscription and shouldn't see /dashboard's member UI.
+      const role = data.user?.role;
+      window.location.href = role === "coproducer" ? "/coproducer" : "/dashboard";
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao fazer login.";
       setError(msg);

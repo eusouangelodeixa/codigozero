@@ -44,6 +44,15 @@ interface Tx {
   isRenewal: boolean;
   isCloseFriends: boolean;
   orderBumpAmount?: number | null;
+  coproducerId?: string | null;
+  coproducer?: { id: string; code: string; displayName: string | null; user: { name: string } } | null;
+}
+
+interface CoproducerOpt {
+  id: string;
+  code: string;
+  displayName: string | null;
+  user: { name: string };
 }
 
 interface FinanceData {
@@ -130,6 +139,8 @@ export default function AdminFinance() {
   const [period, setPeriod] = useState<Period>("30d");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
+  const [source, setSource] = useState<string>("all"); // all | principal | <coproducerId>
+  const [coproducers, setCoproducers] = useState<CoproducerOpt[]>([]);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -164,31 +175,39 @@ export default function AdminFinance() {
         period,
         page: String(page),
         limit: String(limit),
+        source,
       });
       if (search) params.set("search", search);
       if (period === "custom" && from && to) {
         params.set("from", from);
         params.set("to", to);
       }
-      const [financeRes, upcomingRes] = await Promise.all([
+      const [financeRes, upcomingRes, coproducersRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/finance?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`${API_URL}/api/admin/finance/upcoming-renewals?days=30&limit=25`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
+        coproducers.length === 0
+          ? fetch(`${API_URL}/api/admin/coproducers`, { headers: { Authorization: `Bearer ${token}` } })
+          : Promise.resolve(null),
       ]);
       if (financeRes.ok) setData(await financeRes.json());
       if (upcomingRes.ok) {
         const json = await upcomingRes.json();
         setUpcoming(json.users || []);
       }
+      if (coproducersRes && coproducersRes.ok) {
+        const json = await coproducersRes.json();
+        setCoproducers(json.coproducers || []);
+      }
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [period, page, search, from, to, router]);
+  }, [period, page, search, from, to, source, router, coproducers.length]);
 
   useEffect(() => {
     // Don't trigger a custom-range fetch until both dates are set
@@ -263,6 +282,29 @@ export default function AdminFinance() {
             <button type="button" className={styles.searchClear} onClick={() => setSearchInput("")} aria-label="Limpar busca">×</button>
           )}
         </div>
+
+        {/* Source filter: principal vs each coproducer */}
+        <select
+          value={source}
+          onChange={(e) => { setSource(e.target.value); setPage(1); }}
+          style={{
+            padding: "8px 12px",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border-default)",
+            borderRadius: 8,
+            color: "var(--text-primary)",
+            fontSize: 13,
+            fontFamily: "inherit",
+            cursor: "pointer",
+            minWidth: 180,
+          }}
+        >
+          <option value="all">Origem: Todas</option>
+          <option value="principal">Origem: Principal</option>
+          {coproducers.map((c) => (
+            <option key={c.id} value={c.id}>Origem: {c.displayName || c.user.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* ── KPI cards ───────────────────────────────────────── */}
@@ -400,6 +442,7 @@ export default function AdminFinance() {
                 <tr>
                   <th>Cliente</th>
                   <th>Tipo</th>
+                  <th>Origem</th>
                   <th>Data</th>
                   <th>Método</th>
                   <th style={{ textAlign: "right" }}>Valor</th>
@@ -425,6 +468,15 @@ export default function AdminFinance() {
                       )}
                       {tx.isCloseFriends && (
                         <span className={styles.cfTag} style={{ marginLeft: 6 }} title="Close Friends">★ CF</span>
+                      )}
+                    </td>
+                    <td>
+                      {tx.coproducer ? (
+                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(168,85,247,0.12)", color: "#a855f7", fontWeight: 600 }}>
+                          {tx.coproducer.displayName || tx.coproducer.user.name}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Principal</span>
                       )}
                     </td>
                     <td>{fmtDateTime(tx.createdAt)}</td>

@@ -11,6 +11,7 @@ import {
 import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder } from '../services/coproducer.service';
+import { computeFees } from '../lib/fees';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -284,6 +285,17 @@ router.post('/lojou', async (req: Request, res: Response) => {
         // bump) so existing faturamento/MRR queries keep working. The bump
         // breakdown is stored separately for audit.
         // (coproducer was already resolved at the top, before bump detection)
+        // ── Gross + fee breakdown (audit) ───────────────────────────────
+        // Reconstruct what Lojou kept, what coproducer kept, what we got.
+        // principalPrice prefers the explicit product.price; falls back to
+        // (totalAmount - bumpAmount) if missing. bumpPrice uses the
+        // coproducer's bumpPrice when applicable.
+        const fees = computeFees({
+          principalPrice: principalAmount,
+          bumpPrice: isCloseFriends ? (coproducer?.bumpPrice ?? bumpAmount) : 0,
+          coproducerSharePct: coproducer?.sharePct ?? null,
+        });
+
         await prisma.transaction.upsert({
           where: { orderId: String(orderId) },
           update: {
@@ -294,6 +306,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
             isCloseFriends,
             isRenewal,
             coproducerId: coproducer?.id ?? null,
+            grossAmount: fees.grossAmount,
+            lojouFee: fees.lojouFee,
+            coproducerFee: fees.coproducerFee,
           },
           create: {
             orderId: String(orderId),
@@ -309,6 +324,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
             isCloseFriends,
             isRenewal,
             coproducerId: coproducer?.id ?? null,
+            grossAmount: fees.grossAmount,
+            lojouFee: fees.lojouFee,
+            coproducerFee: fees.coproducerFee,
           },
         });
 

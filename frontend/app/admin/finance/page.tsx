@@ -24,11 +24,16 @@ interface Metrics {
   closeFriendsRevenue: number;
   closeFriendsCount: number;
   mrr: number;
+  mrrTheoretical?: number;
+  netTicketAvg?: number;
   activePaidUsers: number;
   renewalRate: number | null;
   churnRate: number | null;
   expectedRenewals: number;
   realizedRenewals: number;
+  grossRevenue?: number;
+  totalLojouFee?: number;
+  totalCoproducerFee?: number;
 }
 
 interface Tx {
@@ -46,6 +51,9 @@ interface Tx {
   orderBumpAmount?: number | null;
   coproducerId?: string | null;
   coproducer?: { id: string; code: string; displayName: string | null; user: { name: string } } | null;
+  grossAmount?: number | null;
+  lojouFee?: number | null;
+  coproducerFee?: number | null;
 }
 
 interface CoproducerOpt {
@@ -361,6 +369,27 @@ export default function AdminFinance() {
           delta={data?.metrics.ticketGrowth ?? null}
           sub="vs período anterior"
         />
+        <MetricCard
+          label="Faturamento bruto"
+          value={data?.metrics.grossRevenue != null ? fmtMoney(data.metrics.grossRevenue) : undefined}
+          loading={loading && !data}
+          icon={<IconRevenue />}
+          sub="antes de taxa Lojou e split"
+        />
+        <MetricCard
+          label="Taxa Lojou"
+          value={data?.metrics.totalLojouFee != null ? fmtMoney(data.metrics.totalLojouFee) : undefined}
+          loading={loading && !data}
+          icon={<IconBolt />}
+          sub="10% + 10 MT por item"
+        />
+        <MetricCard
+          label="Pago a coprodutores"
+          value={data?.metrics.totalCoproducerFee != null ? fmtMoney(data.metrics.totalCoproducerFee) : undefined}
+          loading={loading && !data}
+          icon={<IconUsers />}
+          sub="split sobre o principal"
+        />
       </div>
 
       {/* ── Chart ───────────────────────────────────────────── */}
@@ -445,7 +474,10 @@ export default function AdminFinance() {
                   <th>Origem</th>
                   <th>Data</th>
                   <th>Método</th>
-                  <th style={{ textAlign: "right" }}>Valor</th>
+                  <th style={{ textAlign: "right" }}>Bruto</th>
+                  <th style={{ textAlign: "right" }}>Taxa Lojou</th>
+                  <th style={{ textAlign: "right" }}>Split coprod.</th>
+                  <th style={{ textAlign: "right" }}>Líquido</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -481,13 +513,22 @@ export default function AdminFinance() {
                     </td>
                     <td>{fmtDateTime(tx.createdAt)}</td>
                     <td><span className={styles.method}>{tx.paymentMethod || "M-Pesa"}</span></td>
-                    <td className={styles.amount} style={{ textAlign: "right" }}>
-                      {fmtMoney(tx.amount)}
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
+                      {tx.grossAmount != null ? fmtMoney(tx.grossAmount) : "—"}
                       {tx.orderBumpAmount ? (
                         <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
                           incl. bump {fmtMoney(tx.orderBumpAmount)}
                         </div>
                       ) : null}
+                    </td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)", fontSize: 12 }}>
+                      {tx.lojouFee != null ? `−${fmtMoney(tx.lojouFee)}` : "—"}
+                    </td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: tx.coproducerFee ? "#a855f7" : "var(--text-tertiary)", fontSize: 12 }}>
+                      {tx.coproducerFee != null && tx.coproducerFee > 0 ? `−${fmtMoney(tx.coproducerFee)}` : "—"}
+                    </td>
+                    <td className={styles.amount} style={{ textAlign: "right" }}>
+                      {fmtMoney(tx.amount)}
                     </td>
                     <td>{statusBadge(tx.status)}</td>
                   </tr>

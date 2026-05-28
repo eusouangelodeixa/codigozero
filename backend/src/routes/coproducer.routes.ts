@@ -33,10 +33,43 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
       enabled: acc.enabled,
       user: acc.user,
       landingUrl: `https://czero.sbs/c/${acc.code}`,
+      vslEmbedHtml: acc.vslEmbedHtml,
+      headScripts: acc.headScripts,
     });
   } catch (error) {
     console.error('[COPRODUCER] /me error:', error);
     res.status(500).json({ error: 'Erro ao carregar conta' });
+  }
+});
+
+/**
+ * PATCH /api/coproducer/me/scripts
+ *
+ * The coproducer can edit their own tracking pixels (Meta Pixel, GA,
+ * TikTok etc.) — injected into <head> on their /c/{code} landing.
+ *
+ * VSL is intentionally NOT editable here — only the superadmin sets
+ * the VSL embed so a coproducer can't replace it with random content.
+ *
+ * Hard cap at 8 KB to keep the HTML reasonable (a full pixel suite is
+ * usually <2 KB; 8 KB is plenty of slack without enabling abuse).
+ */
+router.patch('/me/scripts', async (req: AuthRequest, res: Response) => {
+  try {
+    const { headScripts } = req.body || {};
+    const raw = typeof headScripts === 'string' ? headScripts : '';
+    if (raw.length > 8000) {
+      return res.status(400).json({ error: 'Scripts excedem o limite de 8 KB' });
+    }
+    const updated = await prisma.coproducerAccount.update({
+      where: { id: req.coproducer!.id },
+      data: { headScripts: raw.trim() || null },
+      select: { headScripts: true },
+    });
+    res.json({ success: true, headScripts: updated.headScripts });
+  } catch (error) {
+    console.error('[COPRODUCER] /me/scripts error:', error);
+    res.status(500).json({ error: 'Erro ao salvar scripts' });
   }
 });
 

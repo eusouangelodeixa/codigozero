@@ -138,6 +138,7 @@ export interface ResolvedCoproducer {
   productPid: string;
   bumpProductPid: string | null;
   bumpPrice: number | null;
+  sharePct: number;
 }
 
 /**
@@ -166,6 +167,7 @@ export async function resolveCoproducerForOrder(opts: {
     productPid: true,
     bumpProductPid: true,
     bumpPrice: true,
+    sharePct: true,
     enabled: true,
   } as const;
   if (opts.productPid) {
@@ -180,6 +182,7 @@ export async function resolveCoproducerForOrder(opts: {
         productPid: byPid.productPid,
         bumpProductPid: byPid.bumpProductPid,
         bumpPrice: byPid.bumpPrice,
+        sharePct: byPid.sharePct,
       };
     }
   }
@@ -195,6 +198,7 @@ export async function resolveCoproducerForOrder(opts: {
         productPid: byCode.productPid,
         bumpProductPid: byCode.bumpProductPid,
         bumpPrice: byCode.bumpPrice,
+        sharePct: byCode.sharePct,
       };
     }
   }

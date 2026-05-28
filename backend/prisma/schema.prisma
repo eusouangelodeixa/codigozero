@@ -40,6 +40,12 @@ model User {
   closeFriends              Boolean   @default(false)
   closeFriendsUntil         DateTime?
   closeFriendsPurchaseCount Int       @default(0)
+
+  // Set when the admin grants a subscription manually (free, trial, comp,
+  // refund recovery, etc) instead of a real Lojou payment. Treated as
+  // paid for access control, but EXCLUDED from MRR/revenue counts and
+  // never gets a Transaction record. Prevents fake numbers in finance.
+  grantedManually           Boolean   @default(false)
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -155,6 +161,13 @@ model Transaction {
   status        String   // pending, approved, failed, refunded
   paymentMethod String?
   metadata      Json?
+  // ── Gross + fee breakdown (audit) ─────────────────────────────────────
+  // amount above is the NET we receive (after Lojou fee + coproducer split).
+  // These columns let the admin see the full economic picture without
+  // having to parse metadata payloads.
+  grossAmount     Float?   // sum of product + bump prices the customer paid
+  lojouFee        Float?   // platform fee deducted (10% × gross + 10 per item)
+  coproducerFee   Float?   // coproducer split deducted (sharePct × principal)
   // ── Order bump audit fields ──────────────────────────────────────────
   orderBumpPid    String?  // e.g. "JQQWc" for Close Friends
   orderBumpAmount Float?   // bump amount only, so reports can split principal vs bump
@@ -458,6 +471,14 @@ model CoproducerAccount {
   displayName         String?
   enabled             Boolean  @default(true)
   notes               String?
+
+  // VSL embed (iframe HTML) que substitui o VSL principal na landing
+  // /c/{code}. Só o superadmin edita — o coprodutor apenas visualiza.
+  vslEmbedHtml        String?
+  // Tags de rastreio (Meta Pixel, GA, TikTok etc.) que o coprodutor injeta
+  // no <head> da própria landing /c/{code}. O coprodutor edita; superadmin
+  // também pode editar/auditar.
+  headScripts         String?
 
   transactions        Transaction[]
 

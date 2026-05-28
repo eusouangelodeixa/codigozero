@@ -231,12 +231,33 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const cfTx = currentTransactions.filter((t) => t.isCloseFriends);
     const cfRevenue = sum(cfTx);
 
-    // Active MRR snapshot (independent of the period — current state)
+    // Active MRR snapshot (independent of the period — current state).
+    // Excludes grantedManually users (free/comp subs) so the MRR reflects
+    // what actually arrives every month — not "if everyone paid full price".
+    // MRR is now active users × NET ticket of recent paid transactions
+    // (last 90 days), which respects the Lojou fee + coproducer split.
+    // We expose both the theoretical (publishedPrice × users) and the
+    // realistic (netTicket × users) so admin can compare.
     const activePaidUsers = await prisma.user.count({
-      where: { subscriptionStatus: 'active', role: 'member', lojouOrderId: { not: null } },
+      where: {
+        subscriptionStatus: 'active',
+        role: 'member',
+        lojouOrderId: { not: null },
+        grantedManually: false,
+      },
     });
     const activePrice = await getActivePrice();
-    const mrr = activePaidUsers * activePrice;
+    const mrrTheoretical = activePaidUsers * activePrice;
+
+    const last90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const recentPaid = await prisma.transaction.findMany({
+      where: { status: 'approved', createdAt: { gte: last90 } },
+      select: { amount: true },
+    });
+    const recentNet = recentPaid.length > 0
+      ? recentPaid.reduce((s, t) => s + t.amount, 0) / recentPaid.length
+      : 0;
+    const mrr = Math.round(activePaidUsers * recentNet);
 
     // ── Renewal funnel for the window ──────────────────────────────────
     // "Expected renewals" = users whose subscriptionEnd fell within the
@@ -318,6 +339,9 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           userEmail: true,
           userPhone: true,
           amount: true,
+          grossAmount: true,
+          lojouFee: true,
+          coproducerFee: true,
           status: true,
           createdAt: true,
           paymentMethod: true,
@@ -346,6 +370,12 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         closeFriendsRevenue: cfRevenue,
         closeFriendsCount: cfTx.length,
         mrr,
+        mrrTheoretical,
+        netTicketAvg: Math.round(recentNet),
+        // Fee breakdown (window)
+        grossRevenue: currentTransactions.reduce((s, t) => s + (t.grossAmount || t.amount), 0),
+        totalLojouFee: currentTransactions.reduce((s, t) => s + (t.lojouFee || 0), 0),
+        totalCoproducerFee: currentTransactions.reduce((s, t) => s + (t.coproducerFee || 0), 0),
         activePaidUsers,
         renewalRate,
         churnRate,
@@ -473,15 +503,52 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
 
 router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, role, isActive, subscriptionStatus, subscriptionEnd, password } = req.body;
+    const { name, email, role, isActive, subscriptionStatus, subscriptionStart, subscriptionEnd, password, phone, grantedManually, lojouOrderId, grantAccess } = req.body;
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id }, select: { lojouOrderId: true, grantedManually: true } });
+    if (!existing) return res.status(404).json({ error: 'Usuário não encontrado' });
+
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (email !== undefined) data.email = email;
+    if (phone !== undefined) data.phone = phone;
     if (role !== undefined) data.role = role;
     if (isActive !== undefined) data.isActive = isActive;
     if (subscriptionStatus !== undefined) data.subscriptionStatus = subscriptionStatus;
+    if (subscriptionStart !== undefined) data.subscriptionStart = subscriptionStart ? new Date(subscriptionStart) : null;
     if (subscriptionEnd !== undefined) data.subscriptionEnd = subscriptionEnd ? new Date(subscriptionEnd) : null;
     if (password) data.passwordHash = await bcrypt.hash(password, 10);
+
+    // ── Manual access grant (comp / trial / refund recovery) ──────────
+    // When the admin grants access without a real payment, mark the user
+    // as grantedManually so MRR/revenue counts skip them. We synthesize
+    // a "MANUAL_<userId>" pseudo-orderId to satisfy the existing
+    // "lojouOrderId IS NOT NULL" checks that gate paid features.
+    if (grantAccess === true) {
+      data.grantedManually = true;
+      data.subscriptionStatus = subscriptionStatus || 'active';
+      if (!existing.lojouOrderId) {
+        data.lojouOrderId = `MANUAL_${req.params.id.slice(0, 8)}`;
+      }
+      if (!subscriptionStart) data.subscriptionStart = new Date();
+      if (!subscriptionEnd) {
+        // Default 30 days unless caller supplied
+        data.subscriptionEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      }
+    } else if (grantedManually !== undefined) {
+      data.grantedManually = !!grantedManually;
+    }
+
+    // Explicit lojouOrderId from the request body. If it doesn't look
+    // like a real Lojou order number (digits) we treat it as a manual
+    // grant marker too — defensive guard against past stamp-and-forget
+    // patterns like the Kelvin case.
+    if (lojouOrderId !== undefined) {
+      const s = lojouOrderId == null ? null : String(lojouOrderId).trim();
+      data.lojouOrderId = s || null;
+      if (s && !/^\d+$/.test(s) && !s.startsWith('MANUAL_')) {
+        data.grantedManually = true;
+      }
+    }
 
     const user = await prisma.user.update({ where: { id: req.params.id }, data });
     res.json({ user });

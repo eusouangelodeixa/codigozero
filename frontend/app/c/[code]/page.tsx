@@ -33,7 +33,12 @@ export default function CoproducerLandingPage() {
           setError(data?.error || "Código de coprodução não encontrado.");
           return;
         }
-        setResolved({ code: data.code, checkoutUrl: data.checkoutUrl });
+        setResolved({
+          code: data.code,
+          checkoutUrl: data.checkoutUrl,
+          vslEmbedHtml: data.vslEmbedHtml ?? null,
+          headScripts: data.headScripts ?? null,
+        });
       })
       .catch(() => {
         if (!cancelled) setError("Não foi possível validar o código agora.");

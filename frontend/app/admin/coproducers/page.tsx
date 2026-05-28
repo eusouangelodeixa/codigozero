@@ -18,6 +18,8 @@ interface Coproducer {
   displayName: string | null;
   enabled: boolean;
   notes: string | null;
+  vslEmbedHtml: string | null;
+  headScripts: string | null;
   createdAt: string;
   user: { id: string; name: string; email: string; phone: string };
   lifetimeRevenue: number;
@@ -45,6 +47,8 @@ export default function AdminCoproducers() {
   const [formBumpPrice, setFormBumpPrice] = useState<number | "">("");
   const [formDisplayName, setFormDisplayName] = useState("");
   const [formNotes, setFormNotes] = useState("");
+  const [formVslEmbed, setFormVslEmbed] = useState("");
+  const [formHeadScripts, setFormHeadScripts] = useState("");
 
   // edit modal state
   const [editing, setEditing] = useState<Coproducer | null>(null);
@@ -85,6 +89,8 @@ export default function AdminCoproducers() {
           bumpPrice: formBumpPrice === "" ? undefined : formBumpPrice,
           displayName: formDisplayName.trim() || undefined,
           notes: formNotes.trim() || undefined,
+          vslEmbedHtml: formVslEmbed.trim() || undefined,
+          headScripts: formHeadScripts.trim() || undefined,
         }),
       });
       const data = await r.json();
@@ -94,6 +100,7 @@ export default function AdminCoproducers() {
         setFormEmail(""); setFormPid(""); setFormPlanId(""); setFormCheckoutUrl(""); setFormSharePct(50);
         setFormBumpPid(""); setFormBumpPrice("");
         setFormDisplayName(""); setFormNotes("");
+        setFormVslEmbed(""); setFormHeadScripts("");
         load();
       } else {
         showToast(`❌ ${data.error || "Erro ao criar"}`);
@@ -120,6 +127,8 @@ export default function AdminCoproducers() {
           displayName: editing.displayName,
           enabled: editing.enabled,
           notes: editing.notes,
+          vslEmbedHtml: editing.vslEmbedHtml ?? "",
+          headScripts: editing.headScripts ?? "",
         }),
       });
       if (r.ok) {
@@ -281,6 +290,30 @@ export default function AdminCoproducers() {
 
               <Field label="Nome de exibição (opcional)" value={formDisplayName} onChange={setFormDisplayName} placeholder="Sobrescreve o nome do membro nas listas" />
               <Field label="Notas internas (opcional)" value={formNotes} onChange={setFormNotes} placeholder="Contrato, observações…" multiline />
+
+              <div style={{ padding: 12, background: "rgba(34,197,94,0.04)", border: "1px solid rgba(34,197,94,0.18)", borderRadius: 8, display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  VSL + rastreio (opcional)
+                </div>
+                <p style={{ fontSize: 11, color: "#888", margin: 0 }}>
+                  VSL embed sobrescreve a VSL principal só na landing /c/{`{code}`} dele. Pixels vão pro &lt;head&gt; da mesma landing.
+                </p>
+                <Field
+                  label="VSL embed HTML (iframe/script)"
+                  value={formVslEmbed}
+                  onChange={setFormVslEmbed}
+                  placeholder='<iframe src="https://player...." …></iframe>'
+                  multiline
+                />
+                <Field
+                  label="Pixels / scripts de rastreio (head)"
+                  value={formHeadScripts}
+                  onChange={setFormHeadScripts}
+                  placeholder='<script>fbq("init", "...")</script>'
+                  hint="Cole o snippet completo do Meta Pixel, GA, TikTok etc. Limite 8 KB."
+                  multiline
+                />
+              </div>
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
               <button onClick={() => setShowCreate(false)} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, background: "none", border: "1px solid rgba(255,255,255,0.08)", color: "#888", cursor: "pointer" }}>Cancelar</button>
@@ -320,6 +353,28 @@ export default function AdminCoproducers() {
 
               <Field label="Nome de exibição" value={editing.displayName || ""} onChange={(v) => setEditing({ ...editing, displayName: v || null })} />
               <Field label="Notas internas" value={editing.notes || ""} onChange={(v) => setEditing({ ...editing, notes: v || null })} multiline />
+
+              <div style={{ padding: 12, background: "rgba(34,197,94,0.04)", border: "1px solid rgba(34,197,94,0.18)", borderRadius: 8, display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  VSL + rastreio
+                </div>
+                <Field
+                  label="VSL embed HTML (iframe/script)"
+                  value={editing.vslEmbedHtml || ""}
+                  onChange={(v) => setEditing({ ...editing, vslEmbedHtml: v || null })}
+                  placeholder='<iframe src="https://player...." …></iframe>'
+                  multiline
+                />
+                <Field
+                  label="Pixels / scripts de rastreio (head)"
+                  value={editing.headScripts || ""}
+                  onChange={(v) => setEditing({ ...editing, headScripts: v || null })}
+                  placeholder='<script>fbq("init", "...")</script>'
+                  hint="O coprodutor também pode editar isto na própria conta. Limite 8 KB."
+                  multiline
+                />
+              </div>
+
               <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#aaa", fontSize: 13, cursor: "pointer" }}>
                 <input type="checkbox" checked={editing.enabled} onChange={(e) => setEditing({ ...editing, enabled: e.target.checked })} />
                 Conta ativa

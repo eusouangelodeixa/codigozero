@@ -67,6 +67,8 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
       displayName: acc.displayName || acc.user.name,
       enabled: acc.enabled,
       notes: acc.notes,
+      vslEmbedHtml: acc.vslEmbedHtml,
+      headScripts: acc.headScripts,
       createdAt: acc.createdAt,
       updatedAt: acc.updatedAt,
       user: acc.user,
@@ -91,7 +93,7 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
  */
 router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { userEmail, productPid, planId, publicCheckoutUrl, sharePct, displayName, notes, bumpProductPid, bumpPrice } = req.body || {};
+    const { userEmail, productPid, planId, publicCheckoutUrl, sharePct, displayName, notes, bumpProductPid, bumpPrice, vslEmbedHtml, headScripts } = req.body || {};
 
     if (!userEmail || !productPid) {
       return res.status(400).json({ error: 'userEmail e productPid são obrigatórios' });
@@ -129,6 +131,8 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
           bumpPrice: bumpPrice != null && bumpPrice !== '' ? Number(bumpPrice) : null,
           displayName: displayName?.trim() || null,
           notes: notes?.trim() || null,
+          vslEmbedHtml: vslEmbedHtml?.trim() || null,
+          headScripts: headScripts?.trim() || null,
         },
       }),
     ]);
@@ -179,7 +183,7 @@ router.post('/:id/resend-welcome', superadminMiddleware, async (req: AuthRequest
 
 router.patch('/:id', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { productPid, planId, publicCheckoutUrl, sharePct, displayName, enabled, notes, bumpProductPid, bumpPrice } = req.body || {};
+    const { productPid, planId, publicCheckoutUrl, sharePct, displayName, enabled, notes, bumpProductPid, bumpPrice, vslEmbedHtml, headScripts } = req.body || {};
     const existing = await prisma.coproducerAccount.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: 'Coprodutor não encontrado' });
 
@@ -208,6 +212,8 @@ router.patch('/:id', superadminMiddleware, async (req: AuthRequest, res: Respons
         ...(displayName != null ? { displayName: String(displayName).trim() || null } : {}),
         ...(enabled != null ? { enabled: !!enabled } : {}),
         ...(notes != null ? { notes: String(notes).trim() || null } : {}),
+        ...(vslEmbedHtml != null ? { vslEmbedHtml: String(vslEmbedHtml).trim() || null } : {}),
+        ...(headScripts != null ? { headScripts: String(headScripts).trim() || null } : {}),
       },
     });
     res.json({ coproducer: updated });

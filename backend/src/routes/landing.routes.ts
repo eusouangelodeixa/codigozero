@@ -135,14 +135,19 @@ router.post('/lead', async (req: Request, res: Response) => {
         data: { checkoutUrl },
       });
     } else if (isCoproducerFlow && coproducerAccount) {
-      // Coproducer landing: try to create a prefilled order under the
-      // coproducer's own pid; if that fails, fall back to their public
-      // checkout link. Either way, the buyer ends up on a Lojou page
-      // tied to the coproducer's product, and the webhook will attribute
-      // the sale via productPid + referredByCoproducer.
-      const fallback = coproducerAccount.publicCheckoutUrl
-        || `https://pay.lojou.app/p/${coproducerAccount.productPid}`;
-      if (LOJOU_KEY) {
+      // Coproducer landing. Priority:
+      //   1. publicCheckoutUrl explicitamente configurado pelo superadmin
+      //      — quando definido, ele é a fonte da verdade (e respeita
+      //      configurações como bump pré-marcado, descontos, etc. que
+      //      o coprodutor já tem na própria página Lojou).
+      //   2. Pedido prefilled via Lojou Orders API (caminho do produto
+      //      principal — pega nome/email/telefone).
+      //   3. Página pública genérica /p/{pid} como último recurso.
+      if (coproducerAccount.publicCheckoutUrl) {
+        checkoutUrl = coproducerAccount.publicCheckoutUrl;
+        await prisma.user.update({ where: { id: user.id }, data: { checkoutUrl } });
+      } else if (LOJOU_KEY) {
+        const fallback = `https://pay.lojou.app/p/${coproducerAccount.productPid}`;
         try {
           const orderRes = await fetch(`${LOJOU_API}/orders`, {
             method: 'POST',
@@ -170,7 +175,7 @@ router.post('/lead', async (req: Request, res: Response) => {
           console.warn('[Landing/Coproducer] Order API threw, using public fallback:', e);
         }
       } else {
-        checkoutUrl = fallback;
+        checkoutUrl = `https://pay.lojou.app/p/${coproducerAccount.productPid}`;
       }
     } else if (LOJOU_KEY) {
       try {
@@ -270,13 +275,25 @@ router.get('/resolve-coproducer/:code', async (req: Request, res: Response) => {
     if (!code) return res.status(400).json({ error: 'código obrigatório' });
     const acc = await prisma.coproducerAccount.findUnique({
       where: { code },
-      select: { code: true, productPid: true, publicCheckoutUrl: true, enabled: true },
+      select: {
+        code: true,
+        productPid: true,
+        publicCheckoutUrl: true,
+        enabled: true,
+        vslEmbedHtml: true,
+        headScripts: true,
+      },
     });
     if (!acc || !acc.enabled) {
       return res.status(404).json({ error: 'Código de coprodução não encontrado' });
     }
     const checkoutUrl = acc.publicCheckoutUrl || `https://pay.lojou.app/p/${acc.productPid}`;
-    res.json({ code: acc.code, checkoutUrl });
+    res.json({
+      code: acc.code,
+      checkoutUrl,
+      vslEmbedHtml: acc.vslEmbedHtml,
+      headScripts: acc.headScripts,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao validar código' });
   }

@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { LayoutGrid, BarChart3, Users as UsersIcon, Send, LogOut, ExternalLink, Copy } from "lucide-react";
+import { LayoutGrid, BarChart3, Users as UsersIcon, Send, LogOut, ExternalLink, Copy, Settings } from "lucide-react";
 import styles from "./coproducer.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -22,6 +22,7 @@ const NAV = [
   { href: "/coproducer/finance",  label: "Vendas",      icon: <BarChart3 size={17} /> },
   { href: "/coproducer/leads",    label: "Leads",       icon: <Send size={17} /> },
   { href: "/coproducer/users",    label: "Assinantes",  icon: <UsersIcon size={17} /> },
+  { href: "/coproducer/config",   label: "Rastreio",    icon: <Settings size={17} /> },
 ];
 
 export default function CoproducerLayout({ children }: { children: ReactNode }) {

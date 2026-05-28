@@ -182,6 +182,8 @@ export interface AffiliateContext {
 export interface CoproducerContext {
   code: string;
   checkoutUrl?: string;
+  vslEmbedHtml?: string | null;
+  headScripts?: string | null;
 }
 
 export default function LandingPage({
@@ -331,6 +333,38 @@ export default function LandingPage({
     }, 600);
     return () => clearTimeout(t);
   }, []);
+
+  // Coproducer tracking pixels — inject the configured HTML into <head>
+  // when /c/{code} is loaded. Scripts inserted via innerHTML don't execute,
+  // so each <script> is rebuilt with document.createElement.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = coproducerContext?.headScripts?.trim();
+    if (!raw) return;
+    const tag = "data-cz-cop-pixel";
+    const tmpl = document.createElement("template");
+    tmpl.innerHTML = raw;
+    const added: HTMLElement[] = [];
+    tmpl.content.childNodes.forEach((node) => {
+      if (node.nodeType !== 1) return;
+      const el = node as HTMLElement;
+      if (el.tagName === "SCRIPT") {
+        const s = document.createElement("script");
+        for (const attr of Array.from(el.attributes)) s.setAttribute(attr.name, attr.value);
+        s.text = el.textContent || "";
+        s.setAttribute(tag, "1");
+        document.head.appendChild(s);
+        added.push(s);
+      } else {
+        el.setAttribute(tag, "1");
+        document.head.appendChild(el);
+        added.push(el);
+      }
+    });
+    return () => {
+      added.forEach((n) => n.parentNode?.removeChild(n));
+    };
+  }, [coproducerContext?.headScripts]);
 
   const handleGateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -615,11 +649,11 @@ export default function LandingPage({
                 <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
               </div>
 
-              {(affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml) ? (
+              {(coproducerContext?.vslEmbedHtml || affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml) ? (
                 <div
                   className={styles.vslEmbed}
                   dangerouslySetInnerHTML={{
-                    __html: affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml,
+                    __html: coproducerContext?.vslEmbedHtml || affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml,
                   }}
                 />
               ) : (

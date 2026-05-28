@@ -1663,27 +1663,229 @@ router.delete('/cupons/:id', async (req: AuthRequest, res: Response) => {
   } catch { return res.status(500).json({ error: 'Erro ao excluir cupom' }); }
 });
 
+/**
+ * Default WhatsApp message sent with a coupon. The recipient form
+ * decides which placeholders are available — but the template uses
+ * the same tokens regardless, so admins can pick freely.
+ *
+ * Placeholders: {{nome}}, {{cupom}}, {{link}}, {{desconto}}
+ */
+const DEFAULT_COUPON_MESSAGE = [
+  'Olá {{nome}}! 🎉',
+  '',
+  'Tenho um presente para você entrar no Código Zero:',
+  '',
+  '🎟️ *Cupom:* {{cupom}}  ({{desconto}})',
+  '',
+  'O link já abre o checkout com o cupom aplicado — basta confirmar:',
+  '🔗 {{link}}',
+  '',
+  '🚀 Aproveite — esse cupom é só seu.',
+].join('\n');
+
+/**
+ * Generate a pre-filled checkout URL on Lojou with the coupon attached.
+ * Falls back to the public product page (?coupon=...) when the order
+ * API is unavailable or rejects — the buyer can still enter the cupom
+ * by hand in that case.
+ */
+async function buildCheckoutUrlWithCoupon(opts: {
+  name: string;
+  email: string;
+  phone: string;
+  couponCode: string;
+}): Promise<string> {
+  const fallbackPublic = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}?coupon=${encodeURIComponent(opts.couponCode)}`;
+  if (!env.LOJOU_API_KEY) return fallbackPublic;
+  try {
+    const order = await lojouService.createOrder({
+      amount: await getActivePrice(),
+      product_pid: env.LOJOU_PRODUCT_PID,
+      plan_id: env.LOJOU_PLAN_ID,
+      coupon_code: opts.couponCode,
+      customer: {
+        name: opts.name,
+        email: opts.email,
+        mobile_number: opts.phone,
+      },
+    });
+    return order?.checkout_url || fallbackPublic;
+  } catch (e: any) {
+    console.warn('[ADMIN] coupon checkout createOrder failed, using public fallback:', e?.message || e);
+    return fallbackPublic;
+  }
+}
+
+/**
+ * POST /api/admin/cupons/send
+ *
+ * Body — recipient is one of:
+ *   { recipient: { type: 'user',   userId: string } }
+ *   { recipient: { type: 'lead',   leadId: string } }
+ *   { recipient: { type: 'manual', name, phone, email? } }
+ *
+ * Plus:
+ *   couponCode: string  (required)
+ *   message?:   string  (optional; defaults to DEFAULT_COUPON_MESSAGE)
+ *
+ * The endpoint:
+ *   1. Resolves the recipient → { name, email, phone }
+ *   2. Generates a Lojou checkout link prefilled with that customer
+ *      and the coupon applied (so brand-new leads can subscribe with
+ *      one tap).
+ *   3. Substitutes {{nome}}, {{cupom}}, {{link}}, {{desconto}} in the
+ *      message body.
+ *   4. Sends via Komunika WhatsApp.
+ */
 router.post('/cupons/send', async (req: AuthRequest, res: Response) => {
   try {
-    const { couponCode, userId } = req.body;
-    if (!couponCode || !userId) return res.status(400).json({ error: 'Cupom e usuário são obrigatórios' });
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-
-    await prisma.coupon.updateMany({ where: { code: couponCode }, data: { linkedUserId: userId, linkedUserEmail: user.email } });
-
-    const message = `Olá ${user.name?.split(' ')[0] || 'membro'}! 🎉\n\nTemos um presente especial para você:\n\n🎟️ *Cupom de desconto:* ${couponCode}\n\nUse este cupom no checkout para aproveitar o desconto exclusivo na sua próxima renovação do Código Zero!\n\n🔗 Acesse: ${process.env.FRONTEND_URL || 'https://codigozero.app'}\n\nAproveite antes que expire! 🚀`;
-
-    const sent = await sendKomunika(user.phone, message);
-    if (sent) {
-      return res.json({ success: true, message: `Cupom enviado para ${user.name}` });
-    } else {
-      return res.status(500).json({ error: 'Falha ao enviar via WhatsApp — verifique configuração Komunika' });
+    const { couponCode, recipient, message } = req.body || {};
+    if (!couponCode) return res.status(400).json({ error: 'Cupom obrigatório' });
+    if (!recipient || typeof recipient !== 'object') {
+      return res.status(400).json({ error: 'Recipient inválido' });
     }
-  } catch (error) {
+
+    // 1. Confirm coupon exists in our DB (also lets us format the discount label)
+    const coupon = await prisma.coupon.findUnique({ where: { code: couponCode.toUpperCase().trim() } });
+    if (!coupon) return res.status(404).json({ error: 'Cupom não encontrado no sistema' });
+    const discountLabel =
+      coupon.type === 'percentage' || coupon.type === 'percent' || coupon.type === '%'
+        ? `${coupon.value}% OFF`
+        : `${coupon.value} MZN OFF`;
+
+    // 2. Resolve recipient → { name, email, phone, linkedUserId? }
+    let name = '';
+    let email = '';
+    let phone = '';
+    let linkedUserId: string | null = null;
+
+    if (recipient.type === 'user') {
+      if (!recipient.userId) return res.status(400).json({ error: 'userId obrigatório' });
+      const u = await prisma.user.findUnique({ where: { id: recipient.userId } });
+      if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
+      name = u.name || '';
+      email = u.email || '';
+      phone = u.phone || '';
+      linkedUserId = u.id;
+    } else if (recipient.type === 'lead') {
+      if (!recipient.leadId) return res.status(400).json({ error: 'leadId obrigatório' });
+      // Leads are stored on the User table with subscriptionStatus='lead'
+      const lead = await prisma.user.findUnique({ where: { id: recipient.leadId } });
+      if (!lead) return res.status(404).json({ error: 'Lead não encontrado' });
+      name = lead.name || '';
+      email = lead.email || '';
+      phone = lead.phone || '';
+      linkedUserId = lead.id;
+    } else if (recipient.type === 'manual') {
+      if (!recipient.name || !recipient.phone) {
+        return res.status(400).json({ error: 'Nome e telefone obrigatórios em envio manual' });
+      }
+      name = String(recipient.name).trim();
+      phone = String(recipient.phone).trim();
+      email = recipient.email ? String(recipient.email).trim() : `${phone.replace(/\D/g, '')}@manual.czero`;
+    } else {
+      return res.status(400).json({ error: `Tipo de recipient desconhecido: ${recipient.type}` });
+    }
+
+    if (!phone) return res.status(400).json({ error: 'Recipient sem telefone' });
+
+    // 3. Link the coupon to the recipient when possible (auditing)
+    if (linkedUserId) {
+      const u = await prisma.user.findUnique({ where: { id: linkedUserId }, select: { email: true } });
+      await prisma.coupon.update({
+        where: { id: coupon.id },
+        data: { linkedUserId, linkedUserEmail: u?.email || email || null },
+      });
+    }
+
+    // 4. Generate prefilled checkout link
+    const checkoutUrl = await buildCheckoutUrlWithCoupon({ name, email, phone, couponCode: coupon.code });
+
+    // 5. Substitute placeholders in the message
+    const firstName = (name || 'membro').split(' ')[0];
+    const finalMessage = (message || DEFAULT_COUPON_MESSAGE)
+      .replace(/\{\{\s*nome\s*\}\}/gi, firstName)
+      .replace(/\{\{\s*cupom\s*\}\}/gi, coupon.code)
+      .replace(/\{\{\s*link\s*\}\}/gi, checkoutUrl)
+      .replace(/\{\{\s*desconto\s*\}\}/gi, discountLabel);
+
+    // 6. Send via Komunika
+    const sent = await sendKomunika(phone, finalMessage);
+    if (!sent) {
+      return res.status(502).json({
+        error: 'Falha ao enviar via WhatsApp — verifique configuração Komunika',
+        checkoutUrl,
+        previewMessage: finalMessage,
+      });
+    }
+    return res.json({
+      success: true,
+      sentTo: { name, phone, email, type: recipient.type },
+      checkoutUrl,
+      previewMessage: finalMessage,
+    });
+  } catch (error: any) {
     console.error('[ADMIN] Send coupon error:', error);
-    return res.status(500).json({ error: 'Erro ao enviar cupom' });
+    return res.status(500).json({ error: error?.message || 'Erro ao enviar cupom' });
+  }
+});
+
+/**
+ * POST /api/admin/cupons/preview
+ *
+ * Same recipient resolution as /send, but only returns the rendered
+ * message + checkout URL without dispatching the WhatsApp. Used by the
+ * admin modal to show a live preview before the user clicks send.
+ */
+router.post('/cupons/preview', async (req: AuthRequest, res: Response) => {
+  try {
+    const { couponCode, recipient, message } = req.body || {};
+    if (!couponCode || !recipient) return res.status(400).json({ error: 'couponCode e recipient obrigatórios' });
+
+    const coupon = await prisma.coupon.findUnique({ where: { code: couponCode.toUpperCase().trim() } });
+    if (!coupon) return res.status(404).json({ error: 'Cupom não encontrado' });
+    const discountLabel =
+      coupon.type === 'percentage' || coupon.type === 'percent' || coupon.type === '%'
+        ? `${coupon.value}% OFF`
+        : `${coupon.value} MZN OFF`;
+
+    let name = '';
+    let phone = '';
+    let email = '';
+    if (recipient.type === 'user' || recipient.type === 'lead') {
+      const id = recipient.userId || recipient.leadId;
+      if (!id) return res.status(400).json({ error: 'id obrigatório' });
+      const u = await prisma.user.findUnique({ where: { id } });
+      if (!u) return res.status(404).json({ error: 'Não encontrado' });
+      name = u.name || '';
+      phone = u.phone || '';
+      email = u.email || '';
+    } else if (recipient.type === 'manual') {
+      name = String(recipient.name || '').trim();
+      phone = String(recipient.phone || '').trim();
+      email = recipient.email ? String(recipient.email).trim() : '';
+    }
+
+    // Preview does NOT call Lojou — keeps the modal snappy and avoids
+    // creating throwaway pending orders. Returns the public fallback
+    // link so the admin can see roughly what will be in the message.
+    const previewLink = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}?coupon=${encodeURIComponent(coupon.code)}`;
+    const firstName = (name || 'membro').split(' ')[0];
+    const finalMessage = (message || DEFAULT_COUPON_MESSAGE)
+      .replace(/\{\{\s*nome\s*\}\}/gi, firstName)
+      .replace(/\{\{\s*cupom\s*\}\}/gi, coupon.code)
+      .replace(/\{\{\s*link\s*\}\}/gi, previewLink)
+      .replace(/\{\{\s*desconto\s*\}\}/gi, discountLabel);
+
+    return res.json({
+      message: finalMessage,
+      previewLink,
+      recipient: { name, phone, email, type: recipient.type },
+      defaultTemplate: DEFAULT_COUPON_MESSAGE,
+    });
+  } catch (error: any) {
+    console.error('[ADMIN] Preview coupon error:', error);
+    return res.status(500).json({ error: error?.message || 'Erro no preview' });
   }
 });
 

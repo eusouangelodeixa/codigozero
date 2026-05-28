@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "../admin.module.css";
 
 const I = ({ d, size = 16, color = "currentColor" }: { d: string; size?: number; color?: string }) => (
@@ -63,12 +63,39 @@ export default function CuponsPage() {
   const [formActive, setFormActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Send modal
+  // Send modal — v2 with three tabs (user/lead/manual) + live preview
   const [sendModal, setSendModal] = useState<{ code: string } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
+  const [leads, setLeads] = useState<User[]>([]);
   const [sendingCoupon, setSendingCoupon] = useState(false);
+
+  type RecipientTab = "user" | "lead" | "manual";
+  const [recipientTab, setRecipientTab] = useState<RecipientTab>("user");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedLeadId, setSelectedLeadId] = useState("");
   const [searchUser, setSearchUser] = useState("");
+  const [searchLead, setSearchLead] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+
+  const DEFAULT_MSG = [
+    "Olá {{nome}}! 🎉",
+    "",
+    "Tenho um presente para você entrar no Código Zero:",
+    "",
+    "🎟️ *Cupom:* {{cupom}}  ({{desconto}})",
+    "",
+    "O link já abre o checkout com o cupom aplicado — basta confirmar:",
+    "🔗 {{link}}",
+    "",
+    "🚀 Aproveite — esse cupom é só seu.",
+  ].join("\n");
+  const [messageBody, setMessageBody] = useState(DEFAULT_MSG);
+  const [previewText, setPreviewText] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messageRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [apiError, setApiError] = useState("");
 
@@ -91,6 +118,15 @@ export default function CuponsPage() {
       const res = await fetch(`${API}/api/admin/users?limit=500`, { headers: hdr() });
       const data = await res.json();
       setUsers(data.users || []);
+    } catch {}
+  };
+
+  const loadLeads = async () => {
+    try {
+      // Leads endpoint already supports a `filter` param (unpaid = subscriptionStatus='lead')
+      const res = await fetch(`${API}/api/admin/leads?filter=unpaid`, { headers: hdr() });
+      const data = await res.json();
+      setLeads(Array.isArray(data.leads) ? data.leads : Array.isArray(data) ? data : []);
     } catch {}
   };
 
@@ -159,23 +195,110 @@ export default function CuponsPage() {
     } catch {}
   };
 
+  // Builds the recipient payload from the active tab.
+  const buildRecipient = useCallback(() => {
+    if (recipientTab === "user") {
+      if (!selectedUserId) return null;
+      return { type: "user" as const, userId: selectedUserId };
+    }
+    if (recipientTab === "lead") {
+      if (!selectedLeadId) return null;
+      return { type: "lead" as const, leadId: selectedLeadId };
+    }
+    if (!manualName.trim() || !manualPhone.trim()) return null;
+    return {
+      type: "manual" as const,
+      name: manualName.trim(),
+      phone: manualPhone.trim(),
+      ...(manualEmail.trim() ? { email: manualEmail.trim() } : {}),
+    };
+  }, [recipientTab, selectedUserId, selectedLeadId, manualName, manualPhone, manualEmail]);
+
+  // Debounced live preview against the backend (handles {{nome}} / {{cupom}}
+  // / {{link}} / {{desconto}} substitutions exactly the way the send
+  // endpoint will, so what you see is what gets delivered).
+  const requestPreview = useCallback(() => {
+    if (!sendModal) return;
+    const recipient = buildRecipient();
+    if (!recipient) {
+      setPreviewText("");
+      return;
+    }
+    setPreviewLoading(true);
+    fetch(`${API}/api/admin/cupons/preview`, {
+      method: "POST",
+      headers: hdr(),
+      body: JSON.stringify({ couponCode: sendModal.code, recipient, message: messageBody }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.message) setPreviewText(data.message);
+        else if (data?.error) setPreviewText(`(preview indisponível: ${data.error})`);
+      })
+      .catch(() => setPreviewText("(falha de conexão ao gerar preview)"))
+      .finally(() => setPreviewLoading(false));
+  }, [sendModal, buildRecipient, messageBody]);
+
+  // Trigger preview with debounce when any input changes
+  useEffect(() => {
+    if (!sendModal) return;
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(requestPreview, 400);
+    return () => {
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+    };
+  }, [sendModal, requestPreview]);
+
+  // Insert a placeholder at the cursor position in the message textarea
+  const insertPlaceholder = (token: string) => {
+    const el = messageRef.current;
+    if (!el) {
+      setMessageBody((m) => `${m}${token}`);
+      return;
+    }
+    const start = el.selectionStart ?? messageBody.length;
+    const end = el.selectionEnd ?? messageBody.length;
+    const next = messageBody.slice(0, start) + token + messageBody.slice(end);
+    setMessageBody(next);
+    // Restore cursor right after the inserted token
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + token.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
   const handleSendCoupon = async () => {
-    if (!selectedUserId || !sendModal) return;
+    if (!sendModal) return;
+    const recipient = buildRecipient();
+    if (!recipient) {
+      showToast("❌ Preencha os dados do destinatário");
+      return;
+    }
     setSendingCoupon(true);
     try {
       const res = await fetch(`${API}/api/admin/cupons/send`, {
-        method: "POST", headers: hdr(),
-        body: JSON.stringify({ couponCode: sendModal.code, userId: selectedUserId }),
+        method: "POST",
+        headers: hdr(),
+        body: JSON.stringify({ couponCode: sendModal.code, recipient, message: messageBody }),
       });
       const data = await res.json();
-      if (res.ok) {
-        showToast(`✅ ${data.message || "Cupom enviado!"}`);
+      if (res.ok && data.success) {
+        showToast(`✅ Cupom enviado para ${data.sentTo?.name || "destinatário"}`);
         setSendModal(null);
         setSelectedUserId("");
+        setSelectedLeadId("");
+        setManualName("");
+        setManualPhone("");
+        setManualEmail("");
+        setMessageBody(DEFAULT_MSG);
+        setPreviewText("");
       } else {
         showToast(`❌ ${data.error || "Erro ao enviar"}`);
       }
-    } catch { showToast("❌ Erro de conexão"); }
+    } catch {
+      showToast("❌ Erro de conexão");
+    }
     setSendingCoupon(false);
   };
 
@@ -192,9 +315,18 @@ export default function CuponsPage() {
 
   const openSendModal = (code: string) => {
     setSendModal({ code });
+    setRecipientTab("user");
     setSelectedUserId("");
+    setSelectedLeadId("");
+    setManualName("");
+    setManualPhone("");
+    setManualEmail("");
     setSearchUser("");
+    setSearchLead("");
+    setMessageBody(DEFAULT_MSG);
+    setPreviewText("");
     if (users.length === 0) loadUsers();
+    if (leads.length === 0) loadLeads();
   };
 
   const resetForm = () => {
@@ -332,62 +464,220 @@ export default function CuponsPage() {
       )}
 
       {/* Send Modal */}
-      {sendModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 28, maxWidth: 440, width: "100%" }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}><I d={icons.send} size={18} color="#22c55e" /> Enviar Cupom via WhatsApp</h3>
+      {sendModal && (() => {
+        const recipient = buildRecipient();
+        const canSend = !!recipient;
+        const filteredLeads = searchLead
+          ? leads.filter(
+              (l) =>
+                (l.name || "").toLowerCase().includes(searchLead.toLowerCase()) ||
+                (l.email || "").toLowerCase().includes(searchLead.toLowerCase()) ||
+                (l.phone || "").includes(searchLead),
+            )
+          : leads;
+        const TabBtn = ({ tab, label }: { tab: RecipientTab; label: string }) => (
+          <button
+            type="button"
+            onClick={() => setRecipientTab(tab)}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              border: "none",
+              background: recipientTab === tab ? "rgba(245,158,11,0.15)" : "transparent",
+              color: recipientTab === tab ? "#f59e0b" : "#888",
+              fontSize: 12,
+              fontWeight: 600,
+              borderRadius: 8,
+              cursor: "pointer",
+              transition: "color 0.15s, background 0.15s",
+            }}
+          >
+            {label}
+          </button>
+        );
+        return (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, overflowY: "auto" }}>
+          <div style={{ background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24, maxWidth: 720, width: "100%", maxHeight: "92vh", overflowY: "auto" }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+              <I d={icons.send} size={18} color="#22c55e" /> Enviar cupom via WhatsApp
+            </h3>
             <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
-              Cupom: <strong style={{ color: "#f59e0b", fontFamily: "monospace", letterSpacing: 1 }}>{sendModal.code}</strong>
+              Cupom: <strong style={{ color: "#f59e0b", fontFamily: "monospace", letterSpacing: 1 }}>{sendModal.code}</strong>{" "}
+              · O link enviado é o checkout normal já com o cupom aplicado.
             </p>
 
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 4 }}>Buscar Usuário</label>
-              <input className={styles.formInput} value={searchUser} onChange={e => setSearchUser(e.target.value)}
-                placeholder="Nome ou email..." />
+            {/* Tabs: user / lead / manual */}
+            <div style={{ display: "flex", gap: 4, padding: 4, background: "rgba(255,255,255,0.03)", borderRadius: 10, marginBottom: 16 }}>
+              <TabBtn tab="user" label="Membro" />
+              <TabBtn tab="lead" label="Lead" />
+              <TabBtn tab="manual" label="Manual" />
             </div>
 
-            <div style={{ maxHeight: 200, overflowY: "auto", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, marginBottom: 16 }}>
-              {filteredUsers.length === 0 ? (
-                <p style={{ padding: 16, textAlign: "center", fontSize: 12, color: "#666" }}>
-                  {users.length === 0 ? "Carregando usuários..." : "Nenhum resultado"}
-                </p>
-              ) : filteredUsers.slice(0, 20).map(u => (
-                <button key={u.id} onClick={() => setSelectedUserId(u.id)} style={{
-                  display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px",
-                  border: "none", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer",
-                  background: selectedUserId === u.id ? "rgba(245,158,11,0.06)" : "transparent",
-                  textAlign: "left", transition: "background 0.15s",
-                }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-                    background: selectedUserId === u.id ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.04)",
-                    color: selectedUserId === u.id ? "#f59e0b" : "#888", fontSize: 11, fontWeight: 600,
-                  }}>{u.name?.[0] || "?"}</div>
-                  <div>
-                    <div style={{ fontSize: 13, color: "#fff", fontWeight: 500 }}>{u.name}</div>
-                    <div style={{ fontSize: 11, color: "#666" }}>{u.email} · {u.phone}</div>
-                  </div>
-                  {selectedUserId === u.id && <span style={{ marginLeft: "auto", color: "#f59e0b", fontSize: 14 }}>✓</span>}
-                </button>
-              ))}
+            {/* Recipient picker by tab */}
+            {recipientTab === "user" && (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Buscar membro</label>
+                  <input className={styles.formInput} value={searchUser} onChange={(e) => setSearchUser(e.target.value)} placeholder="Nome, email ou telefone…" />
+                </div>
+                <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, marginBottom: 16 }}>
+                  {filteredUsers.length === 0 ? (
+                    <p style={{ padding: 16, textAlign: "center", fontSize: 12, color: "#666" }}>
+                      {users.length === 0 ? "Carregando membros…" : "Nenhum resultado"}
+                    </p>
+                  ) : (
+                    filteredUsers.slice(0, 30).map((u) => (
+                      <button
+                        key={u.id}
+                        onClick={() => setSelectedUserId(u.id)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px",
+                          border: "none", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer",
+                          background: selectedUserId === u.id ? "rgba(245,158,11,0.08)" : "transparent",
+                          textAlign: "left",
+                        }}
+                      >
+                        <div style={{ width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: selectedUserId === u.id ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.04)", color: selectedUserId === u.id ? "#f59e0b" : "#888", fontSize: 11, fontWeight: 600 }}>{(u.name || "?")[0]}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: "#fff", fontWeight: 500 }}>{u.name}</div>
+                          <div style={{ fontSize: 11, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email} · {u.phone}</div>
+                        </div>
+                        {selectedUserId === u.id && <span style={{ marginLeft: "auto", color: "#f59e0b" }}>✓</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {recipientTab === "lead" && (
+              <>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Buscar lead (não assinantes)</label>
+                  <input className={styles.formInput} value={searchLead} onChange={(e) => setSearchLead(e.target.value)} placeholder="Nome, email ou telefone…" />
+                </div>
+                <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, marginBottom: 16 }}>
+                  {filteredLeads.length === 0 ? (
+                    <p style={{ padding: 16, textAlign: "center", fontSize: 12, color: "#666" }}>
+                      {leads.length === 0 ? "Carregando leads…" : "Nenhum lead encontrado"}
+                    </p>
+                  ) : (
+                    filteredLeads.slice(0, 30).map((l) => (
+                      <button
+                        key={l.id}
+                        onClick={() => setSelectedLeadId(l.id)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px",
+                          border: "none", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer",
+                          background: selectedLeadId === l.id ? "rgba(245,158,11,0.08)" : "transparent",
+                          textAlign: "left",
+                        }}
+                      >
+                        <div style={{ width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: selectedLeadId === l.id ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.04)", color: selectedLeadId === l.id ? "#f59e0b" : "#888", fontSize: 11, fontWeight: 600 }}>{(l.name || "?")[0]}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: "#fff", fontWeight: 500 }}>{l.name || "(sem nome)"}</div>
+                          <div style={{ fontSize: 11, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.email} · {l.phone}</div>
+                        </div>
+                        {selectedLeadId === l.id && <span style={{ marginLeft: "auto", color: "#f59e0b" }}>✓</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {recipientTab === "manual" && (
+              <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Nome *</label>
+                  <input className={styles.formInput} value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="Ex: Anderson Sevene" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>WhatsApp *</label>
+                  <input className={styles.formInput} value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} placeholder="Ex: +258 84 123 4567" />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Email <span style={{ textTransform: "none", letterSpacing: 0, color: "#666" }}>(opcional)</span></label>
+                  <input className={styles.formInput} value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} placeholder="Ex: anderson@email.com" />
+                </div>
+              </div>
+            )}
+
+            {/* Message editor with placeholder chips */}
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Mensagem</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                {["{{nome}}", "{{cupom}}", "{{link}}", "{{desconto}}"].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => insertPlaceholder(t)}
+                    style={{
+                      padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600,
+                      background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
+                      color: "#f59e0b", cursor: "pointer", fontFamily: "monospace",
+                    }}
+                  >{t}</button>
+                ))}
+              </div>
+              <textarea
+                ref={messageRef}
+                value={messageBody}
+                onChange={(e) => setMessageBody(e.target.value)}
+                style={{
+                  width: "100%", minHeight: 130, padding: 10, borderRadius: 8,
+                  background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.06)",
+                  color: "#fff", fontSize: 13, lineHeight: 1.5, fontFamily: "inherit", resize: "vertical",
+                }}
+              />
+            </div>
+
+            {/* Live preview */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 11, color: "#888", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                <span>Preview</span>
+                <span style={{ textTransform: "none", letterSpacing: 0, color: "#555", fontSize: 10 }}>{previewLoading ? "atualizando…" : "exatamente como vai chegar"}</span>
+              </label>
+              <pre
+                style={{
+                  margin: 0, padding: 12, background: "#1a1a1a",
+                  border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8,
+                  color: "#ddd", fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap",
+                  fontFamily: "inherit", minHeight: 90,
+                }}
+              >
+                {previewText || (canSend ? "(carregando preview…)" : "Selecione o destinatário pra ver o preview.")}
+              </pre>
             </div>
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setSendModal(null)} style={{
-                padding: "8px 18px", borderRadius: 8, fontSize: 13, background: "none",
-                border: "1px solid rgba(255,255,255,0.08)", color: "#888", cursor: "pointer",
-              }}>Cancelar</button>
-              <button onClick={handleSendCoupon} disabled={sendingCoupon || !selectedUserId} style={{
-                padding: "8px 22px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                background: selectedUserId ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.04)",
-                border: "none", color: selectedUserId ? "#fff" : "#666",
-                cursor: !selectedUserId || sendingCoupon ? "not-allowed" : "pointer",
-                opacity: sendingCoupon ? 0.7 : 1,
-              }}><span style={{ display: "flex", alignItems: "center", gap: 6 }}><I d={icons.send} size={14} /> Enviar via WhatsApp</span></button>
+              <button
+                onClick={() => setSendModal(null)}
+                style={{
+                  padding: "9px 18px", borderRadius: 8, fontSize: 13, background: "none",
+                  border: "1px solid rgba(255,255,255,0.08)", color: "#888", cursor: "pointer",
+                }}
+              >Cancelar</button>
+              <button
+                onClick={handleSendCoupon}
+                disabled={sendingCoupon || !canSend}
+                style={{
+                  padding: "9px 22px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+                  background: canSend ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.04)",
+                  border: "none", color: canSend ? "#fff" : "#666",
+                  cursor: !canSend || sendingCoupon ? "not-allowed" : "pointer",
+                  opacity: sendingCoupon ? 0.7 : 1,
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <I d={icons.send} size={14} /> {sendingCoupon ? "Enviando…" : "Enviar via WhatsApp"}
+                </span>
+              </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Table */}
       {loading ? (

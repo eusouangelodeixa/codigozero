@@ -48,6 +48,12 @@ model User {
   affiliateAccount   AffiliateAccount?    // becomes an affiliate themselves
   affiliateReferrals AffiliateReferral[]  @relation("AffiliateReferralUser")
 
+  // Coproducer attribution — set when a lead/user enters via /c/{code}.
+  // Lets the system route renewals and remarketing back to the right
+  // coproducer (and feeds the source filter in admin/finance).
+  referredByCoproducer String?
+  coproducerAccount    CoproducerAccount?
+
   leads              Lead[]
   lessonProgress     LessonProgress[]
   chatMessages       ChatMessage[]
@@ -157,7 +163,14 @@ model Transaction {
   // false when this was their first paid order. Set by the webhook;
   // back-populated for historical rows via migration.
   isRenewal       Boolean  @default(false)
+  // Coproducer attribution: set by the webhook when the order pid matches
+  // a registered coproducer product, or when the buyer's User row carries
+  // referredByCoproducer. NULL = principal (main product).
+  coproducerId    String?
+  coproducer      CoproducerAccount? @relation(fields: [coproducerId], references: [id])
   createdAt     DateTime @default(now())
+
+  @@index([coproducerId])
 }
 
 model SystemConfig {
@@ -403,4 +416,48 @@ model PlatformMilestone {
   createdAt   DateTime  @default(now())
 
   @@unique([category, targetValue])
+}
+
+// ─────────────────────────────────────────────────────────
+// Coproducer program
+// ─────────────────────────────────────────────────────────
+// A coproducer is a partner who sells the Código Zero offer under their
+// own Lojou product pid. They get a personalised landing page at
+// /c/{code}; every sale made through that page lands on their Lojou
+// pid and is split by Lojou's own coproduction settings.
+//
+// The system uses `productPid` to back-attribute incoming webhooks
+// (matches data.product.pid → CoproducerAccount.productPid). Leads
+// captured on /c/{code} also persist `referredByCoproducer = code`
+// on the User row as a secondary attribution signal.
+//
+// `sharePct` is documentation only — Lojou handles the actual split.
+model CoproducerAccount {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Public code used in /c/{code} URLs. Short, copyable.
+  code                String   @unique
+  // Lojou product identifier owned by the coproducer. Webhook attribution
+  // matches `data.product.pid` to this column.
+  productPid          String   @unique
+  // Optional plan id (Lojou)
+  planId              String?
+  // Public Lojou checkout fallback (https://pay.lojou.app/p/...)
+  publicCheckoutUrl   String?
+  // Coproducer's share of each sale (0-100). Lojou itself enforces the
+  // split — this is shown in the coproducer dashboard for transparency.
+  sharePct            Float    @default(50)
+  // Display name shown on dashboards / admin lists. Falls back to the
+  // linked User.name when null.
+  displayName         String?
+  enabled             Boolean  @default(true)
+  notes               String?
+
+  transactions        Transaction[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([enabled])
 }

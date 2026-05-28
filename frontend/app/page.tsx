@@ -172,7 +172,25 @@ export interface AffiliateContext {
   checkoutUrl?: string;
 }
 
-export default function LandingPage({ affiliateContext }: { affiliateContext?: AffiliateContext } = {}) {
+/**
+ * When the landing is rendered at /c/{code}, the page is the exact same
+ * page as /, but every lead/checkout call is tagged with this coproducer
+ * so the webhook can attribute the resulting sale to them. `checkoutUrl`
+ * is the public fallback used when the API can't return a personalised
+ * order URL.
+ */
+export interface CoproducerContext {
+  code: string;
+  checkoutUrl?: string;
+}
+
+export default function LandingPage({
+  affiliateContext,
+  coproducerContext,
+}: {
+  affiliateContext?: AffiliateContext;
+  coproducerContext?: CoproducerContext;
+} = {}) {
   const [gateOpen, setGateOpen] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "", phoneCode: "+258", whatsappCode: "+258" });
   const [submitting, setSubmitting] = useState(false);
@@ -258,6 +276,7 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
                 phone: lead.phone,
                 whatsapp: lead.whatsapp,
                 ...(affiliateContext?.code ? { affiliateCode: affiliateContext.code } : {}),
+                ...(coproducerContext?.code ? { coproducerCode: coproducerContext.code } : {}),
               }),
             })
               .then(r => r.json())
@@ -279,7 +298,9 @@ export default function LandingPage({ affiliateContext }: { affiliateContext?: A
             const hoursPassed = (Date.now() - savedTime) / (1000 * 60 * 60);
 
             if (hoursPassed >= 4) {
-              const fallbackBase = affiliateContext?.checkoutUrl || "https://pay.lojou.app/p/uoEHz";
+              const fallbackBase = affiliateContext?.checkoutUrl
+                || coproducerContext?.checkoutUrl
+                || "https://pay.lojou.app/p/uoEHz";
               const fallbackUrl = new URL(fallbackBase);
               fallbackUrl.searchParams.append("name", lead.name);
               fallbackUrl.searchParams.append("email", lead.email);

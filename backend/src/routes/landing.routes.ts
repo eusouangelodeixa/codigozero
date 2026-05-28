@@ -22,7 +22,7 @@ const PLAN_ID = env.LOJOU_PLAN_ID;
  */
 router.post('/lead', async (req: Request, res: Response) => {
   try {
-    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode } = req.body;
+    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
@@ -44,7 +44,25 @@ router.post('/lead', async (req: Request, res: Response) => {
       if (acc && acc.enabled) affiliateAccount = { id: acc.id, code: acc.code };
     }
 
+    // ── Coproducer check ───────────────────────────────────────────────
+    // Same shape as affiliate: validate the code, ignore silently on miss.
+    // Coproducer + affiliate are mutually exclusive at the URL level
+    // (/c/code vs /r/code), but if both arrive here, affiliate wins (the
+    // affiliate flow uses its own product pid in Lojou).
+    let coproducerAccount: { id: string; code: string; productPid: string; publicCheckoutUrl: string | null; planId: string | null } | null = null;
+    if (coproducerCode && typeof coproducerCode === 'string') {
+      const code = coproducerCode.trim();
+      const acc = await prisma.coproducerAccount.findUnique({
+        where: { code },
+        select: { id: true, code: true, productPid: true, publicCheckoutUrl: true, planId: true, enabled: true },
+      });
+      if (acc && acc.enabled) {
+        coproducerAccount = { id: acc.id, code: acc.code, productPid: acc.productPid, publicCheckoutUrl: acc.publicCheckoutUrl, planId: acc.planId };
+      }
+    }
+
     const isAffiliateFlow = affiliateAccount !== null;
+    const isCoproducerFlow = !isAffiliateFlow && coproducerAccount !== null;
 
     // Try to find existing user by email first
     let user = await prisma.user.findUnique({ where: { email } });
@@ -61,6 +79,10 @@ router.post('/lead', async (req: Request, res: Response) => {
           ...(affiliateAccount && !user.referredByCode
             ? { referredByCode: affiliateAccount.code }
             : {}),
+          // Same rule for coproducer attribution.
+          ...(coproducerAccount && !user.referredByCoproducer
+            ? { referredByCoproducer: coproducerAccount.code }
+            : {}),
         },
       });
     } else {
@@ -75,6 +97,7 @@ router.post('/lead', async (req: Request, res: Response) => {
           subscriptionStatus: 'lead',
           ...(surveyAnswers && { surveyAnswers }),
           ...(affiliateAccount ? { referredByCode: affiliateAccount.code } : {}),
+          ...(coproducerAccount ? { referredByCoproducer: coproducerAccount.code } : {}),
         },
       });
     }
@@ -111,6 +134,44 @@ router.post('/lead', async (req: Request, res: Response) => {
         where: { id: user.id },
         data: { checkoutUrl },
       });
+    } else if (isCoproducerFlow && coproducerAccount) {
+      // Coproducer landing: try to create a prefilled order under the
+      // coproducer's own pid; if that fails, fall back to their public
+      // checkout link. Either way, the buyer ends up on a Lojou page
+      // tied to the coproducer's product, and the webhook will attribute
+      // the sale via productPid + referredByCoproducer.
+      const fallback = coproducerAccount.publicCheckoutUrl
+        || `https://pay.lojou.app/p/${coproducerAccount.productPid}`;
+      if (LOJOU_KEY) {
+        try {
+          const orderRes = await fetch(`${LOJOU_API}/orders`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${LOJOU_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              product_pid: coproducerAccount.productPid,
+              ...(coproducerAccount.planId ? { plan_id: coproducerAccount.planId } : {}),
+              amount: await getActivePrice(),
+              customer: { name, email, mobile_number: contactPhone },
+            }),
+          });
+          const orderData = await orderRes.json();
+          if (orderData?.checkout_url) {
+            checkoutUrl = orderData.checkout_url;
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { lojouOrderId: orderData.order_number, checkoutUrl },
+            });
+          } else {
+            checkoutUrl = fallback;
+            console.warn('[Landing/Coproducer] Order API not OK, using public fallback:', JSON.stringify(orderData));
+          }
+        } catch (e) {
+          checkoutUrl = fallback;
+          console.warn('[Landing/Coproducer] Order API threw, using public fallback:', e);
+        }
+      } else {
+        checkoutUrl = fallback;
+      }
     } else if (LOJOU_KEY) {
       try {
         const orderRes = await fetch(`${LOJOU_API}/orders`, {
@@ -195,6 +256,29 @@ router.get('/config', async (_req: Request, res: Response) => {
     res.json({ config: config || {} });
   } catch (error) {
     res.json({ config: {} });
+  }
+});
+
+/**
+ * GET /api/landing/resolve-coproducer/:code
+ * Public — used by /c/{code} to validate the code and resolve the
+ * fallback checkout URL (used when the Lojou order API is unavailable).
+ */
+router.get('/resolve-coproducer/:code', async (req: Request, res: Response) => {
+  try {
+    const code = (req.params.code || '').trim();
+    if (!code) return res.status(400).json({ error: 'código obrigatório' });
+    const acc = await prisma.coproducerAccount.findUnique({
+      where: { code },
+      select: { code: true, productPid: true, publicCheckoutUrl: true, enabled: true },
+    });
+    if (!acc || !acc.enabled) {
+      return res.status(404).json({ error: 'Código de coprodução não encontrado' });
+    }
+    const checkoutUrl = acc.publicCheckoutUrl || `https://pay.lojou.app/p/${acc.productPid}`;
+    res.json({ code: acc.code, checkoutUrl });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao validar código' });
   }
 });
 

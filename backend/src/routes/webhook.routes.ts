@@ -10,6 +10,7 @@ import {
 } from '../services/affiliate.service';
 import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
+import { resolveCoproducerForOrder } from '../services/coproducer.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -266,6 +267,17 @@ router.post('/lojou', async (req: Request, res: Response) => {
         // Record transaction. `amount` is always the gross total (principal +
         // bump) so existing faturamento/MRR queries keep working. The bump
         // breakdown is stored separately for audit.
+        // Coproducer attribution: prefer matching the order's product pid
+        // against a registered coproducer; fall back to the buyer's
+        // referredByCoproducer pointer if any. NULL = principal product.
+        const coproducer = await resolveCoproducerForOrder({
+          productPid: data.product?.pid || null,
+          buyerReferralCode: user.referredByCoproducer || null,
+        });
+        if (coproducer) {
+          console.log(`[WEBHOOK] 🤝 Attributed to coproducer ${coproducer.code} (id=${coproducer.id})`);
+        }
+
         await prisma.transaction.upsert({
           where: { orderId: String(orderId) },
           update: {
@@ -275,6 +287,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
             orderBumpAmount: bumpAmount || null,
             isCloseFriends,
             isRenewal,
+            coproducerId: coproducer?.id ?? null,
           },
           create: {
             orderId: String(orderId),
@@ -289,6 +302,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
             orderBumpAmount: bumpAmount || null,
             isCloseFriends,
             isRenewal,
+            coproducerId: coproducer?.id ?? null,
           },
         });
 

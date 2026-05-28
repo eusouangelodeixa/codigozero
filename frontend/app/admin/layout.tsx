@@ -108,6 +108,12 @@ const I = {
       <path d="M6 12h.01M18 12h.01" />
     </svg>
   ),
+  Coproducers: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 17a4 4 0 11-4 4 4 4 0 014-4z" />
+      <path d="M21 8.94l-2-.39a7.71 7.71 0 00-.46-1.11l1.14-1.68a.5.5 0 00-.06-.63L18.43 4.5a.5.5 0 00-.63-.06L16.12 5.58a7.71 7.71 0 00-1.11-.46L14.62 3a.5.5 0 00-.49-.41h-2.26a.5.5 0 00-.49.41l-.39 1.94" />
+    </svg>
+  ),
 };
 
 const NAV: NavGroup[] = [
@@ -148,6 +154,12 @@ const NAV: NavGroup[] = [
     items: [
       { href: "/admin/afiliados", label: "Afiliados",  icon: I.Affiliates },
       { href: "/admin/saques",    label: "Saques",     icon: I.Withdrawals },
+    ],
+  },
+  {
+    label: "Parceiros",
+    items: [
+      { href: "/admin/coproducers", label: "Coprodutores", icon: I.Coproducers },
     ],
   },
 ];

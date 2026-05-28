@@ -14,6 +14,7 @@ import landingRoutes from './routes/landing.routes';
 import adminRoutes from './routes/admin.routes';
 import chatRoutes from './routes/chat.routes';
 import affiliateRoutes from './routes/affiliate.routes';
+import coproducerAdminRoutes from './routes/coproducer.admin.routes';
 import { startCronJobs } from './jobs/cron';
 import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
@@ -59,6 +60,7 @@ app.use('/api/forja', forjaRoutes);
 app.use('/api/qg', qgRoutes);
 app.use('/api/landing', landingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/coproducers', coproducerAdminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/webhooks', webhookRoutes);

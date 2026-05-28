@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { coproducerMiddleware } from '../middlewares/coproducer.middleware';
+import { notifyCoproducer } from '../services/coproducer.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -70,6 +71,98 @@ router.patch('/me/scripts', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[COPRODUCER] /me/scripts error:', error);
     res.status(500).json({ error: 'Erro ao salvar scripts' });
+  }
+});
+
+/**
+ * GET /api/coproducer/notifications/prefs
+ * Returns the 4 toggle states. Used by /coproducer/notifications.
+ */
+router.get('/notifications/prefs', async (req: AuthRequest, res: Response) => {
+  try {
+    const acc = await prisma.coproducerAccount.findUnique({
+      where: { id: req.coproducer!.id },
+      select: {
+        notifySale: true,
+        notifyRenewal: true,
+        notifyLead: true,
+        notifyCredentialFail: true,
+      },
+    });
+    if (!acc) return res.status(404).json({ error: 'Conta não encontrada' });
+    res.json({ prefs: acc });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao carregar preferências' });
+  }
+});
+
+/**
+ * PATCH /api/coproducer/notifications/prefs
+ * Body: any subset of { notifySale, notifyRenewal, notifyLead, notifyCredentialFail }
+ */
+router.patch('/notifications/prefs', async (req: AuthRequest, res: Response) => {
+  try {
+    const { notifySale, notifyRenewal, notifyLead, notifyCredentialFail } = req.body || {};
+    const updated = await prisma.coproducerAccount.update({
+      where: { id: req.coproducer!.id },
+      data: {
+        ...(typeof notifySale === 'boolean' ? { notifySale } : {}),
+        ...(typeof notifyRenewal === 'boolean' ? { notifyRenewal } : {}),
+        ...(typeof notifyLead === 'boolean' ? { notifyLead } : {}),
+        ...(typeof notifyCredentialFail === 'boolean' ? { notifyCredentialFail } : {}),
+      },
+      select: {
+        notifySale: true,
+        notifyRenewal: true,
+        notifyLead: true,
+        notifyCredentialFail: true,
+      },
+    });
+    res.json({ prefs: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao salvar preferências' });
+  }
+});
+
+/**
+ * GET /api/coproducer/notifications/history?limit=50
+ * Reverse-chronological list of pushes (or attempts) targeted at this
+ * coproducer's user. Includes both delivered and skipped (toggle-off)
+ * entries — by design, so the coproducer can audit what they missed.
+ */
+router.get('/notifications/history', async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Math.min(200, Math.max(5, parseInt((req.query.limit as string) || '50', 10)));
+    const items = await prisma.notificationLog.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, type: true, title: true, body: true, url: true, delivered: true, createdAt: true },
+    });
+    res.json({ items });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao carregar histórico' });
+  }
+});
+
+/**
+ * POST /api/coproducer/notifications/test
+ * Sends a test push to the caller. Bypasses the per-type toggle on
+ * purpose — this is the button the coproducer clicks to confirm their
+ * browser is properly subscribed.
+ */
+router.post('/notifications/test', async (req: AuthRequest, res: Response) => {
+  try {
+    const delivered = await notifyCoproducer({
+      coproducerId: req.coproducer!.id,
+      type: 'test',
+      title: '🔔 Notificação de teste',
+      body: 'Está tudo certo — você vai receber notificações de vendas, leads, renovações e falhas aqui.',
+      url: '/coproducer/notifications',
+    });
+    res.json({ delivered });
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao enviar teste' });
   }
 });
 
@@ -294,7 +387,10 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
 
 /**
  * GET /api/coproducer/users
- * Active or paid users attributed to this coproducer.
+ * Every user attributed to this coproducer, EXCEPT pure leads
+ * (subscriptionStatus='lead' lives on /leads). Includes active,
+ * expired, cancelled, overdue, grace_period — so the coproducer
+ * sees churned/inactive customers too.
  */
 router.get('/users', async (req: AuthRequest, res: Response) => {
   try {

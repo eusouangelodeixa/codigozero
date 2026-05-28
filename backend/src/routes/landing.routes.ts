@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import crypto from 'crypto';
 import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
 import { getActivePrice } from '../lib/pricing';
+import { notifyCoproducer } from '../services/coproducer.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -110,6 +111,19 @@ router.post('/lead', async (req: Request, res: Response) => {
           ...(coproducerAccount ? { referredByCoproducer: coproducerAccount.code } : {}),
         },
       });
+
+      // Push the coproducer about the brand-new lead. Skipped when the
+      // user already existed (existing leads/customers re-submitting the
+      // form shouldn't generate noise).
+      if (coproducerAccount) {
+        notifyCoproducer({
+          coproducerId: coproducerAccount.id,
+          type: 'lead',
+          title: '👤 Novo lead',
+          body: `${name} (${email}) preencheu o formulário no seu link.`,
+          url: '/coproducer/leads',
+        }).catch(() => {});
+      }
     }
 
     // Record (or update) the referral row when applicable.

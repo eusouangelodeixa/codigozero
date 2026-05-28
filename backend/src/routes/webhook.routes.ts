@@ -10,7 +10,7 @@ import {
 } from '../services/affiliate.service';
 import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
-import { resolveCoproducerForOrder } from '../services/coproducer.service';
+import { resolveCoproducerForOrder, notifyCoproducer } from '../services/coproducer.service';
 import { computeFees } from '../lib/fees';
 import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer } from '../services/stripe.service';
 import {
@@ -346,6 +346,21 @@ router.post('/lojou', async (req: Request, res: Response) => {
           },
         });
 
+        // ── Coproducer push notification ─────────────────────────────────
+        // Fire-and-forget; helper never throws. Skips when the coproducer
+        // turned off the relevant toggle but still logs to NotificationLog.
+        if (coproducer && !txExistedBefore) {
+          const verb = isRenewal ? 'Renovação' : 'Nova venda';
+          const cfTag = isCloseFriends ? ' ⭐CF' : '';
+          notifyCoproducer({
+            coproducerId: coproducer.id,
+            type: isRenewal ? 'renewal' : 'sale',
+            title: `💰 ${verb}${cfTag}`,
+            body: `${customerName || customerEmail} — ${(totalAmount || 0).toFixed(0)} MZN`,
+            url: '/coproducer/finance',
+          }).catch(() => {});
+        }
+
         // ── Coupon usage tracking ────────────────────────────────────────
         // Lojou puts the coupon code on the top-level webhook payload as
         // `coupon_code` (also surfaced as `discount_amount`/`original_amount`
@@ -447,6 +462,16 @@ router.post('/lojou', async (req: Request, res: Response) => {
                     body: `${user.email} pagou mas não recebeu credenciais. Status Komunika: ${lastStatus}`,
                     url: '/admin/users',
                   }).catch(() => {});
+                  // Coproducer também precisa saber — ele pode reenviar do dashboard dele
+                  if (coproducer) {
+                    notifyCoproducer({
+                      coproducerId: coproducer.id,
+                      type: 'credential_fail',
+                      title: '🚨 Acesso não entregue',
+                      body: `${user.email} pagou mas o WhatsApp falhou (${lastStatus}). Avise o cliente ou peça ao admin pra reenviar.`,
+                      url: '/coproducer/users',
+                    }).catch(() => {});
+                  }
                 }
               } else {
                 console.warn(`[WEBHOOK] ⚠️ Komunika instanceId missing — credentials NOT sent via WhatsApp`);

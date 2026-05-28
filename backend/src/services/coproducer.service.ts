@@ -2,8 +2,89 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { env } from '../config/env';
+import { sendPushToUser } from './push.service';
 
 const prisma = new PrismaClient();
+
+/**
+ * Notification types emitted to coproducers. The matching toggle column
+ * on CoproducerAccount is named `notify<Title>`.
+ */
+export type CoproducerNotifType = 'sale' | 'renewal' | 'lead' | 'credential_fail' | 'test';
+
+const TYPE_TO_PREF: Record<CoproducerNotifType, string | null> = {
+  sale: 'notifySale',
+  renewal: 'notifyRenewal',
+  lead: 'notifyLead',
+  credential_fail: 'notifyCredentialFail',
+  test: null, // test bypasses the toggle on purpose — it's a manual probe
+};
+
+/**
+ * Send a push notification to a coproducer, honoring their per-type
+ * preference, and persist the attempt to NotificationLog so the
+ * /coproducer/notifications page can show a history.
+ *
+ * - Skips the actual push when the toggle for that type is false, but
+ *   still writes the log entry (with delivered=0) so the coproducer
+ *   can see "you would have been notified about X" in the history.
+ * - Never throws — safe to fire-and-forget from webhook handlers. A
+ *   broken notification must not fail a payment.
+ *
+ * Returns the number of subscriptions reached (0 if pref disabled or
+ * the user has no active push subscription registered).
+ */
+export async function notifyCoproducer(opts: {
+  coproducerId: string;
+  type: CoproducerNotifType;
+  title: string;
+  body: string;
+  url?: string;
+}): Promise<number> {
+  try {
+    const acc = await prisma.coproducerAccount.findUnique({
+      where: { id: opts.coproducerId },
+      select: {
+        userId: true,
+        enabled: true,
+        notifySale: true,
+        notifyRenewal: true,
+        notifyLead: true,
+        notifyCredentialFail: true,
+      },
+    });
+    if (!acc) return 0;
+    if (!acc.enabled) return 0;
+
+    const prefKey = TYPE_TO_PREF[opts.type];
+    const enabledForType = prefKey === null ? true : Boolean((acc as any)[prefKey]);
+
+    let delivered = 0;
+    if (enabledForType) {
+      const result = await sendPushToUser(acc.userId, {
+        title: opts.title,
+        body: opts.body,
+        url: opts.url,
+      });
+      delivered = result.delivered;
+    }
+
+    await prisma.notificationLog.create({
+      data: {
+        userId: acc.userId,
+        type: opts.type,
+        title: opts.title,
+        body: opts.body,
+        url: opts.url || null,
+        delivered,
+      },
+    });
+    return delivered;
+  } catch (e: any) {
+    console.error('[NOTIFY/COPRODUCER] non-blocking error:', e?.message || e);
+    return 0;
+  }
+}
 
 // Short, copyable code for /c/{code} URLs. Avoids ambiguous glyphs
 // (0/O, 1/I/l) so it's safe to dictate over the phone.

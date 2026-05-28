@@ -367,3 +367,142 @@
 @media (max-width: 480px) {
   .processing { padding: var(--space-8) var(--space-4); }
 }
+
+/* ─────────────────────────────────────────────────────────
+   Radar v2 — multi-city chips, tri-state filters, rating
+   ───────────────────────────────────────────────────────── */
+
+/* Multi-city input: pills + grow-to-fit text input */
+.cityChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-glass);
+  min-height: 42px;
+  align-items: center;
+}
+.cityChips:focus-within { border-color: var(--accent); }
+.cityChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: 999px;
+  background: var(--accent-dim);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--accent-border);
+}
+.cityChipRemove {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 1.05rem;
+  line-height: 1;
+  border-radius: 50%;
+}
+.cityChipRemove:hover { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+.cityChipsInput {
+  flex: 1 1 100px;
+  min-width: 100px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  padding: 4px 6px;
+}
+.cityChipsInput::placeholder { color: var(--text-tertiary); }
+
+/* Tri-state segmented control */
+.triFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 4px 6px 4px 12px;
+}
+.triFilterLabel {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.triFilterSeg {
+  display: inline-flex;
+  background: rgba(255,255,255,0.04);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
+}
+.triFilterOpt {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.triFilterOpt:hover { color: var(--text-secondary); }
+.triFilterOptActive {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.triFilterOptActive:hover { color: var(--accent-fg); }
+
+/* Rating cell (table + cards) */
+.ratingCell {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.ratingStar {
+  color: #FFC107;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.ratingValue { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ratingCount { color: var(--text-tertiary); font-size: 0.75rem; }
+
+/* Compact Maps button (icon-only in the table) */
+.mapsBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.mapsBtn:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+}
+
+@media (max-width: 768px) {
+  .triFilter { width: 100%; justify-content: space-between; padding: 6px 10px; }
+  .triFilterSeg { flex: 1; max-width: 220px; }
+  .triFilterOpt { flex: 1; text-align: center; }
+  .filterRow { flex-direction: column; align-items: stretch; gap: 8px; }
+}

@@ -65,8 +65,12 @@ export const apiClient = {
   getMetrics: () => api('/api/dashboard/metrics'),
 
   // Radar
-  startSearch: (query: string, city: string) =>
-    api('/api/radar/start', { method: 'POST', body: JSON.stringify({ query, city }) }),
+  startSearch: (
+    query: string,
+    cities: string[],
+    filters?: { phone?: 'any' | 'has' | 'none'; website?: 'any' | 'has' | 'none'; instagram?: 'any' | 'has' | 'none' },
+  ) =>
+    api('/api/radar/start', { method: 'POST', body: JSON.stringify({ query, cities, filters }) }),
 
   getSearchHistory: () => api('/api/radar/history'),
 

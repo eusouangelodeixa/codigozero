@@ -29,6 +29,14 @@ interface Lead {
   instagram?: string;
   status: string;
   recommendedScriptId?: string;
+  // Maps enrichment (radar v2)
+  mapsUrl?: string | null;
+  placeId?: string | null;
+  rating?: number | null;
+  reviewsCount?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string | null;
 }
 
 interface Script {
@@ -97,6 +105,12 @@ const Icon = {
       <path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3" />
     </svg>
   ),
+  Pin: (p: { size?: number }) => (
+    <svg width={p.size ?? 14} height={p.size ?? 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 21s-7-7.5-7-12a7 7 0 0114 0c0 4.5-7 12-7 12z" />
+      <circle cx="12" cy="9" r="2.5" />
+    </svg>
+  ),
   Send: (p: { size?: number }) => (
     <svg width={p.size ?? 14} height={p.size ?? 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="22" y1="2" x2="11" y2="13" />
@@ -118,13 +132,43 @@ export default function RadarPage() {
   const toast = useToast();
 
   const [query, setQuery] = useState("");
-  const [city, setCity] = useState("");
+  const [cities, setCities] = useState<string[]>([]);
+  const [cityInput, setCityInput] = useState("");
   const [savedJobs, setSavedJobs] = useState<{ leads?: Lead[] }[]>([]);
   const [tab, setTab] = useState<"current" | "history">("current");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const [requirePhone, setRequirePhone] = useState(false);
-  const [requireWebsite, setRequireWebsite] = useState(false);
+  // Tri-state filters applied server-side by the scraper worker.
+  type TriState = "any" | "has" | "none";
+  const [filterPhone, setFilterPhone] = useState<TriState>("any");
+  const [filterWebsite, setFilterWebsite] = useState<TriState>("any");
+  const [filterInstagram, setFilterInstagram] = useState<TriState>("any");
+
+  const addCity = (raw: string) => {
+    const v = raw.trim();
+    if (!v) return;
+    setCities((prev) => {
+      const lower = v.toLowerCase();
+      if (prev.some((c) => c.toLowerCase() === lower)) return prev;
+      if (prev.length >= 5) {
+        toast.warning("Máximo 5 cidades", "Refine antes de adicionar mais.");
+        return prev;
+      }
+      return [...prev, v];
+    });
+    setCityInput("");
+  };
+  const removeCity = (c: string) =>
+    setCities((prev) => prev.filter((x) => x.toLowerCase() !== c.toLowerCase()));
+  const cityInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addCity(cityInput);
+    }
+    if (e.key === "Backspace" && !cityInput && cities.length > 0) {
+      removeCity(cities[cities.length - 1]);
+    }
+  };
 
   const [scriptsFolders, setScriptsFolders] = useState<ScriptFolder[]>([]);
   const [suggestedScript, setSuggestedScript] = useState<Script | null>(null);
@@ -168,9 +212,26 @@ export default function RadarPage() {
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
-    if (!query.trim() || !city.trim()) return;
+    if (!query.trim()) return;
+    // Allow submitting with a city still in the input that wasn't "Enter"d
+    const pendingCity = cityInput.trim();
+    const allCities = pendingCity
+      ? [...cities.filter((c) => c.toLowerCase() !== pendingCity.toLowerCase()), pendingCity]
+      : cities;
+    if (allCities.length === 0) {
+      toast.error("Adicione ao menos uma cidade", "Pressione Enter ou vírgula para adicionar.");
+      return;
+    }
+    setCityInput("");
+    if (pendingCity && !cities.some((c) => c.toLowerCase() === pendingCity.toLowerCase())) {
+      setCities(allCities);
+    }
     setTab("current");
-    startSearch(query.trim(), city.trim());
+    startSearch(query.trim(), allCities, {
+      phone: filterPhone,
+      website: filterWebsite,
+      instagram: filterInstagram,
+    });
   };
 
   const copyPhone = async (phone: string, id: string) => {
@@ -223,24 +284,48 @@ export default function RadarPage() {
   };
 
   const allHistoryLeads: Lead[] = savedJobs.flatMap((j) => j.leads || []);
-  const sourceLeads = tab === "current" ? results : allHistoryLeads;
-  const displayLeads = sourceLeads.filter((lead) => {
-    if (requirePhone && (!lead.phone || lead.phone.trim() === "")) return false;
-    if (requireWebsite && (!lead.website || lead.website.trim() === "")) return false;
-    return true;
-  });
+  // Filters are applied server-side at scrape time. Whatever comes through
+  // already respects the user's choices, so the UI just renders it.
+  const displayLeads: Lead[] = tab === "current" ? results : allHistoryLeads;
 
   const exportCsv = () => {
     if (displayLeads.length === 0) return;
-    const headers = ["nome", "telefone", "status", "endereco", "website", "instagram"];
+    const csvEscape = (v: string | number | null | undefined) => {
+      const s = v == null ? "" : String(v);
+      // Quote whenever the cell could break CSV parsing
+      if (/[",\n;]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const headers = [
+      "nome",
+      "telefone",
+      "status",
+      "rating",
+      "avaliacoes",
+      "cidade",
+      "endereco",
+      "website",
+      "instagram",
+      "maps_url",
+      "place_id",
+      "latitude",
+      "longitude",
+    ];
     const rows = displayLeads.map((l) =>
       [
-        (l.name || "").replace(/,/g, " "),
-        l.phone || "",
-        (l.status || "").replace(/,/g, " "),
-        (l.address || "").replace(/,/g, " "),
-        l.website || "",
-        l.instagram || "",
+        csvEscape(l.name),
+        csvEscape(l.phone),
+        csvEscape(l.status),
+        csvEscape(l.rating ?? ""),
+        csvEscape(l.reviewsCount ?? ""),
+        csvEscape(l.city ?? ""),
+        csvEscape(l.address ?? ""),
+        csvEscape(l.website ?? ""),
+        csvEscape(l.instagram ?? ""),
+        csvEscape(l.mapsUrl ?? ""),
+        csvEscape(l.placeId ?? ""),
+        csvEscape(l.latitude ?? ""),
+        csvEscape(l.longitude ?? ""),
       ].join(",")
     );
     const csv = [headers.join(","), ...rows].join("\n");
@@ -308,13 +393,37 @@ export default function RadarPage() {
               placeholder="Ex: Clínicas odontológicas"
               required
             />
-            <Input
-              label="Localidade"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="Ex: São Paulo, SP"
-              required
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: "var(--type-label)", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, color: "var(--text-secondary)" }}>
+                Cidades · até 5
+              </label>
+              <div className={styles.cityChips}>
+                {cities.map((c) => (
+                  <span key={c} className={styles.cityChip}>
+                    {c}
+                    <button
+                      type="button"
+                      className={styles.cityChipRemove}
+                      onClick={() => removeCity(c)}
+                      aria-label={`Remover ${c}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  className={styles.cityChipsInput}
+                  value={cityInput}
+                  onChange={(e) => setCityInput(e.target.value)}
+                  onKeyDown={cityInputKeyDown}
+                  onBlur={() => addCity(cityInput)}
+                  placeholder={cities.length === 0 ? "Ex: Maputo, Beira" : "+ adicionar"}
+                />
+              </div>
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                Pressione Enter ou vírgula para adicionar. Cada cidade conta 1 busca.
+              </span>
+            </div>
             <Button
               type="submit"
               variant="primary"
@@ -325,28 +434,16 @@ export default function RadarPage() {
               Rastrear
             </Button>
           </div>
+
+          {/* Tri-state filters — applied server-side by the scraper */}
           <div className={styles.filterRow}>
             <span className={styles.dim} style={{ fontSize: "var(--type-label)", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>
               Filtros
             </span>
-            <button
-              type="button"
-              onClick={() => setRequirePhone((v) => !v)}
-              className={cx(styles.chip, requirePhone && styles.chipActive)}
-              aria-pressed={requirePhone}
-            >
-              <span className={styles.chipCheck}>{requirePhone && <Icon.Check />}</span>
-              Exigir telefone
-            </button>
-            <button
-              type="button"
-              onClick={() => setRequireWebsite((v) => !v)}
-              className={cx(styles.chip, requireWebsite && styles.chipActive)}
-              aria-pressed={requireWebsite}
-            >
-              <span className={styles.chipCheck}>{requireWebsite && <Icon.Check />}</span>
-              Exigir website
-            </button>
+
+            <TriFilter label="Telefone" value={filterPhone} onChange={setFilterPhone} />
+            <TriFilter label="Website" value={filterWebsite} onChange={setFilterWebsite} />
+            <TriFilter label="Instagram" value={filterInstagram} onChange={setFilterInstagram} />
           </div>
         </form>
       </Card>
@@ -429,10 +526,12 @@ export default function RadarPage() {
               <thead>
                 <tr>
                   <th>Negócio</th>
+                  <th>Avaliação</th>
                   <th>Telefone</th>
                   <th>Website</th>
                   <th>Status</th>
                   <th>Instagram</th>
+                  <th style={{ width: 1 }}>Maps</th>
                   <th style={{ width: 1 }}>Ação</th>
                 </tr>
               </thead>
@@ -445,6 +544,24 @@ export default function RadarPage() {
                       <td>
                         <div className={styles.leadName}>{lead.name}</div>
                         {lead.address && <div className={styles.leadAddress}>{lead.address}</div>}
+                        {lead.city && (
+                          <div className={styles.leadAddress} style={{ fontStyle: "italic" }}>
+                            {lead.city}
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        {lead.rating != null ? (
+                          <div className={styles.ratingCell}>
+                            <span className={styles.ratingStar}>★</span>
+                            <span className={styles.ratingValue}>{lead.rating.toFixed(1)}</span>
+                            {lead.reviewsCount != null && (
+                              <span className={styles.ratingCount}>({lead.reviewsCount})</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={styles.dim}>—</span>
+                        )}
                       </td>
                       <td>
                         <button
@@ -495,6 +612,22 @@ export default function RadarPage() {
                         )}
                       </td>
                       <td>
+                        {lead.mapsUrl ? (
+                          <a
+                            href={lead.mapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={styles.mapsBtn}
+                            title="Abrir no Google Maps"
+                            aria-label="Abrir no Google Maps"
+                          >
+                            <Icon.Pin size={14} />
+                          </a>
+                        ) : (
+                          <span className={styles.dim}>—</span>
+                        )}
+                      </td>
+                      <td>
                         <Button
                           variant="accent"
                           size="sm"
@@ -521,7 +654,23 @@ export default function RadarPage() {
             return (
               <div key={id} className={styles.leadCard}>
                 <div className={styles.leadCardHead}>
-                  <div className={styles.leadName}>{lead.name}</div>
+                  <div>
+                    <div className={styles.leadName}>{lead.name}</div>
+                    {lead.rating != null && (
+                      <div className={styles.ratingCell}>
+                        <span className={styles.ratingStar}>★</span>
+                        <span className={styles.ratingValue}>{lead.rating.toFixed(1)}</span>
+                        {lead.reviewsCount != null && (
+                          <span className={styles.ratingCount}>({lead.reviewsCount})</span>
+                        )}
+                        {lead.city && (
+                          <span className={styles.ratingCount} style={{ fontStyle: "italic" }}>
+                            · {lead.city}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <Badge variant={statusVariant(lead.status)} size="sm">
                     {lead.status}
                   </Badge>
@@ -539,6 +688,11 @@ export default function RadarPage() {
                       <Icon.Copy className={styles.copyIcon} />
                     )}
                   </button>
+                  {lead.mapsUrl && (
+                    <a href={lead.mapsUrl} target="_blank" rel="noreferrer" className={styles.linkInline}>
+                      <Icon.Pin size={12} /> Maps <Icon.ExternalLink />
+                    </a>
+                  )}
                   {lead.website && (
                     <a
                       href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
@@ -646,6 +800,44 @@ export default function RadarPage() {
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Tri-state segmented control used by the radar filter row.
+ * Three states map to what the worker expects: 'any' | 'has' | 'none'.
+ */
+function TriFilter({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: "any" | "has" | "none";
+  onChange: (v: "any" | "has" | "none") => void;
+}) {
+  const options: { v: "any" | "has" | "none"; label: string }[] = [
+    { v: "any", label: "Tanto faz" },
+    { v: "has", label: "Tem" },
+    { v: "none", label: "Não tem" },
+  ];
+  return (
+    <div className={styles.triFilter} role="group" aria-label={label}>
+      <span className={styles.triFilterLabel}>{label}</span>
+      <div className={styles.triFilterSeg}>
+        {options.map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            className={cx(styles.triFilterOpt, value === o.v && styles.triFilterOptActive)}
+            onClick={() => onChange(o.v)}
+            aria-pressed={value === o.v}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

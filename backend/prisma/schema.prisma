@@ -195,7 +195,11 @@ model ScrapeJob {
   id        String   @id @default(uuid())
   userId    String
   query     String
+  // Single-city legacy column (kept for backwards compat with old jobs).
+  // New jobs populate `cities` (JSON array). The worker reads cities ??
+  // [city] so both shapes resolve to a list.
   city      String
+  cities    Json?    // string[] — multi-city support
   status    String   // processing, completed, failed
   leads     ScrapedLead[]
   createdAt DateTime @default(now())
@@ -214,6 +218,18 @@ model ScrapedLead {
   instagram   String?
   status      String   // "Sem Website", "Website Lento/Antigo", "Website Bom"
   recommendedScriptId String? // ID do script sugerido
+  // Google Maps enrichment — captured by the worker from the Maps detail
+  // page. mapsUrl is the canonical place link; placeId is the stable
+  // identifier; rating/reviewsCount surface social proof in the UI.
+  mapsUrl       String?
+  placeId       String?
+  rating        Float?
+  reviewsCount  Int?
+  latitude      Float?
+  longitude     Float?
+  // City that produced this lead (relevant when the job has multiple
+  // cities — lets the UI/CSV show which city each lead came from).
+  city          String?
   createdAt   DateTime @default(now())
 
   @@index([jobId])

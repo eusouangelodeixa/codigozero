@@ -32,63 +32,112 @@ const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
 
 /**
  * POST /api/radar/start
- * Starts a Google Maps scraping job via BullMQ
+ * Starts a Google Maps scraping job via BullMQ.
+ *
+ * Body: { query: string, cities?: string[], city?: string,
+ *         filters?: { phone?: 'any'|'has'|'none', website?: ..., instagram?: ... } }
+ *
+ * - `cities` is preferred; `city` (singular) is kept for backwards-compat
+ *   and silently converted to a one-element array.
+ * - Each city counts as one search against the daily rate limit.
  */
+type TriState = 'any' | 'has' | 'none';
+function sanitizeTri(v: unknown): TriState {
+  return v === 'has' || v === 'none' ? v : 'any';
+}
+
 router.post('/start', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { query, city } = req.body;
+    const { query, cities, city, filters } = req.body || {};
 
-    if (!query || !city) {
-      return res.status(400).json({ error: 'Query e localidade (city) são obrigatórios' });
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return res.status(400).json({ error: 'Query (nicho) é obrigatória' });
     }
 
-    // Rate limiting: 10 searches/day
+    // Normalise cities into a clean string[]
+    let cityList: string[] = [];
+    if (Array.isArray(cities)) {
+      cityList = cities
+        .map((c: unknown) => (typeof c === 'string' ? c.trim() : ''))
+        .filter((c) => c.length > 0);
+    } else if (typeof city === 'string' && city.trim()) {
+      cityList = [city.trim()];
+    }
+    // De-duplicate (case-insensitive) without changing display order
+    const seen = new Set<string>();
+    cityList = cityList.filter((c) => {
+      const k = c.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+    if (cityList.length === 0) {
+      return res.status(400).json({ error: 'Informe ao menos uma localidade' });
+    }
+    if (cityList.length > 5) {
+      return res.status(400).json({ error: 'Máximo 5 cidades por busca' });
+    }
+
+    // Rate limiting: each city counts as 1 search
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     const today = new Date().toDateString();
     const lastSearch = user.lastSearchDate ? new Date(user.lastSearchDate).toDateString() : null;
-    let searchCount = lastSearch === today ? user.dailySearchCount : 0;
+    const searchCount = lastSearch === today ? user.dailySearchCount : 0;
+    const remainingBefore = env.MAX_DAILY_SEARCHES - searchCount;
 
-    if (searchCount >= env.MAX_DAILY_SEARCHES) {
+    if (remainingBefore < cityList.length) {
       return res.status(429).json({
-        error: 'Limite diário atingido',
-        message: `Você atingiu o limite de ${env.MAX_DAILY_SEARCHES} buscas por dia. Tente novamente amanhã.`,
-        remaining: 0,
+        error: 'Limite diário insuficiente',
+        message: `Você quer buscar em ${cityList.length} cidade(s) mas só restam ${Math.max(0, remainingBefore)} busca(s) hoje.`,
+        remaining: Math.max(0, remainingBefore),
+        needed: cityList.length,
       });
     }
 
-    // Create a job record in database
+    const sanitizedFilters = {
+      phone: sanitizeTri(filters?.phone),
+      website: sanitizeTri(filters?.website),
+      instagram: sanitizeTri(filters?.instagram),
+    };
+
+    // Create the job record. `city` (legacy NOT NULL) is set to the first
+    // city for backwards compat; `cities` holds the full list.
     const dbJob = await prisma.scrapeJob.create({
       data: {
         userId,
-        query,
-        city,
-        status: 'queued'
-      }
+        query: query.trim(),
+        city: cityList[0],
+        cities: cityList,
+        status: 'queued',
+      },
     });
 
-    // Increment search count
+    // Increment search count by the number of cities
     await prisma.user.update({
       where: { id: userId },
       data: {
-        dailySearchCount: searchCount + 1,
+        dailySearchCount: searchCount + cityList.length,
         lastSearchDate: new Date(),
       },
     });
 
-    // Add to BullMQ Queue
     await scraperQueue.add('scrape', {
       jobId: dbJob.id,
-      query,
-      city
+      query: query.trim(),
+      cities: cityList,
+      filters: sanitizedFilters,
     });
 
     return res.json({
       jobId: dbJob.id,
       status: 'queued',
-      remaining: env.MAX_DAILY_SEARCHES - searchCount - 1,
+      cities: cityList,
+      filters: sanitizedFilters,
+      remaining: env.MAX_DAILY_SEARCHES - (searchCount + cityList.length),
     });
   } catch (error) {
     console.error('[RADAR] Start error:', error);

@@ -4,7 +4,15 @@ import { apiClient } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-interface Lead {
+export type TriState = 'any' | 'has' | 'none';
+
+export interface RadarFilters {
+  phone?: TriState;
+  website?: TriState;
+  instagram?: TriState;
+}
+
+export interface Lead {
   id: string;
   name: string;
   phone: string;
@@ -13,6 +21,14 @@ interface Lead {
   instagram?: string;
   status: string;
   recommendedScriptId?: string;
+  // Maps enrichment (added in radar v2)
+  mapsUrl?: string | null;
+  placeId?: string | null;
+  rating?: number | null;
+  reviewsCount?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string | null;
 }
 
 interface RadarState {
@@ -36,12 +52,12 @@ export function useRadar() {
     }
   }, []);
 
-  const startSearch = useCallback(async (query: string, city: string) => {
+  const startSearch = useCallback(async (query: string, cities: string[], filters?: RadarFilters) => {
     stopStreaming();
     setState({ status: 'processing', results: [] });
 
     try {
-      const data = await apiClient.startSearch(query, city);
+      const data = await apiClient.startSearch(query, cities, filters);
       const token = localStorage.getItem("cz_token");
 
       setState(prev => ({ ...prev, remaining: data.remaining }));

@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
 import { superadminMiddleware } from '../middlewares/superadmin.middleware';
-import { generateUniqueCoproducerCode } from '../services/coproducer.service';
+import { generateUniqueCoproducerCode, sendCoproducerWelcome } from '../services/coproducer.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -133,10 +133,47 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
       }),
     ]);
 
-    return res.json({ coproducer: account, code });
+    // Fire-and-await the welcome message so the admin immediately sees
+    // whether delivery worked. The function resets the password as part
+    // of the flow (same nova-senha pattern as the post-checkout webhook).
+    const welcome = await sendCoproducerWelcome({ coproducerAccountId: account.id });
+
+    return res.json({
+      coproducer: account,
+      code,
+      welcome: {
+        delivered: welcome.delivered,
+        status: welcome.status,
+      },
+    });
   } catch (error) {
     console.error('[ADMIN/COPRODUCERS] Create error:', error);
     res.status(500).json({ error: 'Erro ao criar coprodutor' });
+  }
+});
+
+/**
+ * POST /api/admin/coproducers/:id/resend-welcome
+ * Generates a fresh password and re-sends the welcome message. Useful
+ * when the WhatsApp was disconnected on first creation, or when the
+ * coprodutor lost their credentials.
+ */
+router.post('/:id/resend-welcome', superadminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const acc = await prisma.coproducerAccount.findUnique({ where: { id: req.params.id } });
+    if (!acc) return res.status(404).json({ error: 'Coprodutor não encontrado' });
+    const result = await sendCoproducerWelcome({ coproducerAccountId: acc.id });
+    if (!result.delivered) {
+      return res.status(502).json({
+        success: false,
+        error: `WhatsApp não entregou (status=${result.status}). Senha foi resetada — copie do log ou tente novamente.`,
+        passwordSent: result.passwordSent,
+      });
+    }
+    res.json({ success: true, status: result.status });
+  } catch (error) {
+    console.error('[ADMIN/COPRODUCERS] Resend welcome error:', error);
+    res.status(500).json({ error: 'Erro ao reenviar boas-vindas' });
   }
 });
 

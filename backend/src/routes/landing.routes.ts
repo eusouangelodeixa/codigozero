@@ -22,13 +22,23 @@ const PLAN_ID = env.LOJOU_PLAN_ID;
  */
 router.post('/lead', async (req: Request, res: Response) => {
   try {
-    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode } = req.body;
+    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode, phoneCode } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
     }
 
     const contactPhone = whatsapp || phone || `+258${Date.now().toString().slice(-9)}`;
+
+    // ── International routing ──────────────────────────────────────────
+    // Any non-MZ phone code routes the buyer to Stripe (hosted Payment
+    // Link). The lead is still captured locally so remarketing works,
+    // and the Stripe webhook will reconcile by email when payment lands.
+    // When STRIPE_CHECKOUT_URL isn't configured we fall back silently
+    // to the normal Lojou flow — better than 500ing the form.
+    const dialCode = String(phoneCode || '').trim();
+    const isInternational = dialCode !== '' && dialCode !== '+258';
+    const useStripe = isInternational && Boolean(env.STRIPE_CHECKOUT_URL);
 
     // ── Affiliate check ────────────────────────────────────────────────
     // If we got an affiliate code, validate it before anything else. An
@@ -121,14 +131,20 @@ router.post('/lead', async (req: Request, res: Response) => {
     }
 
     // ── Checkout URL strategy ─────────────────────────────────────────
-    // Default landing: create a personalized Lojou order (prefilled checkout).
-    // Affiliate landing: skip Lojou orders API and return the standard public
-    // checkout URL for the affiliate product. The user re-enters their info
-    // on Lojou; the system attributes the sale via the email captured here
-    // when the webhook fires (see User.referredByCode).
+    // Order of precedence:
+    //   0. International (any non-MZ phoneCode) → Stripe hosted Payment Link
+    //   1. Affiliate landing → standard public affiliate checkout
+    //   2. Coproducer landing → publicCheckoutUrl OR Lojou Orders API
+    //   3. Default landing → personalized Lojou order (prefilled checkout)
     let checkoutUrl = '';
 
-    if (isAffiliateFlow) {
+    if (useStripe) {
+      checkoutUrl = env.STRIPE_CHECKOUT_URL;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { checkoutUrl },
+      });
+    } else if (isAffiliateFlow) {
       checkoutUrl = AFFILIATE_PRODUCT.checkoutUrl;
       await prisma.user.update({
         where: { id: user.id },

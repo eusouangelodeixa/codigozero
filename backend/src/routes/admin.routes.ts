@@ -350,6 +350,8 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           orderBumpAmount: true,
           coproducerId: true,
           coproducer: { select: { id: true, code: true, displayName: true, user: { select: { name: true } } } },
+          gateway: true,
+          stripePaymentIntentId: true,
         },
       }),
     ]);

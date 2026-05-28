@@ -378,8 +378,13 @@ export default function LandingPage({
       ...formData,
       phone: finalWhatsapp,
       whatsapp: finalWhatsapp,
+      // phoneCode is the country dial code (e.g. "+258", "+351").
+      // Backend uses it to decide between Lojou (MZ) and Stripe
+      // (everyone else) when returning the checkoutUrl.
+      phoneCode: formData.whatsappCode,
       surveyAnswers,
       ...(affiliateContext?.code ? { affiliateCode: affiliateContext.code } : {}),
+      ...(coproducerContext?.code ? { coproducerCode: coproducerContext.code } : {}),
     };
 
     const leadRecord: Record<string, any> = { ...payload, savedAt: new Date().toISOString(), _v: LEAD_VERSION };

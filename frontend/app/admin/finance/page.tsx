@@ -54,6 +54,8 @@ interface Tx {
   grossAmount?: number | null;
   lojouFee?: number | null;
   coproducerFee?: number | null;
+  gateway?: string | null;
+  stripePaymentIntentId?: string | null;
 }
 
 interface CoproducerOpt {
@@ -512,7 +514,26 @@ export default function AdminFinance() {
                       )}
                     </td>
                     <td>{fmtDateTime(tx.createdAt)}</td>
-                    <td><span className={styles.method}>{tx.paymentMethod || "M-Pesa"}</span></td>
+                    <td>
+                      <span className={styles.method}>{tx.paymentMethod || "M-Pesa"}</span>
+                      {tx.gateway && tx.gateway !== "lojou" && (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            fontSize: 10,
+                            padding: "2px 7px",
+                            borderRadius: 999,
+                            fontWeight: 700,
+                            letterSpacing: 0.3,
+                            background: tx.gateway === "stripe" ? "rgba(99,91,255,0.14)" : "rgba(168,168,168,0.14)",
+                            color: tx.gateway === "stripe" ? "#635bff" : "var(--text-tertiary)",
+                          }}
+                          title={tx.stripePaymentIntentId || tx.gateway}
+                        >
+                          {tx.gateway.toUpperCase()}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
                       {tx.grossAmount != null ? fmtMoney(tx.grossAmount) : "—"}
                       {tx.orderBumpAmount ? (

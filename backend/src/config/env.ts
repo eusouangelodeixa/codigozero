@@ -26,4 +26,13 @@ export const env = {
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',
   KOMUNIKA_FUNNEL_VISITOR_ID: process.env.KOMUNIKA_FUNNEL_VISITOR_ID || '', // Funil de Visitantes Puros
   KOMUNIKA_FUNNEL_CHECKOUT_ID: process.env.KOMUNIKA_FUNNEL_CHECKOUT_ID || '', // Funil de Carrinho Abandonado
+  // ── Stripe (international card payments — non-MZ leads) ────────────
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
+  STRIPE_PRICE_ID: process.env.STRIPE_PRICE_ID || '',
+  // The hosted Stripe checkout link used when a non-MZ lead submits the
+  // landing form. This is a static link generated in the Stripe dashboard
+  // (e.g. https://buy.stripe.com/...). The webhook still uses the
+  // PRICE_ID + SECRET_KEY to verify and reconcile incoming payments.
+  STRIPE_CHECKOUT_URL: process.env.STRIPE_CHECKOUT_URL || '',
 };

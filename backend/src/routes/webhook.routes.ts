@@ -12,6 +12,14 @@ import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder } from '../services/coproducer.service';
 import { computeFees } from '../lib/fees';
+import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer } from '../services/stripe.service';
+import {
+  generateUserPassword,
+  sendCredentialsViaWhatsApp,
+  notifyAdminOfSale,
+  reconcileManualStripe,
+} from '../services/payment.service';
+import type Stripe from 'stripe';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -606,5 +614,330 @@ router.post('/lojou', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Stripe webhook
+ *
+ * Mounted at POST /api/webhooks/stripe. Express's raw body middleware
+ * (set in server.ts for /api/webhooks/*) keeps `req.body` as a Buffer so
+ * the signature verification can run against the exact bytes Stripe sent.
+ *
+ * Events we handle:
+ *   • checkout.session.completed   → first payment / new subscription
+ *   • invoice.paid                 → renewal (skip if same session)
+ *   • invoice.payment_failed       → push to superadmins
+ *   • customer.subscription.deleted → mark cancelled
+ *
+ * Other events ack with 200 and do nothing — Stripe retries non-2xx, so
+ * we don't want unknown events to clog the queue.
+ *
+ * Idempotency: every Transaction we create is keyed by the Stripe
+ * payment_intent or invoice id (stored on orderId). Re-delivery of the
+ * same event resolves to upsert / no-op.
+ * ───────────────────────────────────────────────────────────────────── */
+router.post('/stripe', async (req: Request, res: Response) => {
+  if (!isStripeConfigured()) {
+    console.warn('[STRIPE-WEBHOOK] Received but Stripe not configured — set STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET');
+    return res.status(503).json({ error: 'stripe-not-configured' });
+  }
+
+  const signature = req.headers['stripe-signature'];
+  if (!signature || Array.isArray(signature)) {
+    return res.status(400).json({ error: 'missing-signature' });
+  }
+
+  // Express's raw middleware leaves the body as a Buffer.
+  const rawBody: Buffer = Buffer.isBuffer(req.body)
+    ? req.body
+    : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}));
+
+  let event: Stripe.Event;
+  try {
+    event = verifyStripeWebhook(rawBody, signature);
+  } catch (e: any) {
+    console.error('[STRIPE-WEBHOOK] 🚨 Signature verification failed:', e?.message || e);
+    return res.status(400).json({ error: 'bad-signature' });
+  }
+
+  console.log(`[STRIPE-WEBHOOK] ✅ Verified event: ${event.type} (${event.id})`);
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        await handleCheckoutCompleted(session);
+        break;
+      }
+      case 'invoice.paid': {
+        const invoice = event.data.object as Stripe.Invoice;
+        await handleInvoicePaid(invoice);
+        break;
+      }
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        await handleInvoiceFailed(invoice);
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object as Stripe.Subscription;
+        await handleSubscriptionDeleted(sub);
+        break;
+      }
+      default:
+        console.log(`[STRIPE-WEBHOOK] Unhandled event type: ${event.type}`);
+    }
+    return res.json({ received: true });
+  } catch (e: any) {
+    // Don't 500 — Stripe retries on non-2xx and we'd duplicate side effects
+    // on the next retry. Log loudly and ack the event; the issue is on us.
+    console.error('[STRIPE-WEBHOOK] 🚨 Handler threw:', e);
+    return res.status(200).json({ received: true, processingError: e?.message || 'unknown' });
+  }
+});
+
+/**
+ * Handle `checkout.session.completed` — first payment on a Stripe
+ * Payment Link. Creates the user (or reactivates an existing one),
+ * generates credentials, sends WhatsApp, creates the Transaction.
+ *
+ * Reconciles the MANUAL_STRIPE_* placeholder (case of users who were
+ * granted access manually before Stripe was wired — Esley etc.) by
+ * matching on email.
+ */
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  // Pull the customer details. Payment Links always create a Customer
+  // before completing, so session.customer is set.
+  const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+  if (!customerId) {
+    console.warn('[STRIPE-WEBHOOK/CHECKOUT] No customer on session — skipping');
+    return;
+  }
+  const cust = await retrieveCustomer(customerId);
+  const email = (session.customer_email || session.customer_details?.email || cust?.email || '').toLowerCase().trim();
+  const name = session.customer_details?.name || cust?.name || email.split('@')[0] || 'Cliente';
+  const phoneRaw = session.customer_details?.phone || cust?.phone || '';
+  const phone = phoneRaw.replace(/\D/g, '');
+
+  if (!email) {
+    console.warn('[STRIPE-WEBHOOK/CHECKOUT] No email on session — cannot create user');
+    return;
+  }
+
+  const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id;
+  const paymentIntentId = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
+  const amount = (session.amount_total ?? 0) / 100;
+  const currency = (session.currency || 'eur').toUpperCase();
+  const orderRef = `stripe_${session.id}`;
+
+  // Idempotency: if we already processed this session, no-op
+  const existingTx = await prisma.transaction.findUnique({ where: { orderId: orderRef } });
+  if (existingTx) {
+    console.log(`[STRIPE-WEBHOOK/CHECKOUT] Already processed ${orderRef}, skipping`);
+    return;
+  }
+
+  // Reconciliation: if a MANUAL_STRIPE_* user exists with this email,
+  // link it instead of creating a new user.
+  const reconciledId = await reconcileManualStripe({
+    email,
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscriptionId,
+  });
+
+  const now = new Date();
+  const subEnd = new Date(now.getTime() + BASE_SUBSCRIPTION_DAYS * DAY_MS);
+
+  let rawPassword: string | null = null;
+
+  if (reconciledId) {
+    // Existing manual user — just extend the subscription, don't re-send credentials
+    await prisma.user.update({
+      where: { id: reconciledId },
+      data: {
+        subscriptionStatus: 'active',
+        subscriptionStart: now,
+        subscriptionEnd: subEnd,
+      },
+    });
+    console.log(`[STRIPE-WEBHOOK/CHECKOUT] Reconciled existing user ${email} → no credentials resend`);
+  } else {
+    const existingByEmail = await prisma.user.findUnique({ where: { email } });
+    if (existingByEmail) {
+      // Reactivate, reset password (matches Lojou behavior)
+      const pw = await generateUserPassword();
+      rawPassword = pw.raw;
+      await prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          passwordHash: pw.hash,
+          subscriptionStatus: 'active',
+          subscriptionStart: now,
+          subscriptionEnd: subEnd,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId ?? null,
+          role: existingByEmail.role === 'admin' ? 'admin' : 'member',
+        },
+      });
+    } else {
+      // Brand new user
+      const pw = await generateUserPassword();
+      rawPassword = pw.raw;
+      await prisma.user.create({
+        data: {
+          name,
+          email,
+          phone: phone || `stripe_${Date.now()}`, // phone is @unique on User; fall back when Stripe didn't provide one
+          passwordHash: pw.hash,
+          role: 'member',
+          subscriptionStatus: 'active',
+          subscriptionStart: now,
+          subscriptionEnd: subEnd,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId ?? null,
+        },
+      });
+    }
+  }
+
+  // Create the Transaction (idempotent via orderId)
+  await prisma.transaction.create({
+    data: {
+      orderId: orderRef,
+      userEmail: email,
+      userPhone: phone,
+      userName: name,
+      amount,
+      currency,
+      status: 'approved',
+      paymentMethod: 'card',
+      gateway: 'stripe',
+      stripePaymentIntentId: paymentIntentId ?? null,
+      grossAmount: amount,
+      // Stripe fees are reported separately on the BalanceTransaction —
+      // we leave the column null here rather than guess at the rate
+      // (varies by country / card type). The finance UI displays "—".
+      lojouFee: 0,
+      coproducerFee: 0,
+      isRenewal: false,
+    },
+  });
+
+  // Send credentials only when we generated a new password (skip for reconciliations)
+  if (rawPassword && phone) {
+    await sendCredentialsViaWhatsApp({ phone, email, rawPassword });
+  } else if (rawPassword && !phone) {
+    console.warn(`[STRIPE-WEBHOOK/CHECKOUT] ${email} created but no phone — credentials NOT sent via WhatsApp`);
+    sendPushToSuperAdmins({
+      title: '⚠️ Cliente Stripe sem telefone',
+      body: `${email} pagou mas o checkout não capturou telefone. Envie acesso manualmente.`,
+      url: '/admin/users',
+    }).catch(() => {});
+  }
+
+  await notifyAdminOfSale({
+    customerName: name,
+    customerEmail: email,
+    amount,
+    currency,
+    gateway: 'stripe',
+    paymentMethod: 'card',
+  });
+}
+
+/**
+ * Handle `invoice.paid` — recurring subscription renewals.
+ * Skipped when the invoice's payment_intent matches the one we already
+ * processed in checkout.session.completed (same charge).
+ */
+async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
+  const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  if (!subId) return;
+  const user = await prisma.user.findFirst({ where: { stripeSubscriptionId: subId } });
+  if (!user) {
+    console.warn(`[STRIPE-WEBHOOK/INVOICE] No user for subscription ${subId} — likely first payment, will be handled by checkout.session.completed`);
+    return;
+  }
+  const orderRef = `stripe_inv_${invoice.id}`;
+  const existing = await prisma.transaction.findUnique({ where: { orderId: orderRef } });
+  if (existing) return;
+
+  const amount = (invoice.amount_paid ?? 0) / 100;
+  const currency = (invoice.currency || 'eur').toUpperCase();
+  const paymentIntentId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent?.id;
+
+  // Skip the very first invoice — same charge as the checkout session
+  const sessionTxExists = paymentIntentId
+    ? await prisma.transaction.findFirst({ where: { stripePaymentIntentId: paymentIntentId } })
+    : null;
+  if (sessionTxExists) {
+    console.log(`[STRIPE-WEBHOOK/INVOICE] Invoice ${invoice.id} is the initial charge — already recorded by checkout.session.completed`);
+    return;
+  }
+
+  const now = new Date();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      subscriptionStatus: 'active',
+      subscriptionStart: user.subscriptionStart || now,
+      subscriptionEnd: new Date(now.getTime() + BASE_SUBSCRIPTION_DAYS * DAY_MS),
+    },
+  });
+
+  await prisma.transaction.create({
+    data: {
+      orderId: orderRef,
+      userEmail: user.email,
+      userPhone: user.phone,
+      userName: user.name,
+      amount,
+      currency,
+      status: 'approved',
+      paymentMethod: 'card',
+      gateway: 'stripe',
+      stripePaymentIntentId: paymentIntentId ?? null,
+      stripeInvoiceId: invoice.id,
+      grossAmount: amount,
+      lojouFee: 0,
+      coproducerFee: 0,
+      isRenewal: true,
+    },
+  });
+
+  await notifyAdminOfSale({
+    customerName: user.name,
+    customerEmail: user.email,
+    amount,
+    currency,
+    gateway: 'stripe',
+    paymentMethod: 'card (renovação)',
+  });
+}
+
+async function handleInvoiceFailed(invoice: Stripe.Invoice): Promise<void> {
+  const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  const user = subId ? await prisma.user.findFirst({ where: { stripeSubscriptionId: subId } }) : null;
+  console.warn(`[STRIPE-WEBHOOK/INVOICE-FAILED] sub=${subId} user=${user?.email || 'unknown'}`);
+  sendPushToSuperAdmins({
+    title: '⚠️ Stripe: pagamento falhou',
+    body: `${user?.email || 'Cliente desconhecido'} — invoice ${invoice.id} (${(invoice.amount_due ?? 0) / 100} ${invoice.currency?.toUpperCase()})`,
+    url: '/admin/finance',
+  }).catch(() => {});
+}
+
+async function handleSubscriptionDeleted(sub: Stripe.Subscription): Promise<void> {
+  const user = await prisma.user.findFirst({ where: { stripeSubscriptionId: sub.id } });
+  if (!user) return;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { subscriptionStatus: 'cancelled' },
+  });
+  console.log(`[STRIPE-WEBHOOK/SUB-DELETED] ${user.email} → cancelled`);
+  sendPushToSuperAdmins({
+    title: '🔻 Stripe: assinatura cancelada',
+    body: `${user.email} cancelou a assinatura no Stripe.`,
+    url: '/admin/users',
+  }).catch(() => {});
+}
 
 export default router;

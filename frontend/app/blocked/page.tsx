@@ -28,11 +28,24 @@ export default function BlockedPage() {
   const [reason, setReason] = useState<BlockedReason | null>(null);
 
   useEffect(() => {
+    // Defensive redirect: coproducers and admins should never see this
+    // page. If they land here (stale cache, race with role flip, etc.),
+    // bounce them to their proper dashboard instead of showing a
+    // "renew subscription" CTA that doesn't apply.
+    try {
+      const cached = localStorage.getItem("cz_user");
+      if (cached) {
+        const u = JSON.parse(cached);
+        if (u?.role === "coproducer") { router.replace("/coproducer"); return; }
+        if (u?.role === "admin")      { router.replace("/admin"); return; }
+      }
+    } catch {}
+
     try {
       const stored = localStorage.getItem("cz_blocked_reason");
       if (stored) setReason(JSON.parse(stored));
     } catch {}
-  }, []);
+  }, [router]);
 
   const isOverdue = reason?.status === "overdue";
   const isCanceled = reason?.status === "canceled";

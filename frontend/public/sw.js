@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cz-aluno-v3';
+const CACHE_NAME = 'cz-aluno-v4';
 
 // Install — activate immediately, cache in background
 self.addEventListener('install', (event) => {

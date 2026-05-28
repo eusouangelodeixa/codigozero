@@ -107,120 +107,296 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
 // FINANCE
 // ═══════════════════════════════════════
 
+/**
+ * GET /api/admin/finance
+ *
+ * Query:
+ *   period: 'today' | '7d' | '30d' | '12m' | 'custom'
+ *   from, to: ISO dates (required when period=custom)
+ *   search:  case-insensitive substring matched against userName / userEmail / userPhone
+ *   page, limit: paginated transaction list (defaults 1 / 25)
+ *
+ * Returns metrics for the chosen window, a comparison vs the previous
+ * equal-length window, a chart series, and a paginated transactions
+ * list with new-vs-renewal split.
+ */
 router.get('/finance', async (req: AuthRequest, res: Response) => {
   try {
-    const period = (req.query.period as string) || '30d'; // 7d, 30d, 12m
-    const now = new Date();
-    let startDate = new Date();
-    let previousStartDate = new Date();
+    const period = (req.query.period as string) || '30d';
+    const search = ((req.query.search as string) || '').trim();
+    const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
+    const limit = Math.min(200, Math.max(5, parseInt((req.query.limit as string) || '25', 10)));
 
-    if (period === '7d') {
+    const now = new Date();
+    let startDate = new Date(now);
+    let endDate = new Date(now);
+
+    if (period === 'today') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === '7d') {
       startDate.setDate(now.getDate() - 7);
-      previousStartDate.setDate(startDate.getDate() - 7);
     } else if (period === '30d') {
       startDate.setDate(now.getDate() - 30);
-      previousStartDate.setDate(startDate.getDate() - 30);
     } else if (period === '12m') {
       startDate.setMonth(now.getMonth() - 12);
-      previousStartDate.setMonth(startDate.getMonth() - 12);
+    } else if (period === 'custom') {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      if (!from || !to) {
+        return res.status(400).json({ error: 'period=custom requer from e to em ISO' });
+      }
+      startDate = new Date(from);
+      endDate = new Date(to);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        return res.status(400).json({ error: 'datas inválidas (ISO esperado)' });
+      }
+      // Inclusive end-of-day if `to` looked like a bare date
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) endDate.setHours(23, 59, 59, 999);
+    } else {
+      startDate.setDate(now.getDate() - 30);
     }
 
-    // Current period transactions
-    const currentTransactions = await prisma.transaction.findMany({
-      where: {
-        status: 'approved',
-        createdAt: { gte: startDate, lte: now }
-      },
-      orderBy: { createdAt: 'asc' }
-    });
+    const windowMs = endDate.getTime() - startDate.getTime();
+    const previousStartDate = new Date(startDate.getTime() - windowMs);
+    const previousEndDate = new Date(startDate);
 
-    // Previous period transactions (for comparison)
-    const previousTransactions = await prisma.transaction.findMany({
-      where: {
-        status: 'approved',
-        createdAt: { gte: previousStartDate, lt: startDate }
-      }
-    });
+    // Search clause shared by both windows
+    const searchClause = search
+      ? {
+          OR: [
+            { userName: { contains: search, mode: 'insensitive' as const } },
+            { userEmail: { contains: search, mode: 'insensitive' as const } },
+            { userPhone: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
 
-    // Metrics
-    const currentRevenue = currentTransactions.reduce((sum, t) => sum + t.amount, 0);
-    const previousRevenue = previousTransactions.reduce((sum, t) => sum + t.amount, 0);
-    const revenueGrowth = previousRevenue === 0 
-      ? (currentRevenue > 0 ? 100 : 0) 
-      : ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+    const [currentTransactions, previousTransactions] = await Promise.all([
+      prisma.transaction.findMany({
+        where: {
+          status: 'approved',
+          createdAt: { gte: startDate, lte: endDate },
+          ...searchClause,
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.transaction.findMany({
+        where: {
+          status: 'approved',
+          createdAt: { gte: previousStartDate, lt: previousEndDate },
+          ...searchClause,
+        },
+      }),
+    ]);
 
-    const currentTicket = currentTransactions.length > 0 ? currentRevenue / currentTransactions.length : 0;
-    const previousTicket = previousTransactions.length > 0 ? previousRevenue / previousTransactions.length : 0;
-    const ticketGrowth = previousTicket === 0
-      ? (currentTicket > 0 ? 100 : 0)
-      : ((currentTicket - previousTicket) / previousTicket) * 100;
+    // ── Metrics ────────────────────────────────────────────────────────
+    const sum = (xs: { amount: number }[]) => xs.reduce((s, t) => s + t.amount, 0);
+    const growth = (curr: number, prev: number) =>
+      prev === 0 ? (curr > 0 ? 100 : 0) : ((curr - prev) / prev) * 100;
+
+    const currentRevenue = sum(currentTransactions);
+    const previousRevenue = sum(previousTransactions);
+    const revenueGrowth = growth(currentRevenue, previousRevenue);
 
     const currentCount = currentTransactions.length;
     const previousCount = previousTransactions.length;
-    const countGrowth = previousCount === 0
-      ? (currentCount > 0 ? 100 : 0)
-      : ((currentCount - previousCount) / previousCount) * 100;
+    const countGrowth = growth(currentCount, previousCount);
 
-    // Chart Data Generation
-    const chartDataMap = new Map<string, number>();
-    
-    if (period === '12m') {
-      // Group by month
-      for (let i = 11; i >= 0; i--) {
+    const currentTicket = currentCount > 0 ? currentRevenue / currentCount : 0;
+    const previousTicket = previousCount > 0 ? previousRevenue / previousCount : 0;
+    const ticketGrowth = growth(currentTicket, previousTicket);
+
+    // New vs Renewal split
+    const newTx = currentTransactions.filter((t) => !t.isRenewal);
+    const renewalTx = currentTransactions.filter((t) => t.isRenewal);
+    const newRevenue = sum(newTx);
+    const renewalRevenue = sum(renewalTx);
+
+    // Close Friends slice (audit)
+    const cfTx = currentTransactions.filter((t) => t.isCloseFriends);
+    const cfRevenue = sum(cfTx);
+
+    // Active MRR snapshot (independent of the period — current state)
+    const activePaidUsers = await prisma.user.count({
+      where: { subscriptionStatus: 'active', role: 'member', lojouOrderId: { not: null } },
+    });
+    const activePrice = await getActivePrice();
+    const mrr = activePaidUsers * activePrice;
+
+    // ── Renewal funnel for the window ──────────────────────────────────
+    // "Expected renewals" = users whose subscriptionEnd fell within the
+    // window (their subscription was up for renewal). "Realized" = those
+    // who paid a renewal in the window (or paid before but extended past
+    // it). Simple, conservative proxy for churn.
+    const expectedRenewals = await prisma.user.count({
+      where: { subscriptionEnd: { gte: startDate, lte: endDate } },
+    });
+    const realizedRenewalsCount = renewalTx.length;
+    const renewalRate = expectedRenewals === 0
+      ? null
+      : Math.min(100, (realizedRenewalsCount / expectedRenewals) * 100);
+    const churnRate = renewalRate == null ? null : Math.max(0, 100 - renewalRate);
+
+    // ── Chart data ─────────────────────────────────────────────────────
+    const days = Math.ceil(windowMs / (24 * 60 * 60 * 1000));
+    const groupByMonth = period === '12m' || days > 90;
+    const chartDataMap = new Map<string, { new: number; renewal: number }>();
+
+    if (groupByMonth) {
+      const monthsBack = Math.min(24, Math.max(2, Math.ceil(days / 30)));
+      for (let i = monthsBack - 1; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        chartDataMap.set(d.toLocaleString('pt-MZ', { month: 'short', year: '2-digit' }), 0);
+        chartDataMap.set(
+          d.toLocaleString('pt-MZ', { month: 'short', year: '2-digit' }),
+          { new: 0, renewal: 0 },
+        );
       }
-      currentTransactions.forEach(t => {
+      currentTransactions.forEach((t) => {
         const key = new Date(t.createdAt).toLocaleString('pt-MZ', { month: 'short', year: '2-digit' });
-        if (chartDataMap.has(key)) chartDataMap.set(key, chartDataMap.get(key)! + t.amount);
+        if (chartDataMap.has(key)) {
+          const slot = chartDataMap.get(key)!;
+          if (t.isRenewal) slot.renewal += t.amount;
+          else slot.new += t.amount;
+        }
       });
     } else {
-      // Group by day
-      const days = period === '7d' ? 7 : 30;
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now);
+      // Group by day, walking back from `endDate` so custom ranges line up
+      for (let i = Math.max(0, days - 1); i >= 0; i--) {
+        const d = new Date(endDate);
         d.setDate(d.getDate() - i);
         const key = d.toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        chartDataMap.set(key, 0);
+        chartDataMap.set(key, { new: 0, renewal: 0 });
       }
-      currentTransactions.forEach(t => {
+      currentTransactions.forEach((t) => {
         const key = new Date(t.createdAt).toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        if (chartDataMap.has(key)) chartDataMap.set(key, chartDataMap.get(key)! + t.amount);
+        if (chartDataMap.has(key)) {
+          const slot = chartDataMap.get(key)!;
+          if (t.isRenewal) slot.renewal += t.amount;
+          else slot.new += t.amount;
+        }
       });
     }
+    const chartData = Array.from(chartDataMap.entries()).map(([date, v]) => ({
+      date,
+      amount: v.new + v.renewal,
+      new: v.new,
+      renewal: v.renewal,
+    }));
 
-    const chartData = Array.from(chartDataMap.entries()).map(([date, amount]) => ({ date, amount }));
-
-    // Recent Transactions (top 20 overall, not limited to period)
-    const recentList = await prisma.transaction.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: {
-        id: true,
-        userName: true,
-        userEmail: true,
-        amount: true,
-        status: true,
-        createdAt: true,
-        paymentMethod: true
-      }
-    });
+    // ── Paginated transactions list (windowed + searched) ──────────────
+    const txWhere = {
+      createdAt: { gte: startDate, lte: endDate },
+      ...searchClause,
+    };
+    const [txTotal, txItems] = await Promise.all([
+      prisma.transaction.count({ where: txWhere }),
+      prisma.transaction.findMany({
+        where: txWhere,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          orderId: true,
+          userName: true,
+          userEmail: true,
+          userPhone: true,
+          amount: true,
+          status: true,
+          createdAt: true,
+          paymentMethod: true,
+          isRenewal: true,
+          isCloseFriends: true,
+          orderBumpAmount: true,
+        },
+      }),
+    ]);
 
     res.json({
+      window: { period, from: startDate.toISOString(), to: endDate.toISOString() },
       metrics: {
         revenue: currentRevenue,
         revenueGrowth,
         ticket: currentTicket,
         ticketGrowth,
         count: currentCount,
-        countGrowth
+        countGrowth,
+        newRevenue,
+        newCount: newTx.length,
+        renewalRevenue,
+        renewalCount: renewalTx.length,
+        closeFriendsRevenue: cfRevenue,
+        closeFriendsCount: cfTx.length,
+        mrr,
+        activePaidUsers,
+        renewalRate,
+        churnRate,
+        expectedRenewals,
+        realizedRenewals: realizedRenewalsCount,
       },
       chartData,
-      recentTransactions: recentList
+      transactions: {
+        total: txTotal,
+        page,
+        limit,
+        items: txItems,
+      },
+      // Kept for backwards compat with the older UI panel
+      recentTransactions: txItems,
     });
   } catch (error) {
     console.error('[ADMIN] Finance error:', error);
     res.status(500).json({ error: 'Erro ao carregar dados financeiros' });
+  }
+});
+
+/**
+ * GET /api/admin/finance/upcoming-renewals
+ *
+ * Users whose subscription ends within the next `days` (default 30),
+ * still active, ordered by closest expiry. Useful to anticipate churn.
+ */
+router.get('/finance/upcoming-renewals', async (req: AuthRequest, res: Response) => {
+  try {
+    const days = Math.min(180, Math.max(1, parseInt((req.query.days as string) || '30', 10)));
+    const limit = Math.min(200, Math.max(10, parseInt((req.query.limit as string) || '50', 10)));
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const users = await prisma.user.findMany({
+      where: {
+        role: 'member',
+        subscriptionStatus: 'active',
+        subscriptionEnd: { gte: now, lte: cutoff },
+      },
+      orderBy: { subscriptionEnd: 'asc' },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        subscriptionEnd: true,
+        closeFriends: true,
+        renewalUrl: true,
+      },
+    });
+
+    res.json({
+      days,
+      now: now.toISOString(),
+      cutoff: cutoff.toISOString(),
+      count: users.length,
+      users: users.map((u) => ({
+        ...u,
+        daysUntilExpiry: u.subscriptionEnd
+          ? Math.max(0, Math.ceil((u.subscriptionEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+          : null,
+      })),
+    });
+  } catch (error) {
+    console.error('[ADMIN] Upcoming renewals error:', error);
+    res.status(500).json({ error: 'Erro ao carregar próximas renovações' });
   }
 });
 

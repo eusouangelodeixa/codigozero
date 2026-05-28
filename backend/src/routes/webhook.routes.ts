@@ -185,8 +185,9 @@ router.post('/lojou', async (req: Request, res: Response) => {
         const rawPassword = uuidv4().slice(0, 8);
         const passwordHash = await bcrypt.hash(rawPassword, 10);
 
-        // Create or reactivate user
-        let user = await prisma.user.findFirst({
+        // Create or reactivate user. Pre-existing user → this is a renewal
+        // (or reactivation); brand-new account → first paid order.
+        const preExisting = await prisma.user.findFirst({
           where: {
             OR: [
               ...(customerEmail ? [{ email: customerEmail }] : []),
@@ -194,6 +195,8 @@ router.post('/lojou', async (req: Request, res: Response) => {
             ],
           },
         });
+        const isRenewal = !!preExisting;
+        let user = preExisting;
 
         const subscriber = data.plan_subscriber || {};
         const subscriptionStart = subscriber.start_date ? new Date(subscriber.start_date) : new Date();
@@ -271,6 +274,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
             orderBumpPid: bumpMatch?.pid ?? null,
             orderBumpAmount: bumpAmount || null,
             isCloseFriends,
+            isRenewal,
           },
           create: {
             orderId: String(orderId),
@@ -284,6 +288,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
             orderBumpPid: bumpMatch?.pid ?? null,
             orderBumpAmount: bumpAmount || null,
             isCloseFriends,
+            isRenewal,
           },
         });
 

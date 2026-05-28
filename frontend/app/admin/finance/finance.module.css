@@ -123,3 +123,176 @@
 @media (max-width: 480px) {
   .metricsGrid { grid-template-columns: 1fr; }
 }
+
+/* ─────────────────────────────────────────────────────────
+   Finance v2 — filters, search, pagination, CF tag
+   ───────────────────────────────────────────────────────── */
+
+.filtersCard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+}
+
+.periodChips {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.periodChip {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.periodChip:hover { color: var(--text-primary); }
+.periodChipActive {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.periodChipActive:hover { color: var(--accent-fg); }
+
+.customRange {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.customRangeLabel {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+.customRangeLabel input[type="date"] {
+  appearance: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  color-scheme: dark;
+}
+.customRangeLabel input[type="date"]:focus { outline: none; border-color: var(--accent); }
+
+.searchWrap {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+.searchIcon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.searchInput {
+  width: 100%;
+  padding: 9px 32px 9px 34px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-family: inherit;
+}
+.searchInput:focus { outline: none; border-color: var(--accent); }
+.searchInput::placeholder { color: var(--text-tertiary); }
+.searchClear {
+  appearance: none;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 50%;
+}
+.searchClear:hover { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-default);
+  gap: 12px;
+}
+.pageBtn {
+  appearance: none;
+  padding: 7px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+}
+.pageBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--accent-border);
+}
+.pageBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.pageInfo {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Close Friends gold tag (used in transactions + upcoming) */
+.cfTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: linear-gradient(135deg, #f5d76e, #d4af37 60%, #a8821a);
+  color: #1a1100;
+  vertical-align: middle;
+}
+
+.daysLeft {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.daysLeftUrgent { color: #ef4444; }
+
+@media (max-width: 900px) {
+  .filtersCard { flex-direction: column; align-items: stretch; }
+  .periodChips { width: 100%; justify-content: space-between; }
+  .periodChip { flex: 1; text-align: center; }
+  .searchWrap { width: 100%; }
+}

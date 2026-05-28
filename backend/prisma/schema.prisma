@@ -153,6 +153,10 @@ model Transaction {
   orderBumpPid    String?  // e.g. "JQQWc" for Close Friends
   orderBumpAmount Float?   // bump amount only, so reports can split principal vs bump
   isCloseFriends  Boolean  @default(false)
+  // True when the buyer was an existing user being reactivated/renewed,
+  // false when this was their first paid order. Set by the webhook;
+  // back-populated for historical rows via migration.
+  isRenewal       Boolean  @default(false)
   createdAt     DateTime @default(now())
 }
 

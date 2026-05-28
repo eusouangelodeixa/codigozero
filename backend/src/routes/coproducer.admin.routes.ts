@@ -62,6 +62,8 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
       planId: acc.planId,
       publicCheckoutUrl: acc.publicCheckoutUrl,
       sharePct: acc.sharePct,
+      bumpProductPid: acc.bumpProductPid,
+      bumpPrice: acc.bumpPrice,
       displayName: acc.displayName || acc.user.name,
       enabled: acc.enabled,
       notes: acc.notes,
@@ -89,13 +91,16 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
  */
 router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { userEmail, productPid, planId, publicCheckoutUrl, sharePct, displayName, notes } = req.body || {};
+    const { userEmail, productPid, planId, publicCheckoutUrl, sharePct, displayName, notes, bumpProductPid, bumpPrice } = req.body || {};
 
     if (!userEmail || !productPid) {
       return res.status(400).json({ error: 'userEmail e productPid são obrigatórios' });
     }
     if (sharePct != null && (sharePct < 0 || sharePct > 100)) {
       return res.status(400).json({ error: 'sharePct deve estar entre 0 e 100' });
+    }
+    if (bumpPrice != null && bumpPrice < 0) {
+      return res.status(400).json({ error: 'bumpPrice não pode ser negativo' });
     }
 
     const user = await prisma.user.findUnique({ where: { email: userEmail.toLowerCase().trim() } });
@@ -120,6 +125,8 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
           planId: planId?.trim() || null,
           publicCheckoutUrl: publicCheckoutUrl?.trim() || null,
           sharePct: sharePct != null ? Number(sharePct) : 50,
+          bumpProductPid: bumpProductPid?.trim() || null,
+          bumpPrice: bumpPrice != null && bumpPrice !== '' ? Number(bumpPrice) : null,
           displayName: displayName?.trim() || null,
           notes: notes?.trim() || null,
         },
@@ -135,12 +142,15 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
 
 router.patch('/:id', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { productPid, planId, publicCheckoutUrl, sharePct, displayName, enabled, notes } = req.body || {};
+    const { productPid, planId, publicCheckoutUrl, sharePct, displayName, enabled, notes, bumpProductPid, bumpPrice } = req.body || {};
     const existing = await prisma.coproducerAccount.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: 'Coprodutor não encontrado' });
 
     if (sharePct != null && (sharePct < 0 || sharePct > 100)) {
       return res.status(400).json({ error: 'sharePct deve estar entre 0 e 100' });
+    }
+    if (bumpPrice != null && bumpPrice !== '' && Number(bumpPrice) < 0) {
+      return res.status(400).json({ error: 'bumpPrice não pode ser negativo' });
     }
     if (productPid && productPid !== existing.productPid) {
       const pidTaken = await prisma.coproducerAccount.findUnique({ where: { productPid } });
@@ -154,6 +164,10 @@ router.patch('/:id', superadminMiddleware, async (req: AuthRequest, res: Respons
         ...(planId != null ? { planId: String(planId).trim() || null } : {}),
         ...(publicCheckoutUrl != null ? { publicCheckoutUrl: String(publicCheckoutUrl).trim() || null } : {}),
         ...(sharePct != null ? { sharePct: Number(sharePct) } : {}),
+        ...(bumpProductPid != null ? { bumpProductPid: String(bumpProductPid).trim() || null } : {}),
+        ...(bumpPrice != null
+          ? { bumpPrice: bumpPrice === '' ? null : Number(bumpPrice) }
+          : {}),
         ...(displayName != null ? { displayName: String(displayName).trim() || null } : {}),
         ...(enabled != null ? { enabled: !!enabled } : {}),
         ...(notes != null ? { notes: String(notes).trim() || null } : {}),

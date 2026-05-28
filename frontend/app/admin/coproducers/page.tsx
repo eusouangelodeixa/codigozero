@@ -13,6 +13,8 @@ interface Coproducer {
   planId: string | null;
   publicCheckoutUrl: string | null;
   sharePct: number;
+  bumpProductPid: string | null;
+  bumpPrice: number | null;
   displayName: string | null;
   enabled: boolean;
   notes: string | null;
@@ -39,6 +41,8 @@ export default function AdminCoproducers() {
   const [formPlanId, setFormPlanId] = useState("");
   const [formCheckoutUrl, setFormCheckoutUrl] = useState("");
   const [formSharePct, setFormSharePct] = useState(50);
+  const [formBumpPid, setFormBumpPid] = useState("");
+  const [formBumpPrice, setFormBumpPrice] = useState<number | "">("");
   const [formDisplayName, setFormDisplayName] = useState("");
   const [formNotes, setFormNotes] = useState("");
 
@@ -77,6 +81,8 @@ export default function AdminCoproducers() {
           planId: formPlanId.trim() || undefined,
           publicCheckoutUrl: formCheckoutUrl.trim() || undefined,
           sharePct: formSharePct,
+          bumpProductPid: formBumpPid.trim() || undefined,
+          bumpPrice: formBumpPrice === "" ? undefined : formBumpPrice,
           displayName: formDisplayName.trim() || undefined,
           notes: formNotes.trim() || undefined,
         }),
@@ -85,7 +91,9 @@ export default function AdminCoproducers() {
       if (r.ok) {
         showToast(`✅ Coprodutor criado (${data.code})`);
         setShowCreate(false);
-        setFormEmail(""); setFormPid(""); setFormPlanId(""); setFormCheckoutUrl(""); setFormSharePct(50); setFormDisplayName(""); setFormNotes("");
+        setFormEmail(""); setFormPid(""); setFormPlanId(""); setFormCheckoutUrl(""); setFormSharePct(50);
+        setFormBumpPid(""); setFormBumpPrice("");
+        setFormDisplayName(""); setFormNotes("");
         load();
       } else {
         showToast(`❌ ${data.error || "Erro ao criar"}`);
@@ -107,6 +115,8 @@ export default function AdminCoproducers() {
           planId: editing.planId,
           publicCheckoutUrl: editing.publicCheckoutUrl,
           sharePct: editing.sharePct,
+          bumpProductPid: editing.bumpProductPid || "",
+          bumpPrice: editing.bumpPrice ?? "",
           displayName: editing.displayName,
           enabled: editing.enabled,
           notes: editing.notes,
@@ -253,6 +263,22 @@ export default function AdminCoproducers() {
                 <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Split do coprodutor (%) — documentação</label>
                 <input className={styles.formInput} type="number" min={0} max={100} value={formSharePct} onChange={(e) => setFormSharePct(parseFloat(e.target.value) || 0)} />
               </div>
+
+              {/* ── Order bump per coprodutor (opcional) ── */}
+              <div style={{ padding: 12, background: "rgba(168,85,247,0.04)", border: "1px solid rgba(168,85,247,0.18)", borderRadius: 8, display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#a855f7", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Order bump (opcional)
+                </div>
+                <p style={{ fontSize: 11, color: "#888", margin: 0 }}>
+                  Se este coprodutor tem um bump próprio na Lojou (com pid separado), informe abaixo. Sem isso, ele usa o bump principal do sistema.
+                </p>
+                <Field label="PID do bump na Lojou" value={formBumpPid} onChange={setFormBumpPid} placeholder="Ex: JQQWc" />
+                <div>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço do bump (MZN)</label>
+                  <input className={styles.formInput} type="number" min={0} step={1} value={formBumpPrice} onChange={(e) => setFormBumpPrice(e.target.value === "" ? "" : (parseFloat(e.target.value) || 0))} placeholder="Ex: 1297" />
+                </div>
+              </div>
+
               <Field label="Nome de exibição (opcional)" value={formDisplayName} onChange={setFormDisplayName} placeholder="Sobrescreve o nome do membro nas listas" />
               <Field label="Notas internas (opcional)" value={formNotes} onChange={setFormNotes} placeholder="Contrato, observações…" multiline />
             </div>
@@ -280,6 +306,18 @@ export default function AdminCoproducers() {
                 <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Split (%)</label>
                 <input className={styles.formInput} type="number" min={0} max={100} value={editing.sharePct} onChange={(e) => setEditing({ ...editing, sharePct: parseFloat(e.target.value) || 0 })} />
               </div>
+
+              <div style={{ padding: 12, background: "rgba(168,85,247,0.04)", border: "1px solid rgba(168,85,247,0.18)", borderRadius: 8, display: "grid", gap: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#a855f7", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Order bump
+                </div>
+                <Field label="PID do bump na Lojou" value={editing.bumpProductPid || ""} onChange={(v) => setEditing({ ...editing, bumpProductPid: v || null })} placeholder="Vazio = sem bump próprio" />
+                <div>
+                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço do bump (MZN)</label>
+                  <input className={styles.formInput} type="number" min={0} step={1} value={editing.bumpPrice ?? ""} onChange={(e) => setEditing({ ...editing, bumpPrice: e.target.value === "" ? null : (parseFloat(e.target.value) || 0) })} placeholder="Ex: 1297" />
+                </div>
+              </div>
+
               <Field label="Nome de exibição" value={editing.displayName || ""} onChange={(v) => setEditing({ ...editing, displayName: v || null })} />
               <Field label="Notas internas" value={editing.notes || ""} onChange={(v) => setEditing({ ...editing, notes: v || null })} multiline />
               <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#aaa", fontSize: 13, cursor: "pointer" }}>

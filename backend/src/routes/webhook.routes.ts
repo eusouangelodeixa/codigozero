@@ -126,46 +126,62 @@ router.post('/lojou', async (req: Request, res: Response) => {
         const currency = data.currency || 'MZN';
         const paymentMethod = data.payment_method || 'mpesa';
 
-        // ── Close Friends order bump ─────────────────────────────────────
-        // Primary detection: scan the Lojou payload for the configured pid.
-        //
-        // Fallback: when a product has coproducer splits enabled, Lojou
-        // strips order_bump[] to an empty array even when the buyer took
-        // the bump (the gateway shows the seller-net amount instead of
-        // declaring the line items). To recover, we infer the bump from
-        // the net amount — if it's materially higher than the principal
-        // alone could ever produce, the bump was bought.
-        //
-        // Heuristic: principal-only net is capped by `principalPrice` (no
-        // upsell can come from below). A net amount > principalPrice ×
-        // BUMP_AMOUNT_THRESHOLD means an upsell was attached. Default
-        // ratio is 1.5, configurable via LOJOU_BUMP_DETECT_RATIO.
-        let bumpMatch = env.LOJOU_CLOSE_FRIENDS_PID
-          ? detectOrderBump(data, env.LOJOU_CLOSE_FRIENDS_PID)
+        // ── Resolve coproducer attribution UP FRONT ──────────────────────
+        // Done before bump detection because the coproducer may have its
+        // own bump pid + price — we need both to pick which pid to scan
+        // and which fallback price to record on audit.
+        const preBuyerForCoproducer = await prisma.user.findFirst({
+          where: {
+            OR: [
+              ...(customerEmail ? [{ email: customerEmail }] : []),
+              ...(customerPhone ? [{ phone: customerPhone }] : []),
+            ],
+          },
+          select: { referredByCoproducer: true },
+        });
+        const coproducer = await resolveCoproducerForOrder({
+          productPid: data.product?.pid || null,
+          buyerReferralCode: preBuyerForCoproducer?.referredByCoproducer || null,
+        });
+        if (coproducer) {
+          console.log(`[WEBHOOK] 🤝 Attributed to coproducer ${coproducer.code} (id=${coproducer.id})`);
+        }
+
+        // ── Close Friends / bump detection ───────────────────────────────
+        // The bump pid is the coproducer's own (when set) OR the principal
+        // env. Same fallback price logic: coproducer.bumpPrice when set,
+        // otherwise LOJOU_CLOSE_FRIENDS_PRICE (default 1297).
+        const effectiveBumpPid = coproducer?.bumpProductPid || env.LOJOU_CLOSE_FRIENDS_PID;
+        const effectiveBumpPrice = coproducer?.bumpPrice
+          ?? parseFloat(process.env.LOJOU_CLOSE_FRIENDS_PRICE || '1297');
+
+        // Primary detection: scan payload for that pid.
+        let bumpMatch = effectiveBumpPid
+          ? detectOrderBump(data, effectiveBumpPid)
           : null;
 
+        // Fallback heuristic: when coproducer splits are on, Lojou strips
+        // order_bump[] but the net amount still betrays the upsell.
         const activePrincipal = await getActivePrice();
         const ratio = parseFloat(process.env.LOJOU_BUMP_DETECT_RATIO || '1.5');
         const bumpInferredByAmount =
           !bumpMatch &&
-          env.LOJOU_CLOSE_FRIENDS_PID &&
+          effectiveBumpPid &&
           activePrincipal > 0 &&
           totalAmount > activePrincipal * ratio;
 
         if (bumpInferredByAmount) {
           bumpMatch = {
-            pid: env.LOJOU_CLOSE_FRIENDS_PID,
-            // Gateway didn't tell us the bump line — use the configured
-            // gross price as the canonical value for audit.
-            amount: parseFloat(process.env.LOJOU_CLOSE_FRIENDS_PRICE || '1297'),
+            pid: effectiveBumpPid,
+            amount: effectiveBumpPrice,
             matchedAt: `inferred:amount>${(activePrincipal * ratio).toFixed(2)}`,
           };
           console.log(
-            `[WEBHOOK] 🥂 Close Friends inferred from amount (net=${totalAmount}, principal=${activePrincipal}, ratio>${ratio})`,
+            `[WEBHOOK] 🥂 Bump inferred from amount (pid=${effectiveBumpPid}, net=${totalAmount}, principal=${activePrincipal}, ratio>${ratio})`,
           );
         } else if (bumpMatch) {
           console.log(
-            `[WEBHOOK] 🥂 Close Friends bump detected at ${bumpMatch.matchedAt} (amount=${bumpMatch.amount})`,
+            `[WEBHOOK] 🥂 Bump detected at ${bumpMatch.matchedAt} (pid=${effectiveBumpPid}, amount=${bumpMatch.amount})`,
           );
         }
         const isCloseFriends = !!bumpMatch;
@@ -267,17 +283,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
         // Record transaction. `amount` is always the gross total (principal +
         // bump) so existing faturamento/MRR queries keep working. The bump
         // breakdown is stored separately for audit.
-        // Coproducer attribution: prefer matching the order's product pid
-        // against a registered coproducer; fall back to the buyer's
-        // referredByCoproducer pointer if any. NULL = principal product.
-        const coproducer = await resolveCoproducerForOrder({
-          productPid: data.product?.pid || null,
-          buyerReferralCode: user.referredByCoproducer || null,
-        });
-        if (coproducer) {
-          console.log(`[WEBHOOK] 🤝 Attributed to coproducer ${coproducer.code} (id=${coproducer.id})`);
-        }
-
+        // (coproducer was already resolved at the top, before bump detection)
         await prisma.transaction.upsert({
           where: { orderId: String(orderId) },
           update: {

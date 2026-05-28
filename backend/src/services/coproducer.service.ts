@@ -26,6 +26,14 @@ export async function generateUniqueCoproducerCode(): Promise<string> {
   return randomCode(9) + randomCode(2);
 }
 
+export interface ResolvedCoproducer {
+  id: string;
+  code: string;
+  productPid: string;
+  bumpProductPid: string | null;
+  bumpPrice: number | null;
+}
+
 /**
  * Resolve a coproducer attribution for an incoming order.
  *
@@ -37,24 +45,52 @@ export async function generateUniqueCoproducerCode(): Promise<string> {
  *      landing on /c/{code}) — fallback when pid lookup misses.
  *
  * Returns null when the order belongs to the principal product.
+ *
+ * Also returns the coproducer's bump pid + price so the webhook can
+ * detect that this particular coproducer's bump was added to the
+ * order (instead of only the principal bump pid).
  */
 export async function resolveCoproducerForOrder(opts: {
   productPid?: string | null;
   buyerReferralCode?: string | null;
-}): Promise<{ id: string; code: string } | null> {
+}): Promise<ResolvedCoproducer | null> {
+  const select = {
+    id: true,
+    code: true,
+    productPid: true,
+    bumpProductPid: true,
+    bumpPrice: true,
+    enabled: true,
+  } as const;
   if (opts.productPid) {
     const byPid = await prisma.coproducerAccount.findUnique({
       where: { productPid: opts.productPid },
-      select: { id: true, code: true, enabled: true },
+      select,
     });
-    if (byPid && byPid.enabled) return { id: byPid.id, code: byPid.code };
+    if (byPid && byPid.enabled) {
+      return {
+        id: byPid.id,
+        code: byPid.code,
+        productPid: byPid.productPid,
+        bumpProductPid: byPid.bumpProductPid,
+        bumpPrice: byPid.bumpPrice,
+      };
+    }
   }
   if (opts.buyerReferralCode) {
     const byCode = await prisma.coproducerAccount.findUnique({
       where: { code: opts.buyerReferralCode },
-      select: { id: true, code: true, enabled: true },
+      select,
     });
-    if (byCode && byCode.enabled) return { id: byCode.id, code: byCode.code };
+    if (byCode && byCode.enabled) {
+      return {
+        id: byCode.id,
+        code: byCode.code,
+        productPid: byCode.productPid,
+        bumpProductPid: byCode.bumpProductPid,
+        bumpPrice: byCode.bumpPrice,
+      };
+    }
   }
   return null;
 }

@@ -448,6 +448,11 @@ model CoproducerAccount {
   // Coproducer's share of each sale (0-100). Lojou itself enforces the
   // split — this is shown in the coproducer dashboard for transparency.
   sharePct            Float    @default(50)
+  // Order bump cadastrado por este coprodutor (opcional). Quando a Lojou
+  // confirma um pedido contendo este pid, o webhook marca isCloseFriends
+  // e estende a assinatura em +60 dias (mesma regra do bump principal).
+  bumpProductPid      String?
+  bumpPrice           Float?
   // Display name shown on dashboards / admin lists. Falls back to the
   // linked User.name when null.
   displayName         String?

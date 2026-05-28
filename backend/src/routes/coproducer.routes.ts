@@ -27,6 +27,8 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
       planId: acc.planId,
       publicCheckoutUrl: acc.publicCheckoutUrl,
       sharePct: acc.sharePct,
+      bumpProductPid: acc.bumpProductPid,
+      bumpPrice: acc.bumpPrice,
       displayName: acc.displayName || acc.user.name,
       enabled: acc.enabled,
       user: acc.user,

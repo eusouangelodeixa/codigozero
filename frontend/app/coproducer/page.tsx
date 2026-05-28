@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Copy, ExternalLink, Check } from "lucide-react";
 import styles from "./coproducer.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -19,19 +20,43 @@ interface Snapshot {
   transactions: { items: { id: string; userName: string | null; amount: number; createdAt: string; isRenewal: boolean }[] };
 }
 
+interface Me {
+  code: string;
+  productPid: string;
+  bumpProductPid: string | null;
+  bumpPrice: number | null;
+  sharePct: number;
+  landingUrl: string;
+}
+
 const fmtMoney = (n: number) =>
   new Intl.NumberFormat("pt-MZ", { style: "currency", currency: "MZN", maximumFractionDigits: 0 }).format(n);
 
 export default function CoproducerOverview() {
   const [data, setData] = useState<Snapshot | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/api/coproducer/finance?period=30d&limit=5`, { headers: hdr() })
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch(`${API}/api/coproducer/finance?period=30d&limit=5`, { headers: hdr() }).then((r) => r.json()).catch(() => null),
+      fetch(`${API}/api/coproducer/me`, { headers: hdr() }).then((r) => r.json()).catch(() => null),
+    ]).then(([fin, meData]) => {
+      if (fin) setData(fin);
+      if (meData) setMe(meData);
+      setLoading(false);
+    });
   }, []);
+
+  const copyLink = async () => {
+    if (!me) return;
+    try {
+      await navigator.clipboard.writeText(me.landingUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
+  };
 
   return (
     <div>
@@ -42,6 +67,37 @@ export default function CoproducerOverview() {
           Resumo das suas vendas, leads e assinantes vindos do seu link exclusivo de coprodução.
         </p>
       </div>
+
+      {/* ── Hero card: link de coprodução ── */}
+      {me && (
+        <div className={styles.linkHero}>
+          <div className={styles.linkHeroMeta}>
+            <span className={styles.linkHeroEyebrow}>Seu link de coprodução</span>
+            <code className={styles.linkHeroValue}>{me.landingUrl}</code>
+            <div className={styles.linkHeroChips}>
+              <span className={styles.linkHeroChip}>PID principal: <strong>{me.productPid}</strong></span>
+              {me.bumpProductPid ? (
+                <span className={`${styles.linkHeroChip} ${styles.linkHeroChipBump}`}>
+                  Bump: <strong>{me.bumpProductPid}</strong>
+                  {me.bumpPrice != null ? ` · ${fmtMoney(me.bumpPrice)}` : ""}
+                </span>
+              ) : (
+                <span className={styles.linkHeroChipMuted}>Sem bump próprio</span>
+              )}
+              <span className={styles.linkHeroChip}>Sua parte: <strong>{me.sharePct}%</strong></span>
+            </div>
+          </div>
+          <div className={styles.linkHeroActions}>
+            <button onClick={copyLink} className={styles.linkHeroBtnPrimary}>
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              {copied ? "Copiado" : "Copiar link"}
+            </button>
+            <a href={me.landingUrl} target="_blank" rel="noopener noreferrer" className={styles.linkHeroBtn}>
+              <ExternalLink size={14} /> Abrir landing
+            </a>
+          </div>
+        </div>
+      )}
 
       <div className={styles.statsGrid}>
         <div className={styles.statCard}>

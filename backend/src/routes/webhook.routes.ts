@@ -8,6 +8,10 @@ import {
   creditCommissionForOrder,
   refundCommissionForOrder,
 } from '../services/affiliate.service';
+import {
+  creditPartnersForOrder,
+  reversePartnersForOrder,
+} from '../services/partner.service';
 import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder, notifyCoproducer } from '../services/coproducer.service';
@@ -195,6 +199,17 @@ router.post('/lojou', async (req: Request, res: Response) => {
         }
         const isCloseFriends = !!bumpMatch;
         const bumpAmount = bumpMatch?.amount || 0;
+
+        // ── Secondary order bump (197 MZN upsell) ────────────────────────
+        // Detected only to count items exactly for the Lojou fixed fee in the
+        // partner revenue-share base. Its value is already inside totalAmount,
+        // so it is split among the sócios either way. Does not extend access.
+        const bump197 = env.LOJOU_BUMP_197_PID
+          ? detectOrderBump(data, env.LOJOU_BUMP_197_PID)
+          : null;
+        if (bump197) {
+          console.log(`[WEBHOOK] ➕ Bump 197 detected at ${bump197.matchedAt} (pid=${env.LOJOU_BUMP_197_PID})`);
+        }
         // Prefer the explicit principal product price from the payload
         // (data.product.price comes as a string in the Lojou format), with
         // total-minus-bump as fallback. This keeps the affiliate commission
@@ -500,6 +515,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
         // get a commission row. Commission is calculated on the principal
         // only — the Close Friends order bump is an upsell that doesn't
         // generate affiliate commission.
+        let affiliateCredited = false;
         try {
           if (user.referredByCode) {
             const credit = await creditCommissionForOrder({
@@ -510,6 +526,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
               lojouOrderId: String(orderId),
             });
             if (credit.credited) {
+              affiliateCredited = true;
               console.log(
                 `[WEBHOOK] 🎉 Affiliate ${user.referredByCode} credited (commission=${credit.commissionId})`,
               );
@@ -531,6 +548,28 @@ router.post('/lojou', async (req: Request, res: Response) => {
           }
         } catch (affErr) {
           console.error('[WEBHOOK] Affiliate commission error (non-blocking):', affErr);
+        }
+
+        // ── Partner (sócios) revenue-share credit ──────────────────────
+        // Splits the NET of the main-product sale among the fixed partners.
+        // Excluded: webhook re-deliveries (txExistedBefore), external
+        // coproducer sales (coproducer set), and affiliate-attributed sales
+        // (affiliateCredited). Stripe sales never reach this Lojou handler.
+        try {
+          if (!txExistedBefore && !coproducer && !affiliateCredited) {
+            // Count items for the Lojou fixed fee: principal + each bump.
+            const numItems = 1 + (isCloseFriends ? 1 : 0) + (bump197 ? 1 : 0);
+            const r = await creditPartnersForOrder({
+              orderId: String(orderId),
+              amount: totalAmount,
+              numItems,
+            });
+            if (r.credited > 0) {
+              console.log(`[WEBHOOK] 🤝 Sócios creditados: ${r.credited} (base=${r.base} MZN)`);
+            }
+          }
+        } catch (partnerErr) {
+          console.error('[WEBHOOK] Partner credit error (non-blocking):', partnerErr);
         }
 
         return res.json({ status: 'user_created', userId: user.id });
@@ -589,6 +628,16 @@ router.post('/lojou', async (req: Request, res: Response) => {
           }
         } catch (affErr) {
           console.error('[WEBHOOK] Affiliate refund error (non-blocking):', affErr);
+        }
+
+        // Reverse any partner (sócios) commissions tied to this order
+        try {
+          const reversedPartners = await reversePartnersForOrder(String(orderId));
+          if (reversedPartners > 0) {
+            console.log(`[WEBHOOK] ↩️ Reversed ${reversedPartners} partner commission(s) for ${orderId}`);
+          }
+        } catch (partnerErr) {
+          console.error('[WEBHOOK] Partner refund error (non-blocking):', partnerErr);
         }
 
         console.log(`[WEBHOOK] 🔄 Order refunded: ${orderId}`);

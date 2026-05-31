@@ -5,6 +5,7 @@ import { lojouService } from '../services/lojou.service';
 import { env } from '../config/env';
 import { processDueDispatches, processDispatch } from '../services/dispatch.service';
 import { transitionDuePending } from '../services/affiliate.service';
+import { transitionDuePartnerPending } from '../services/partner.service';
 import { getActivePrice } from '../lib/pricing';
 
 const prisma = new PrismaClient();
@@ -609,8 +610,14 @@ export function startCronJobs() {
     } catch (error) {
       console.error('[CRON] Affiliate availability tick failed:', error);
     }
+    try {
+      const movedPartners = await transitionDuePartnerPending();
+      if (movedPartners > 0) console.log(`[CRON] 🤝 Partner commissions matured: ${movedPartners}`);
+    } catch (error) {
+      console.error('[CRON] Partner availability tick failed:', error);
+    }
   });
-  console.log('[CRON] ⏰ Affiliate availability tick (hourly)');
+  console.log('[CRON] ⏰ Affiliate + partner availability tick (hourly)');
 
   // ── Recover orphaned dispatches on boot ──
   // Any 'running' rows left over from a previous process crash, plus any

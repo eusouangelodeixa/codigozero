@@ -16,6 +16,8 @@ import chatRoutes from './routes/chat.routes';
 import affiliateRoutes from './routes/affiliate.routes';
 import coproducerAdminRoutes from './routes/coproducer.admin.routes';
 import coproducerRoutes from './routes/coproducer.routes';
+import partnerRoutes from './routes/partner.routes';
+import partnerAdminRoutes from './routes/partner.admin.routes';
 import { startCronJobs } from './jobs/cron';
 import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
@@ -63,6 +65,8 @@ app.use('/api/landing', landingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/coproducers', coproducerAdminRoutes);
 app.use('/api/coproducer', coproducerRoutes);
+app.use('/api/partner', partnerRoutes);
+app.use('/api/admin', partnerAdminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/webhooks', webhookRoutes);

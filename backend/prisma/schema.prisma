@@ -65,6 +65,11 @@ model User {
   referredByCoproducer String?
   coproducerAccount    CoproducerAccount?
 
+  // Revenue-share partner (sócio). A user who takes a fixed % of the
+  // main product's net revenue, paid out internally by Código Zero.
+  // Independent of CoproducerAccount (which is per-product / Lojou-split).
+  partnerAccount       PartnerAccount?
+
   leads              Lead[]
   lessonProgress     LessonProgress[]
   chatMessages       ChatMessage[]
@@ -531,4 +536,77 @@ model NotificationLog {
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+// ═══════════════════════════════════════════
+// REVENUE SHARE — SÓCIOS (internal partners)
+// ═══════════════════════════════════════════
+// Unlike CoproducerAccount (each coproducer owns a Lojou product and Lojou
+// splits natively), the sócios all share the SAME main product. Every paid
+// order lands on one Lojou account; Código Zero splits the NET (after the
+// Lojou fee) among the partners by a fixed sharePct. Each partner sees their
+// balance in real time and requests a withdrawal (3% + 35 MZN), approved by
+// an admin — exactly like the affiliate program. Affiliate-attributed sales,
+// external-coproducer sales and Stripe sales are EXCLUDED from the pool.
+
+model PartnerAccount {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName   String?              // e.g. "Rival" (falls back to User.name)
+  roleLabel     String?              // e.g. "Edição de vídeo"
+  // Partner's share of the main product NET, 0-100. The sum across enabled
+  // partners should be 100; the admin UI surfaces the running total.
+  sharePct      Float
+  enabled       Boolean  @default(true)
+  payoutMethod  String?              // "mpesa" | "emola"
+  payoutTarget  String?              // phone number to receive funds
+  notifySale    Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  commissions   PartnerCommission[]
+  withdrawals   PartnerWithdrawal[]
+
+  @@index([enabled])
+}
+
+model PartnerCommission {
+  id            String   @id @default(uuid())
+  partnerId     String
+  partner       PartnerAccount @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  // = Transaction.orderId of the sale that generated this commission.
+  orderId       String
+  baseAmount    Float          // net pool of the order (audit)
+  sharePct      Float          // snapshot of the % at sale time
+  amount        Float          // baseAmount * sharePct / 100
+  availableAt   DateTime       // sale date + 3 days (D+3) before withdrawable
+  status        String   @default("pending") // pending | available | withdrawn | refunded
+  withdrawalId  String?        // set when consumed by a withdrawal payout
+  createdAt     DateTime @default(now())
+
+  // One commission per (partner, order) — backstops webhook re-delivery.
+  @@unique([partnerId, orderId])
+  @@index([partnerId, status])
+  @@index([availableAt, status])
+  @@index([withdrawalId])
+}
+
+model PartnerWithdrawal {
+  id              String   @id @default(uuid())
+  partnerId       String
+  partner         PartnerAccount @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  amountRequested Float          // total gross (sum of net commissions consumed)
+  feeAmount       Float          // 3% + 35 MZN (Lojou withdrawal fee)
+  amountNet       Float          // what the partner actually receives
+  payoutMethod    String         // "mpesa" | "emola"
+  payoutTarget    String
+  status          String   @default("pending") // pending | paid | rejected
+  notes           String?
+  processedAt     DateTime?
+  processedBy     String?        // admin user id who approved/rejected
+  createdAt       DateTime @default(now())
+
+  @@index([partnerId, status])
+  @@index([status, createdAt])
 }

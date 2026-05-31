@@ -160,6 +160,7 @@ const NAV: NavGroup[] = [
     label: "Parceiros",
     items: [
       { href: "/admin/coproducers", label: "Coprodutores", icon: I.Coproducers },
+      { href: "/admin/socios", label: "Sócios", icon: I.Finance },
     ],
   },
 ];

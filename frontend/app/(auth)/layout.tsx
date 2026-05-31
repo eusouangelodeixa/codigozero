@@ -46,6 +46,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           setUser(data.user);
           localStorage.setItem("cz_user", JSON.stringify(data.user));
           subscribeToPush().catch(() => {});
+          // Non-blocking: reveal the "Sócios" link for revenue-share partners.
+          fetch(`${API_URL}/api/partner/me`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((r) => {
+              if (r.ok) setUser((u) => (u ? { ...u, isPartner: true } : u));
+            })
+            .catch(() => {});
           if (!data.user.hasCompletedOnboarding && !window.location.pathname.startsWith("/onboarding")) {
             router.replace("/onboarding");
           }

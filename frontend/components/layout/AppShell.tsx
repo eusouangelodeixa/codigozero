@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   LogOut,
   Star,
+  Percent,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import {
@@ -131,7 +132,16 @@ export interface AppShellUser {
   avatarUrl?: string;
   closeFriends?: boolean;
   closeFriendsUntil?: string | null;
+  isPartner?: boolean;
 }
+
+const SociosNavItem: NavItem = {
+  href: "/socios",
+  label: "Sócios",
+  icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+    <Percent size={size} strokeWidth={1.6} className={className} />
+  ),
+};
 
 export function AppShell({
   user,
@@ -165,6 +175,16 @@ export function AppShell({
   }, [pathname]);
 
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
+  // Inject the "Sócios" link into the Negócio group only for revenue-share
+  // partners (so it stays hidden for regular members).
+  const navGroups = useMemo(() => {
+    if (!user?.isPartner) return NAV_GROUPS;
+    return NAV_GROUPS.map((g) =>
+      g.label === "Negócio" ? { ...g, items: [...g.items, SociosNavItem] } : g,
+    );
+  }, [user?.isPartner]);
+
   const firstName = user?.name?.split(" ")[0] || "Membro";
   const initial = (user?.name?.charAt(0) || "?").toUpperCase();
   const avatarSrc = user?.avatarUrl
@@ -193,7 +213,7 @@ export function AppShell({
         </a>
 
         <nav className={styles.navList}>
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.label} className={styles.group}>
               <span className={styles.groupLabel}>{group.label}</span>
               {group.items.map((item) => {
@@ -365,7 +385,7 @@ export function AppShell({
         </header>
 
         <nav className={styles.drawerNav}>
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.label} className={styles.group}>
               <span className={styles.groupLabel}>{group.label}</span>
               {group.items.map((item) => {

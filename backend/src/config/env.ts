@@ -19,6 +19,12 @@ export const env = {
   // payload alongside the main product, the buyer gets +2 months (3 total) and
   // the closeFriends flag set on their account.
   LOJOU_CLOSE_FRIENDS_PID: process.env.LOJOU_CLOSE_FRIENDS_PID || 'JQQWc',
+  // Secondary order bump (197 MZN upsell). Detected only to count items
+  // exactly for the Lojou fee (10% + 10/item) in the partner revenue-share
+  // base. The bump value is already inside data.amount, so it is split among
+  // the sócios regardless. Set the real pid in .env. Does NOT extend access.
+  LOJOU_BUMP_197_PID: process.env.LOJOU_BUMP_197_PID || 'MWZhQ', // "Cartão Virtual" — 197 MZN
+  LOJOU_BUMP_197_PRICE: parseFloat(process.env.LOJOU_BUMP_197_PRICE || '197'),
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   NODE_ENV: process.env.NODE_ENV || 'development',
   MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '10', 10),

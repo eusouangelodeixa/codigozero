@@ -1,61 +1,60 @@
 #!/bin/bash
 # ==========================================================================
-# Código Zero — Deploy seguro do módulo de Sócios (revenue share)
-# Rode na VPS:  bash infrastructure/deploy-socios.sh
+# Código Zero — Deploy do módulo de Sócios (revenue share) — rodar NA VPS
 #
-# Faz, em ordem:
-#   1. Backup do banco (pg_dump) antes de qualquer coisa
-#   2. git pull origin main
-#   3. rebuild dos containers
-#   4. prisma migrate deploy  (migration aditiva: só cria tabelas Partner*)
-#   5. healthcheck do backend
+#   cd /opt/codigozero && bash infrastructure/deploy-socios.sh
 #
-# A migration NÃO altera/apaga dados existentes — só adiciona PartnerAccount,
-# PartnerCommission e PartnerWithdrawal. O backup é uma rede de segurança.
+# Passos (todos idempotentes):
+#   1. Backup do banco (pg_dump) — rede de segurança
+#   2. Rebuild dos containers a partir do código já presente em /opt/codigozero
+#   3. prisma migrate deploy  (migration ADITIVA: só cria tabelas Partner*)
+#   4. Healthcheck do backend
+#
+# A migration não altera nem apaga dados existentes — apenas adiciona
+# PartnerAccount, PartnerCommission e PartnerWithdrawal.
 # ==========================================================================
 set -euo pipefail
 
-REPO_DIR="/root/codigo-zero"
-COMPOSE_FILE="infrastructure/docker-compose.prod.yml"
+DEPLOY_DIR="/opt/codigozero"
+COMPOSE="docker compose -f docker-compose.prod.yml --env-file .env"
 TS="$(date +%Y%m%d_%H%M%S)"
 BACKUP="/root/cz_backup_${TS}.sql"
 
-cd "$REPO_DIR"
+cd "$DEPLOY_DIR/infrastructure"
 
-echo "🛡️  [1/5] Backup do banco -> ${BACKUP}"
-docker compose -f "$COMPOSE_FILE" exec -T db \
-  pg_dump -U czero -d codigozero > "$BACKUP"
+echo "🛡️  [1/4] Backup do banco -> ${BACKUP}"
+$COMPOSE exec -T czero_db pg_dump -U czero -d codigozero > "$BACKUP"
 echo "    OK — $(du -h "$BACKUP" | cut -f1)"
 
-echo "📥 [2/5] git pull origin main"
-git pull origin main
-
-echo "🔨 [3/5] rebuild dos containers"
-docker compose -f "$COMPOSE_FILE" up -d --build
+echo "🔨 [2/4] Rebuild dos containers"
+$COMPOSE up -d --build
 
 echo "⏳ aguardando o banco ficar saudável..."
 for i in $(seq 1 30); do
-  if docker compose -f "$COMPOSE_FILE" exec -T db pg_isready -U czero -d codigozero >/dev/null 2>&1; then
+  if $COMPOSE exec -T czero_db pg_isready -U czero -d codigozero >/dev/null 2>&1; then
     echo "    banco OK"; break
   fi
   sleep 2
 done
 
-echo "🗄️  [4/5] prisma migrate deploy"
-docker compose -f "$COMPOSE_FILE" exec -T backend npx prisma migrate deploy
+echo "🗄️  [3/4] prisma migrate deploy"
+$COMPOSE exec -T czero_backend npx prisma migrate deploy
 
-echo "🩺 [5/5] healthcheck"
-sleep 3
-if curl -fsS http://localhost:4000/api/health >/dev/null; then
+echo "🩺 [4/4] healthcheck"
+sleep 4
+if curl -fsS http://localhost:4000/api/health >/dev/null 2>&1 \
+   || docker exec czero_backend_prod wget -qO- http://localhost:4000/api/health >/dev/null 2>&1; then
   echo "    backend respondendo ✅"
 else
-  echo "    ⚠️  /api/health não respondeu — verifique:  docker compose -f $COMPOSE_FILE logs -n 50 backend"
-  echo "    Para restaurar o banco:  cat ${BACKUP} | docker compose -f $COMPOSE_FILE exec -T db psql -U czero -d codigozero"
+  echo "    ⚠️  /api/health não respondeu. Verifique:"
+  echo "        $COMPOSE logs -n 60 czero_backend"
+  echo "    Restaurar o banco se necessário:"
+  echo "        cat ${BACKUP} | $COMPOSE exec -T czero_db psql -U czero -d codigozero"
   exit 1
 fi
 
 docker image prune -f >/dev/null 2>&1 || true
 echo ""
 echo "✅ Deploy do módulo de Sócios concluído."
-echo "   Próximo passo: adicione os 4 sócios em https://app.eusouangelodeixa.com/admin/socios"
+echo "   Agora: https://app.czero.sbs/admin/socios — adicione os 4 sócios"
 echo "   (cada um recebe email+senha pelo WhatsApp). A soma das % deve dar 100%."

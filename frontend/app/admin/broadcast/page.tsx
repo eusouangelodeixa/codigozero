@@ -37,8 +37,72 @@ export default function BroadcastPage() {
   const [toast, setToast] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pollRef = useRef<any>(null);
+  const completedRef = useRef(false);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+
+  const JOB_KEY = "cz_broadcast_job";
+
+  // Apply a polled job state to the UI. The job log events carry the same
+  // shape as the live progress, so the last entry drives the progress bar.
+  const applyJob = useCallback((job: any) => {
+    if (!job) return;
+    const evts: SSEEvent[] = job.log || [];
+    setLog(evts);
+    setProgress(evts.length ? evts[evts.length - 1] : { type: "start", total: job.total, sent: 0, failed: 0 });
+
+    if ((job.status === "done" || job.status === "error") && !completedRef.current) {
+      completedRef.current = true;
+      if (job.status === "error") {
+        showToast(`❌ Broadcast falhou: ${job.error || "erro desconhecido"}`);
+      } else {
+        const couponMsg = job.coupons ? ` 🎟️ ${job.coupons} cupons.` : "";
+        showToast(`✅ Broadcast concluído! ${job.sent} enviados, ${job.failed} falhas.${couponMsg}`);
+      }
+    }
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  }, []);
+
+  // Poll a background job until it finishes. Survives navigating away/back
+  // because the work runs server-side; we just re-read its state.
+  const startPolling = useCallback((jobId: string) => {
+    stopPolling();
+    completedRef.current = false;
+    setSending(true);
+    localStorage.setItem(JOB_KEY, jobId);
+
+    const tick = async () => {
+      try {
+        const r = await fetch(`${API}/api/admin/broadcast/status/${jobId}`, { headers: hdr() });
+        if (r.status === 404) { stopPolling(); setSending(false); localStorage.removeItem(JOB_KEY); return; }
+        const job = await r.json();
+        applyJob(job);
+        if (job.status === "done" || job.status === "error") {
+          stopPolling();
+          setSending(false);
+          localStorage.removeItem(JOB_KEY);
+        }
+      } catch { /* transient network error — keep polling */ }
+    };
+
+    tick();
+    pollRef.current = setInterval(tick, 1500);
+  }, [applyJob, stopPolling]);
+
+  // Reattach to an in-progress broadcast when the page (re)mounts.
+  useEffect(() => {
+    const stored = localStorage.getItem(JOB_KEY);
+    if (stored) { startPolling(stored); return; }
+    fetch(`${API}/api/admin/broadcast/active`, { headers: hdr() })
+      .then(r => r.json())
+      .then(d => { if (d?.job?.id) startPolling(d.job.id); })
+      .catch(() => {});
+    return () => stopPolling();
+  }, [startPolling, stopPolling]);
 
   // Load audience & instances on mount
   useEffect(() => {
@@ -101,6 +165,7 @@ export default function BroadcastPage() {
     setSending(true);
     setLog([]);
     setProgress(null);
+    completedRef.current = false;
 
     try {
       const res = await fetch(`${API}/api/admin/broadcast/send`, {
@@ -116,37 +181,15 @@ export default function BroadcastPage() {
         return;
       }
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      const { jobId } = await res.json();
+      if (!jobId) { showToast("❌ Não foi possível iniciar o disparo"); setSending(false); return; }
 
-      if (!reader) { setSending(false); return; }
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const event: SSEEvent = JSON.parse(line.slice(6));
-              setProgress(event);
-              setLog(prev => [...prev, event]);
-
-              if (event.type === "complete") {
-                showToast(`✅ Broadcast concluído! ${event.sent} enviados, ${event.failed} falhas.`);
-              }
-            } catch {}
-          }
-        }
-      }
+      // The disparo now runs server-side; we just poll its progress. Closing
+      // this tab or navigating away no longer stops it.
+      showToast("🚀 Disparo iniciado — pode navegar à vontade, continua em segundo plano.");
+      startPolling(jobId);
     } catch (err: any) {
       showToast(`❌ Erro de conexão: ${err.message}`);
-    } finally {
       setSending(false);
     }
   };
@@ -422,11 +465,13 @@ export default function BroadcastPage() {
             }}
           >
             {log.map((evt, i) => (
-              <div key={i} style={{ color: evt.type === "sent" ? "#22c55e" : evt.type === "error" || evt.type === "skip" ? "#ef4444" : evt.type === "waiting" ? "#888" : evt.type === "complete" ? "#2DD4BF" : "#aaa" }}>
+              <div key={i} style={{ color: evt.type === "sent" || evt.type === "coupon" ? "#22c55e" : evt.type === "error" || evt.type === "skip" || evt.type === "coupon_error" || evt.type === "fatal" ? "#ef4444" : evt.type === "waiting" ? "#888" : evt.type === "complete" ? "#2DD4BF" : "#aaa" }}>
                 {evt.type === "start" && `[START] Iniciando envio para ${evt.total} leads...`}
                 {evt.type === "sent" && `[✓] ${evt.name} — ${evt.phone}`}
                 {evt.type === "error" && `[✗] ${evt.name} — ${evt.error}`}
                 {evt.type === "skip" && `[SKIP] ${evt.name} — ${evt.reason}`}
+                {evt.type === "coupon" && `[🎟️] Cupom ${(evt as any).code} criado para ${evt.name}`}
+                {evt.type === "coupon_error" && `[🎟️✗] Falha no cupom ${(evt as any).code} (${evt.name}) — ${evt.error}`}
                 {evt.type === "waiting" && `[...] Aguardando ${evt.delay}s antes do próximo envio`}
                 {evt.type === "complete" && `[DONE] Broadcast concluído. ✅ ${evt.sent} enviados, ❌ ${evt.failed} falhas.`}
                 {evt.type === "fatal" && `[FATAL] ${evt.error}`}

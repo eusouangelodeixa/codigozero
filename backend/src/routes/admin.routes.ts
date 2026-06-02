@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
@@ -1091,7 +1092,10 @@ router.post('/broadcast/preview', async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/admin/broadcast/send
- * Dispatches messages with randomized delays via SSE
+ * Starts a broadcast as a server-side background job and returns its id
+ * immediately. The send loop runs detached from this request, so the admin
+ * navigating to another tab no longer interrupts it. Progress is read via
+ * GET /broadcast/status/:jobId.
  */
 router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
   try {
@@ -1101,8 +1105,6 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
     if (!instanceId && !sendPush) return res.status(400).json({ error: 'Selecione uma instância WhatsApp ou ative Push Notification' });
 
     const sendWhatsApp = !!instanceId;
-    const minDelay = Math.max(1, parseInt(delayMin) || 5);
-    const maxDelay = Math.max(minDelay, parseInt(delayMax) || 15);
 
     const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
     const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
@@ -1119,143 +1121,275 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
 
     if (users.length === 0) return res.status(400).json({ error: 'Nenhum lead encontrado neste segmento' });
 
-    // SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
+    pruneBroadcastJobs();
+    const jobId = randomUUID();
+    const job: BroadcastJob = {
+      id: jobId,
+      status: 'running',
+      total: users.length,
+      sent: 0,
+      failed: 0,
+      coupons: 0,
+      log: [],
+      startedAt: Date.now(),
+    };
+    broadcastJobs.set(jobId, job);
+
+    // Fire-and-forget: the loop survives this request closing / the admin
+    // navigating away. We never await it here.
+    runBroadcast(job, {
+      users, message, instanceId, apiKey, apiUrl, sendWhatsApp,
+      delayMin, delayMax, sendPush, generateCoupons, couponDiscount, couponMaxUses,
+    }).catch((err: any) => {
+      job.status = 'error';
+      job.error = err?.message || String(err);
+      job.finishedAt = Date.now();
+      pushBroadcastEvent(job, { type: 'fatal', error: job.error });
+      console.error('[BROADCAST] Job error:', err);
     });
 
-    const sendEvent = (data: object) => {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-
-    sendEvent({ type: 'start', total: users.length });
-
-    let sent = 0;
-    let failed = 0;
-
-    if (sendWhatsApp) {
-      // ── WhatsApp broadcast loop ──
-      for (let i = 0; i < users.length; i++) {
-        const user = users[i];
-
-        // Clean phone
-        let cleanPhone = user.phone.replace(/\D/g, '');
-        if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-          cleanPhone = `258${cleanPhone}`;
-        }
-
-        // Skip if no valid phone
-        if (cleanPhone.length < 9) {
-          failed++;
-          sendEvent({ type: 'skip', index: i, name: user.name, reason: 'Telefone inválido', sent, failed });
-          continue;
-        }
-
-        let personalizedMsg = substituteVariables(message, user);
-
-        // Generate per-user coupon if enabled
-        if (generateCoupons && message.includes('{{cupom}}')) {
-          const couponCode = `CZ${couponDiscount || 10}_${user.id.slice(0, 6).toUpperCase()}`;
-          if (env.LOJOU_API_KEY) {
-            try {
-              await lojouService.createDiscount({
-                code: couponCode,
-                type: 'percentage',
-                value: parseInt(couponDiscount) || 10,
-                uses_limit: parseInt(couponMaxUses) || 1,
-                status: 'active',
-              });
-              console.log(`[BROADCAST] 🎟️ Coupon ${couponCode} created for ${user.email}`);
-            } catch (couponErr: any) {
-              const msg = String(couponErr?.message || couponErr);
-              if (msg.includes('(409)')) {
-                console.log(`[BROADCAST] ↩ Coupon ${couponCode} already exists, reusing for ${user.email}`);
-              } else {
-                console.warn(`[BROADCAST] Coupon error for ${user.email}:`, msg);
-              }
-            }
-          }
-          personalizedMsg = personalizedMsg.replace(/\{\{cupom\}\}/gi, couponCode);
-        }
-
-        try {
-          const sendRes = await fetch(`${apiUrl}/api/v1/messages/send`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-API-Key': apiKey!,
-            },
-            body: JSON.stringify({
-              instanceId,
-              to: cleanPhone,
-              type: 'text',
-              content: personalizedMsg,
-            }),
-          });
-
-          if (sendRes.ok) {
-            sent++;
-            sendEvent({ type: 'sent', index: i, name: user.name, phone: cleanPhone, sent, failed });
-          } else {
-            const errBody = await sendRes.text().catch(() => 'Unknown error');
-            failed++;
-            sendEvent({ type: 'error', index: i, name: user.name, error: errBody, sent, failed });
-          }
-        } catch (err: any) {
-          failed++;
-          sendEvent({ type: 'error', index: i, name: user.name, error: err.message, sent, failed });
-        }
-
-        // Randomized delay between messages (anti-block)
-        if (i < users.length - 1) {
-          const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-          sendEvent({ type: 'waiting', delay, nextIndex: i + 1, sent, failed });
-          await new Promise(resolve => setTimeout(resolve, delay * 1000));
-        }
-      }
-    } else {
-      // ── Push-only mode: no WhatsApp loop ──
-      sent = users.length;
-    }
-
-    sendEvent({ type: 'complete', sent, failed, total: users.length });
-    res.end();
-
-    // Send Web Push notification if requested
-    if (sendPush) {
-      // Strip {{variable}} placeholders since push is broadcast (not per-user)
-      const pushBody = message
-        .replace(/\{\{nome\}\}/gi, 'Aluno')
-        .replace(/\{\{email\}\}/gi, '')
-        .replace(/\{\{telefone\}\}/gi, '')
-        .replace(/\{\{objetivo\}\}/gi, '')
-        .replace(/\{\{dor\}\}/gi, '')
-        .replace(/\{\{compromisso\}\}/gi, '')
-        .replace(/\{\{consciencia\}\}/gi, '')
-        .replace(/\{\{cupom\}\}/gi, '')
-        .replace(/\{\{[^}]+\}\}/g, '')  // catch any remaining
-        .replace(/\s{2,}/g, ' ')        // collapse double spaces
-        .trim();
-      sendPushBroadcast({
-        title: 'Código Zero',
-        body: pushBody.length > 120 ? pushBody.substring(0, 120) + '...' : pushBody,
-        url: '/dashboard',
-      }).catch(() => {});
-    }
-
+    return res.json({ jobId, total: users.length });
   } catch (error: any) {
     console.error('[BROADCAST] Send error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: `Erro ao enviar broadcast: ${error.message}` });
-    } else {
-      res.write(`data: ${JSON.stringify({ type: 'fatal', error: error.message })}\n\n`);
-      res.end();
-    }
+    return res.status(500).json({ error: `Erro ao iniciar broadcast: ${error.message}` });
   }
 });
+
+/**
+ * GET /api/admin/broadcast/status/:jobId
+ * Returns the current state of a broadcast job (polled by the frontend).
+ */
+router.get('/broadcast/status/:jobId', (req: AuthRequest, res: Response) => {
+  const job = broadcastJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job não encontrado' });
+  return res.json(job);
+});
+
+/**
+ * GET /api/admin/broadcast/active
+ * Returns the most recent running/recent job so reopening the page reattaches
+ * to an in-progress broadcast.
+ */
+router.get('/broadcast/active', (_req: AuthRequest, res: Response) => {
+  let latest: BroadcastJob | null = null;
+  for (const j of broadcastJobs.values()) {
+    if (j.status !== 'running') continue;
+    if (!latest || j.startedAt > latest.startedAt) latest = j;
+  }
+  return res.json({ job: latest });
+});
+
+// ── Broadcast background jobs ──
+// In-memory store so the send loop is independent of the HTTP/SSE connection.
+// (Single backend instance — acceptable for admin broadcasts.)
+
+interface BroadcastEvent { type: string; [key: string]: any }
+interface BroadcastJob {
+  id: string;
+  status: 'running' | 'done' | 'error';
+  total: number;
+  sent: number;
+  failed: number;
+  coupons: number;
+  log: BroadcastEvent[];
+  startedAt: number;
+  finishedAt?: number;
+  error?: string;
+}
+
+const broadcastJobs = new Map<string, BroadcastJob>();
+const MAX_BROADCAST_LOG = 3000;
+
+function pushBroadcastEvent(job: BroadcastJob, ev: BroadcastEvent) {
+  job.log.push({ ...ev, total: job.total, sent: job.sent, failed: job.failed, coupons: job.coupons });
+  if (job.log.length > MAX_BROADCAST_LOG) job.log.splice(0, job.log.length - MAX_BROADCAST_LOG);
+}
+
+// Drop finished jobs older than 2h to keep memory bounded.
+function pruneBroadcastJobs() {
+  const now = Date.now();
+  for (const [id, j] of broadcastJobs) {
+    if (j.finishedAt && now - j.finishedAt > 2 * 60 * 60 * 1000) broadcastJobs.delete(id);
+  }
+}
+
+interface RunBroadcastOpts {
+  users: any[];
+  message: string;
+  instanceId?: string;
+  apiKey?: string | null;
+  apiUrl: string;
+  sendWhatsApp: boolean;
+  delayMin: any;
+  delayMax: any;
+  sendPush: boolean;
+  generateCoupons: boolean;
+  couponDiscount: any;
+  couponMaxUses: any;
+}
+
+async function runBroadcast(job: BroadcastJob, opts: RunBroadcastOpts) {
+  const { users, message, instanceId, apiKey, apiUrl, sendWhatsApp, sendPush, generateCoupons, couponDiscount, couponMaxUses } = opts;
+  const minDelay = Math.max(1, parseInt(opts.delayMin) || 5);
+  const maxDelay = Math.max(minDelay, parseInt(opts.delayMax) || 15);
+
+  pushBroadcastEvent(job, { type: 'start' });
+
+  if (sendWhatsApp) {
+    // ── WhatsApp broadcast loop ──
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+
+      // Clean phone
+      let cleanPhone = user.phone.replace(/\D/g, '');
+      if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
+        cleanPhone = `258${cleanPhone}`;
+      }
+
+      // Skip if no valid phone
+      if (cleanPhone.length < 9) {
+        job.failed++;
+        pushBroadcastEvent(job, { type: 'skip', index: i, name: user.name, reason: 'Telefone inválido' });
+        continue;
+      }
+
+      let personalizedMsg = substituteVariables(message, user);
+
+      // Generate per-user coupon if enabled
+      if (generateCoupons && message.includes('{{cupom}}')) {
+        const couponCode = await ensureBroadcastCoupon(job, user, couponDiscount, couponMaxUses);
+        personalizedMsg = personalizedMsg.replace(/\{\{cupom\}\}/gi, couponCode);
+      }
+
+      try {
+        const sendRes = await fetch(`${apiUrl}/api/v1/messages/send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey!,
+          },
+          body: JSON.stringify({
+            instanceId,
+            to: cleanPhone,
+            type: 'text',
+            content: personalizedMsg,
+          }),
+        });
+
+        if (sendRes.ok) {
+          job.sent++;
+          pushBroadcastEvent(job, { type: 'sent', index: i, name: user.name, phone: cleanPhone });
+        } else {
+          const errBody = await sendRes.text().catch(() => 'Unknown error');
+          job.failed++;
+          pushBroadcastEvent(job, { type: 'error', index: i, name: user.name, error: errBody });
+        }
+      } catch (err: any) {
+        job.failed++;
+        pushBroadcastEvent(job, { type: 'error', index: i, name: user.name, error: err.message });
+      }
+
+      // Randomized delay between messages (anti-block)
+      if (i < users.length - 1) {
+        const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+        pushBroadcastEvent(job, { type: 'waiting', delay, nextIndex: i + 1 });
+        await new Promise(resolve => setTimeout(resolve, delay * 1000));
+      }
+    }
+  } else {
+    // ── Push-only mode: no WhatsApp loop ──
+    job.sent = users.length;
+  }
+
+  job.status = 'done';
+  job.finishedAt = Date.now();
+  pushBroadcastEvent(job, { type: 'complete' });
+
+  // Send Web Push notification if requested
+  if (sendPush) {
+    // Strip {{variable}} placeholders since push is broadcast (not per-user)
+    const pushBody = message
+      .replace(/\{\{nome\}\}/gi, 'Aluno')
+      .replace(/\{\{email\}\}/gi, '')
+      .replace(/\{\{telefone\}\}/gi, '')
+      .replace(/\{\{objetivo\}\}/gi, '')
+      .replace(/\{\{dor\}\}/gi, '')
+      .replace(/\{\{compromisso\}\}/gi, '')
+      .replace(/\{\{consciencia\}\}/gi, '')
+      .replace(/\{\{cupom\}\}/gi, '')
+      .replace(/\{\{[^}]+\}\}/g, '')  // catch any remaining
+      .replace(/\s{2,}/g, ' ')        // collapse double spaces
+      .trim();
+    sendPushBroadcast({
+      title: 'Código Zero',
+      body: pushBody.length > 120 ? pushBody.substring(0, 120) + '...' : pushBody,
+      url: '/dashboard',
+    }).catch(() => {});
+  }
+}
+
+/**
+ * Creates (or reuses) a per-recipient coupon, syncing it to Lojou AND the local
+ * coupon table so it behaves exactly like coupons created in the admin panel
+ * (visible, trackable, deduplicated). Failures are surfaced in the job log so
+ * the admin actually sees why a coupon didn't work instead of failing silently.
+ */
+async function ensureBroadcastCoupon(job: BroadcastJob, user: any, couponDiscount: any, couponMaxUses: any): Promise<string> {
+  const discount = parseInt(couponDiscount) || 10;
+  const maxUses = parseInt(couponMaxUses) || 1;
+  const code = `CZ${discount}_${user.id.slice(0, 6).toUpperCase()}`;
+
+  // Already created (previous run or earlier iteration) → reuse it.
+  const existing = await prisma.coupon.findUnique({ where: { code } }).catch(() => null);
+  if (existing) return code;
+
+  let lojouId: string | null = null;
+  if (env.LOJOU_API_KEY) {
+    try {
+      // product_ids is optional: empty → coupon applies to every product.
+      const product_ids = env.LOJOU_PRODUCT_ID
+        ? [Number.isNaN(Number(env.LOJOU_PRODUCT_ID)) ? env.LOJOU_PRODUCT_ID : Number(env.LOJOU_PRODUCT_ID)]
+        : undefined;
+      const resp = await lojouService.createDiscount({
+        code,
+        type: 'percentage',
+        value: discount,
+        uses_limit: maxUses,
+        status: 'active',
+        ...(product_ids ? { product_ids } : {}),
+      });
+      lojouId = LojouService.extractDiscountId(resp);
+      console.log(`[BROADCAST] 🎟️ Coupon ${code} created for ${user.email}${lojouId ? ` [Lojou: ${lojouId}]` : ''}`);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      if (msg.includes('(409)')) {
+        // Exists in Lojou but not locally → fall through and persist locally.
+        console.log(`[BROADCAST] ↩ Coupon ${code} already exists in Lojou, reusing for ${user.email}`);
+      } else {
+        console.warn(`[BROADCAST] Coupon error for ${user.email}:`, msg);
+        pushBroadcastEvent(job, { type: 'coupon_error', name: user.name, code, error: msg });
+        return code; // still substitute the code; admin can investigate via the log
+      }
+    }
+  } else {
+    pushBroadcastEvent(job, { type: 'coupon_error', name: user.name, code, error: 'LOJOU_API_KEY não configurada' });
+    return code;
+  }
+
+  try {
+    await prisma.coupon.create({
+      data: {
+        code, type: 'percentage', value: discount, maxUses,
+        active: true, lojouId, linkedUserId: user.id, linkedUserEmail: user.email,
+      },
+    });
+    job.coupons++;
+    pushBroadcastEvent(job, { type: 'coupon', name: user.name, code });
+  } catch {
+    // Unique-constraint race (created concurrently) — safe to ignore.
+  }
+  return code;
+}
 
 // ── Broadcast helpers ──
 

@@ -114,7 +114,38 @@ async function sendToSubscriptions(
   return result;
 }
 
-export async function sendPushToUser(userId: string, payload: PushPayload): Promise<PushResult> {
+/**
+ * Notification categories the member can opt out of (maps to User flags).
+ * Pass one to sendPushToUser to honour the user's preferences; omit it for
+ * mandatory/system-internal pushes (e.g. superadmin alerts).
+ */
+export type NotificationCategory = 'community' | 'promotions' | 'system' | 'expiration';
+
+const CATEGORY_FIELD: Record<NotificationCategory, 'notifyCommunity' | 'notifyPromotions' | 'notifySystem' | 'notifyExpiration'> = {
+  community: 'notifyCommunity',
+  promotions: 'notifyPromotions',
+  system: 'notifySystem',
+  expiration: 'notifyExpiration',
+};
+
+async function categoryAllowed(userId: string, category?: NotificationCategory): Promise<boolean> {
+  if (!category) return true;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { [CATEGORY_FIELD[category]]: true } as any,
+  });
+  // Default to allowed when the row/flag can't be read.
+  return user ? (user as any)[CATEGORY_FIELD[category]] !== false : true;
+}
+
+export async function sendPushToUser(
+  userId: string,
+  payload: PushPayload,
+  category?: NotificationCategory,
+): Promise<PushResult> {
+  if (!(await categoryAllowed(userId, category))) {
+    return { attempted: 0, delivered: 0, removed: 0, failed: 0, errors: ['muted-by-preference'] };
+  }
   const subs = await prisma.pushSubscription.findMany({ where: { userId } });
   return sendToSubscriptions(subs, payload, `user:${userId.slice(0, 8)}`);
 }
@@ -122,16 +153,33 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
 export async function sendPushToUsers(
   userIds: string[],
   payload: PushPayload,
+  category?: NotificationCategory,
 ): Promise<PushResult> {
   if (userIds.length === 0) {
     return { attempted: 0, delivered: 0, removed: 0, failed: 0, errors: [] };
   }
-  const subs = await prisma.pushSubscription.findMany({ where: { userId: { in: userIds } } });
-  return sendToSubscriptions(subs, payload, `users:${userIds.length}`);
+  let ids = userIds;
+  if (category) {
+    const opted = await prisma.user.findMany({
+      where: { id: { in: userIds }, [CATEGORY_FIELD[category]]: true } as any,
+      select: { id: true },
+    });
+    ids = opted.map((u) => u.id);
+    if (ids.length === 0) return { attempted: 0, delivered: 0, removed: 0, failed: 0, errors: ['all-muted-by-preference'] };
+  }
+  const subs = await prisma.pushSubscription.findMany({ where: { userId: { in: ids } } });
+  return sendToSubscriptions(subs, payload, `users:${ids.length}`);
 }
 
-export async function sendPushBroadcast(payload: PushPayload): Promise<PushResult> {
-  const subs = await prisma.pushSubscription.findMany();
+export async function sendPushBroadcast(
+  payload: PushPayload,
+  category?: NotificationCategory,
+): Promise<PushResult> {
+  const subs = await prisma.pushSubscription.findMany(
+    category
+      ? { where: { user: { [CATEGORY_FIELD[category]]: true } as any } }
+      : undefined,
+  );
   return sendToSubscriptions(subs, payload, 'broadcast');
 }
 

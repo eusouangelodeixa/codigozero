@@ -27,10 +27,14 @@ export default function PerfilPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", avatarUrl: "" });
   const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwCode, setPwCode] = useState("");
+  const [pwOtpSent, setPwOtpSent] = useState(false);
+  const [requestingOtp, setRequestingOtp] = useState(false);
   const [saving, setSaving] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
+  const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hdr = () => ({
@@ -51,7 +55,29 @@ export default function PerfilPage() {
           });
         }
       });
+
+    fetch(`${API}/api/auth/notification-prefs`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((data) => { if (data.prefs) setPrefs(data.prefs); })
+      .catch(() => {});
   }, []);
+
+  const togglePref = async (key: string) => {
+    if (!prefs) return;
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next); // optimistic
+    try {
+      const res = await fetch(`${API}/api/auth/notification-prefs`, {
+        method: "PATCH",
+        headers: hdr(),
+        body: JSON.stringify({ [key]: next[key] }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setPrefs(prefs); // revert
+      toast.error("Não foi possível salvar a preferência");
+    }
+  };
 
   const avatarSrc = form.avatarUrl
     ? form.avatarUrl.startsWith("/")
@@ -155,9 +181,38 @@ export default function PerfilPage() {
     setTestingPush(false);
   };
 
+  const requestPwOtp = async () => {
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      toast.error("As senhas não coincidem.");
+      return;
+    }
+    if (pwForm.newPassword.length < 6) {
+      toast.error("A nova senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+    setRequestingOtp(true);
+    try {
+      const res = await fetch(`${API}/api/auth/password/request-otp`, { method: "POST", headers: hdr() });
+      const data = await res.json();
+      if (res.ok) {
+        setPwOtpSent(true);
+        toast.success("Código enviado", `Enviamos um código no seu WhatsApp${data.phoneHint ? ` (${data.phoneHint})` : ""}.`);
+      } else {
+        toast.error("Falha ao enviar código", data.error);
+      }
+    } catch {
+      toast.error("Erro de conexão");
+    }
+    setRequestingOtp(false);
+  };
+
   const changePassword = async () => {
     if (pwForm.newPassword !== pwForm.confirmPassword) {
       toast.error("As senhas não coincidem.");
+      return;
+    }
+    if (!pwCode.trim()) {
+      toast.error("Informe o código enviado no WhatsApp.");
       return;
     }
     setChangingPw(true);
@@ -168,12 +223,15 @@ export default function PerfilPage() {
         body: JSON.stringify({
           currentPassword: pwForm.currentPassword,
           newPassword: pwForm.newPassword,
+          code: pwCode.trim(),
         }),
       });
       const data = await res.json();
       if (res.ok) {
         toast.success("Senha alterada");
         setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        setPwCode("");
+        setPwOtpSent(false);
       } else {
         toast.error("Falha ao alterar", data.error);
       }
@@ -267,9 +325,34 @@ export default function PerfilPage() {
           <div>
             <h2 className={styles.sectionTitle}>Notificações push</h2>
             <p className={styles.sectionSubtitle}>
-              Receba avisos do chat da comunidade, suporte e novidades neste dispositivo.
+              Escolha o que deseja receber neste dispositivo. Mensagens de suporte são sempre entregues.
             </p>
           </div>
+
+          {prefs && (
+            <div className={styles.prefList}>
+              {[
+                { key: "notifyCommunity", label: "Mensagens da comunidade", desc: "Novas mensagens no chat da comunidade." },
+                { key: "notifyPromotions", label: "Promoções e ofertas", desc: "Cupons, campanhas e novidades comerciais." },
+                { key: "notifySystem", label: "Avisos do sistema", desc: "Novas aulas, lembretes e atualizações." },
+                { key: "notifyExpiration", label: "Vencimento da assinatura", desc: "Avisos de renovação antes de expirar." },
+              ].map((p) => (
+                <label key={p.key} className={styles.prefRow}>
+                  <span className={styles.prefText}>
+                    <span className={styles.prefLabel}>{p.label}</span>
+                    <span className={styles.prefDesc}>{p.desc}</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    className={styles.prefSwitch}
+                    checked={prefs[p.key] !== false}
+                    onChange={() => togglePref(p.key)}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
+
           <div>
             <Button variant="secondary" onClick={testPush} loading={testingPush}>
               Enviar notificação de teste
@@ -310,15 +393,42 @@ export default function PerfilPage() {
             }
           />
 
-          <div>
-            <Button
-              variant="secondary"
-              onClick={changePassword}
-              loading={changingPw}
-              disabled={!pwForm.currentPassword || !pwForm.newPassword}
-            >
-              Alterar senha
-            </Button>
+          {pwOtpSent && (
+            <Input
+              label="Código do WhatsApp"
+              inputMode="numeric"
+              value={pwCode}
+              onChange={(e) => setPwCode(e.target.value)}
+              placeholder="000000"
+              hint="Por segurança, confirme a alteração com o código enviado ao seu WhatsApp."
+            />
+          )}
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {!pwOtpSent ? (
+              <Button
+                variant="secondary"
+                onClick={requestPwOtp}
+                loading={requestingOtp}
+                disabled={!pwForm.currentPassword || !pwForm.newPassword || !pwForm.confirmPassword}
+              >
+                Enviar código no WhatsApp
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={changePassword}
+                  loading={changingPw}
+                  disabled={!pwCode.trim()}
+                >
+                  Confirmar alteração
+                </Button>
+                <Button variant="ghost" onClick={requestPwOtp} loading={requestingOtp}>
+                  Reenviar código
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </Card>

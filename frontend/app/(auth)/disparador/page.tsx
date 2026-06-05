@@ -120,6 +120,11 @@ export default function DisparadorPage() {
 
   const [contactTab, setContactTab] = useState<"radar" | "manual">("radar");
   const [radarLeads, setRadarLeads] = useState<Contact[]>([]);
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string; leadsCount: number }[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(
+    () => searchParams.get("campaign") || ""
+  );
+  const [loadingLeads, setLoadingLeads] = useState(false);
   const [manualContacts, setManualContacts] = useState<Contact[]>([]);
   const [manualName, setManualName] = useState("");
   const [manualPhone, setManualPhone] = useState("");
@@ -176,8 +181,21 @@ export default function DisparadorPage() {
       .catch(() => {});
   }, [hdr]);
 
+  // Load the user's campaigns so the user can target a single prospecting run.
   useEffect(() => {
-    fetch(`${API}/api/radar/leads`, { headers: hdr() })
+    fetch(`${API}/api/radar/campaigns`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((data) => setCampaigns(data.campaigns || []))
+      .catch(() => {});
+  }, [hdr]);
+
+  // Load radar leads — scoped to the selected campaign when one is chosen.
+  useEffect(() => {
+    const url = selectedCampaignId
+      ? `${API}/api/radar/leads?jobId=${encodeURIComponent(selectedCampaignId)}`
+      : `${API}/api/radar/leads`;
+    setLoadingLeads(true);
+    fetch(url, { headers: hdr() })
       .then((r) => r.json())
       .then((data) => {
         const leads: Contact[] = (data.leads || []).map((l: { phone: string; name: string }) => ({
@@ -188,8 +206,9 @@ export default function DisparadorPage() {
         }));
         setRadarLeads(leads);
       })
-      .catch(() => {});
-  }, [hdr]);
+      .catch(() => {})
+      .finally(() => setLoadingLeads(false));
+  }, [hdr, selectedCampaignId]);
 
   useEffect(() => {
     fetch(`${API}/api/radar/komunika-info`, { headers: hdr() })
@@ -718,11 +737,29 @@ export default function DisparadorPage() {
             />
 
             {contactTab === "radar" ? (
-              radarLeads.length === 0 ? (
+              <>
+                {campaigns.length > 0 && (
+                  <Select
+                    label="Campanha"
+                    value={selectedCampaignId}
+                    onChange={(e) => setSelectedCampaignId(e.target.value)}
+                    hint="Escolha uma campanha para disparar apenas para os leads dela."
+                  >
+                    <option value="">Todas as campanhas</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.leadsCount})
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                {loadingLeads ? (
+                  <div className={styles.leadsLoading}>Carregando leads…</div>
+                ) : radarLeads.length === 0 ? (
                 <EmptyState
                   compact
                   icon={<DisparadorIcon size={20} />}
-                  title="Nenhum lead disponível"
+                  title={selectedCampaignId ? "Campanha sem leads" : "Nenhum lead disponível"}
                   description="Capture leads no Radar para selecioná-los aqui."
                   actions={<Button variant="secondary" onClick={() => router.push("/radar")}>Ir para o Radar</Button>}
                 />
@@ -759,7 +796,8 @@ export default function DisparadorPage() {
                     </div>
                   </div>
                 </>
-              )
+              )}
+              </>
             ) : (
               <div className={styles.manualGroup}>
                 <div className={styles.manualRow}>

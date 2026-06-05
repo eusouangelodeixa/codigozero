@@ -85,6 +85,7 @@ router.post('/community', async (req: AuthRequest, res: Response) => {
         body: content.trim().substring(0, 140),
         url: '/chat',
       },
+      'community',
     ).catch((e) => console.error('[CHAT] community push error:', e));
   } catch (error) {
     console.error('[CHAT] Community send error:', error);

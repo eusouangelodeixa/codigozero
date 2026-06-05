@@ -39,6 +39,21 @@ model User {
   hasCompletedOnboarding Boolean @default(false)
   lastExpirationAlert DateTime?
 
+  // ── PWA install tracking ────────────────────────────────────────────
+  // pwaInstalledAt is stamped the first time the authed app loads in
+  // standalone/display-mode (added to home screen). pwaReminderSentAt is
+  // set by the daily cron once it nudges a paid user who hasn't installed.
+  pwaInstalledAt     DateTime?
+  pwaReminderSentAt  DateTime?
+
+  // ── Notification preferences (per channel) ──────────────────────────
+  // Honoured by sendPushToUser(category) and the WhatsApp/cron senders.
+  // Defaults true so existing users keep receiving everything.
+  notifyCommunity    Boolean          @default(true)
+  notifyPromotions   Boolean          @default(true)
+  notifySystem       Boolean          @default(true)
+  notifyExpiration   Boolean          @default(true)
+
   // ── Close Friends (order bump JQQWc): grants +2 months on top of the
   // standard subscription, expires together with subscriptionEnd, and is
   // automatically dropped on a renewal payment that doesn't include the bump.
@@ -225,7 +240,7 @@ model LandingConfig {
   heroSubtitle  String?
   heroDesc      String?
   ctaText       String?
-  priceAmount   Int     @default(797)
+  priceAmount   Int     @default(497)
   maxVagas      Int     @default(50)
   sections      Json?   // full page sections as JSON
   headScripts       String? // Tracking pixels for <head> (concatenated)
@@ -241,6 +256,13 @@ model ScrapeJob {
   id        String   @id @default(uuid())
   userId    String
   query     String
+  // Human-friendly campaign label (defaults to "<query> — <cities>").
+  // Lets users find and dispatch to a specific prospecting run instead of
+  // one giant flat list of leads. Renameable from the Radar UI.
+  name      String?
+  // Soft-delete / hide a campaign from the Radar list without dropping its
+  // leads. New campaigns are visible (false).
+  archived  Boolean  @default(false)
   // Single-city legacy column (kept for backwards compat with old jobs).
   // New jobs populate `cities` (JSON array). The worker reads cities ??
   // [city] so both shapes resolve to a list.
@@ -340,6 +362,28 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+/// One-time verification codes delivered over WhatsApp.
+///
+/// Used for two flows:
+///   • password_reset  — forgot-password (unauthenticated, matched by phone)
+///   • password_change — authed password change confirmation in /perfil
+///
+/// A code is 6 digits, expires after 10 minutes, and is single-use
+/// (consumedAt). `attempts` backs off brute-force on the verify step.
+model OtpCode {
+  id         String    @id @default(uuid())
+  userId     String?   // set for password_change (known user); null for reset
+  phone      String    // normalized E.164 digits (no +)
+  code       String    // 6-digit numeric
+  purpose    String    // 'password_reset' | 'password_change'
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, purpose])
 }
 
 // ═══════════════════════════════════════════

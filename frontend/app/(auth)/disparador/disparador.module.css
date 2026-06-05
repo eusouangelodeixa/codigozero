@@ -538,3 +538,10 @@
   .historyCards { display: flex; }
   .manualRow { grid-template-columns: 1fr; }
 }
+
+.leadsLoading {
+  padding: var(--space-4);
+  text-align: center;
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+}

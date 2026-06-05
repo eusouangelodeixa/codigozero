@@ -110,6 +110,9 @@ router.post('/start', authMiddleware, subscriptionMiddleware, async (req: AuthRe
       data: {
         userId,
         query: query.trim(),
+        // Auto-name the campaign so users can tell prospecting runs apart in
+        // the Radar list and target a single one in the Disparador. Renameable.
+        name: `${query.trim()} — ${cityList.join(', ')}`,
         city: cityList[0],
         cities: cityList,
         status: 'queued',
@@ -259,20 +262,63 @@ router.get('/history', authMiddleware, subscriptionMiddleware, async (req: AuthR
 });
 
 /**
- * GET /api/radar/leads
- * Returns all scraped leads for the user (across all jobs)
+ * GET /api/radar/campaigns
+ * Lists the user's prospecting campaigns (scrape jobs) with lead counts.
+ * Each campaign is one prospecting run, so the user can find and dispatch to
+ * a specific one instead of one giant flat list.
+ */
+router.get('/campaigns', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const jobs = await prisma.scrapeJob.findMany({
+      where: { userId, archived: false },
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { leads: true } } },
+      take: 100,
+    });
+
+    return res.json({
+      campaigns: jobs.map((j) => ({
+        id: j.id,
+        name: j.name || j.query,
+        query: j.query,
+        cities: (j.cities as string[] | null) ?? (j.city ? [j.city] : []),
+        status: j.status,
+        leadsCount: j._count.leads,
+        createdAt: j.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('[RADAR] Campaigns error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar campanhas' });
+  }
+});
+
+/**
+ * GET /api/radar/leads[?jobId=]
+ * Returns scraped leads for the user. With `jobId`, scopes to a single
+ * campaign (after verifying ownership); without it, returns the most recent
+ * leads across all campaigns (legacy behavior, capped at 500).
  */
 router.get('/leads', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const jobs = await prisma.scrapeJob.findMany({
-      where: { userId },
-      select: { id: true },
-    });
-    const jobIds = jobs.map(j => j.id);
+    const jobId = typeof req.query.jobId === 'string' ? req.query.jobId : undefined;
+
+    let where: { jobId: string } | { jobId: { in: string[] } };
+    if (jobId) {
+      const job = await prisma.scrapeJob.findUnique({ where: { id: jobId }, select: { userId: true } });
+      if (!job || job.userId !== userId) {
+        return res.status(404).json({ error: 'Campanha não encontrada' });
+      }
+      where = { jobId };
+    } else {
+      const jobs = await prisma.scrapeJob.findMany({ where: { userId }, select: { id: true } });
+      where = { jobId: { in: jobs.map((j) => j.id) } };
+    }
 
     const leads = await prisma.scrapedLead.findMany({
-      where: { jobId: { in: jobIds } },
+      where,
       orderBy: { createdAt: 'desc' },
       take: 500,
     });
@@ -281,6 +327,51 @@ router.get('/leads', authMiddleware, subscriptionMiddleware, async (req: AuthReq
   } catch (error) {
     console.error('[RADAR] Leads error:', error);
     return res.status(500).json({ error: 'Erro ao carregar leads' });
+  }
+});
+
+/**
+ * PATCH /api/radar/campaigns/:id
+ * Rename a campaign or archive it (hide from the list without deleting leads).
+ * Body: { name?: string, archived?: boolean }
+ */
+router.patch('/campaigns/:id', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const job = await prisma.scrapeJob.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+    if (!job || job.userId !== userId) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+    const data: { name?: string; archived?: boolean } = {};
+    if (typeof req.body?.name === 'string' && req.body.name.trim()) data.name = req.body.name.trim().slice(0, 120);
+    if (typeof req.body?.archived === 'boolean') data.archived = req.body.archived;
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'Nada para atualizar' });
+    }
+    const updated = await prisma.scrapeJob.update({ where: { id: req.params.id }, data });
+    return res.json({ success: true, name: updated.name, archived: updated.archived });
+  } catch (error) {
+    console.error('[RADAR] Campaign update error:', error);
+    return res.status(500).json({ error: 'Erro ao atualizar campanha' });
+  }
+});
+
+/**
+ * DELETE /api/radar/campaigns/:id
+ * Permanently deletes a campaign and its leads (ScrapedLead cascades).
+ */
+router.delete('/campaigns/:id', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const job = await prisma.scrapeJob.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+    if (!job || job.userId !== userId) {
+      return res.status(404).json({ error: 'Campanha não encontrada' });
+    }
+    await prisma.scrapeJob.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('[RADAR] Campaign delete error:', error);
+    return res.status(500).json({ error: 'Erro ao excluir campanha' });
   }
 });
 

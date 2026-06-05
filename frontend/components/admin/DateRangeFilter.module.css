@@ -1,0 +1,41 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast);
+  font-family: inherit;
+  white-space: nowrap;
+}
+.chip:hover { background: var(--bg-glass); color: var(--text-primary); border-color: var(--border-strong); }
+.chipActive {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.customRange { display: inline-flex; align-items: center; gap: 6px; }
+.dash { color: var(--text-tertiary); font-size: 12px; }
+.dateInput {
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  color-scheme: dark;
+}
+.dateInput:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }

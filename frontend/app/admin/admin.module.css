@@ -861,3 +861,33 @@
   .main { padding: var(--space-4) var(--space-3); }
   .kpiGrid { grid-template-columns: 1fr; }
 }
+
+/* ── Mobile card list (replaces horizontal-scroll tables < 640px) ───── */
+.mobileCards { display: none; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.mCard {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mCardHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mCardName { font-weight: 600; color: var(--text-primary); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mCardRow { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.mCardLabel { color: var(--text-tertiary); }
+.mCardValue { color: var(--text-secondary); text-align: right; }
+.mCardActions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+/* Expiry helper text shown in users / leads tables */
+.expiry { display: flex; flex-direction: column; gap: 1px; }
+.expiryDate { font-size: 12.5px; color: var(--text-secondary); }
+.expiryDays { font-size: 10.5px; color: var(--text-tertiary); }
+.expiryUrgent .expiryDays, .expiryUrgent .expiryDate { color: var(--color-error); }
+.expiryWarn .expiryDays { color: var(--color-warning); }
+
+@media (max-width: 640px) {
+  .table { display: none; }
+  .mobileCards { display: flex; }
+}

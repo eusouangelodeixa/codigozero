@@ -74,6 +74,18 @@ export const apiClient = {
 
   getSearchHistory: () => api('/api/radar/history'),
 
+  // Campaigns (prospecting runs grouped as folders)
+  getRadarCampaigns: () => api('/api/radar/campaigns'),
+
+  getRadarLeads: (jobId?: string) =>
+    api(jobId ? `/api/radar/leads?jobId=${encodeURIComponent(jobId)}` : '/api/radar/leads'),
+
+  renameRadarCampaign: (id: string, name: string) =>
+    api(`/api/radar/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+
+  deleteRadarCampaign: (id: string) =>
+    api(`/api/radar/campaigns/${id}`, { method: 'DELETE' }),
+
   // Authoritative job snapshot (status + leads) — used as SSE fallback
   getRadarJob: (jobId: string) => api(`/api/radar/job/${jobId}`),
 

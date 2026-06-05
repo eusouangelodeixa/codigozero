@@ -506,3 +506,78 @@
   .triFilterOpt { flex: 1; text-align: center; }
   .filterRow { flex-direction: column; align-items: stretch; gap: 8px; }
 }
+
+/* ── Campaigns (history tab folders) ───────────────────────────────── */
+.campaignGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+.campaignCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.campaignOpen {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.campaignIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.campaignInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.campaignName {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.campaignMeta { font-size: 0.8rem; color: var(--text-secondary); }
+.campaignDate { font-size: 0.72rem; color: var(--text-tertiary); }
+.campaignActions { display: flex; gap: 4px; flex-shrink: 0; }
+.campaignActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.campaignActionBtn:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-dim); }
+.campaignActionDanger:hover { color: var(--error, #ef4444); border-color: var(--error, #ef4444); background: rgba(239,68,68,0.08); }
+.campaignBack {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.campaignBack:hover { color: var(--accent); }
+.campaignBack strong { color: var(--text-primary); }

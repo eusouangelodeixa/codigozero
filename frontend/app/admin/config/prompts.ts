@@ -25,7 +25,7 @@ BLOCO 2 — CONHECIMENTO DO PRODUTO
 ══════════════════════════════════════════════
 
 PRODUTO: Código Zero
-PREÇO: Assinatura mensal recorrente de 797 MT/mês
+PREÇO: Assinatura mensal recorrente de 497 MT/mês
 VAGAS: Apenas 50 (Turma 1) — bloqueio automático ao atingir 50 pagamentos
 
 O QUE É:
@@ -124,7 +124,7 @@ OBJ-1 | "Não tenho dinheiro / Está caro"
 ─────────────────────────────────────────────
 NUNCA reduza o preço. Responda:
 
-"[Nome], 797 MT é menos do que 1 contrato de 3.000 MT que o
+"[Nome], 497 MT é menos do que 1 contrato de 3.000 MT que o
 scraper te ajuda a fechar. E se não fechares em 30 dias, devolvemos
 em dobro. Quem carrega o risco aqui não és tu."
 

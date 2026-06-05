@@ -68,16 +68,23 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
 
 router.get('/leads', async (req: AuthRequest, res: Response) => {
   try {
-    const filter = req.query.filter as string; // all, paid, unpaid
+    const filter = req.query.filter as string; // all, paid, unpaid, subscriber
     const search = req.query.search as string;
+    const period = req.query.period as string; // today | 7d | 30d | custom | all
+    const status = req.query.status as string; // optional explicit subscriptionStatus
 
     let where: any = {};
 
-    if (filter === 'paid') {
+    if (filter === 'paid' || filter === 'subscriber') {
       where.subscriptionStatus = 'active';
       where.lojouOrderId = { not: null };
     } else if (filter === 'unpaid') {
       where.subscriptionStatus = 'lead';
+    }
+    // Explicit single-status filter overrides the coarse paid/unpaid one.
+    if (status && status !== 'all') {
+      where.subscriptionStatus = status;
+      delete where.lojouOrderId;
     }
 
     if (search) {
@@ -88,12 +95,15 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
       ];
     }
 
+    const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
+    if (window) where.createdAt = window;
+
     const leads = await prisma.user.findMany({
       where: { ...where, role: 'member' },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, name: true, email: true, phone: true,
-        subscriptionStatus: true, lojouOrderId: true, createdAt: true,
+        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, createdAt: true,
       },
     });
 
@@ -132,6 +142,10 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     // numbers OR drill into just the principal product OR a single
     // coproducer without mixing them.
     const source = ((req.query.source as string) || 'all').trim();
+    // Transaction-list filters (apply to the paginated list only, NOT the
+    // window metrics — those always reflect every approved sale).
+    const txType = ((req.query.txType as string) || 'all').trim(); // all | new | renewal | closeFriends
+    const txStatus = ((req.query.txStatus as string) || 'all').trim(); // all | approved | failed | pending
 
     const now = new Date();
     let startDate = new Date(now);
@@ -321,10 +335,21 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     }));
 
     // ── Paginated transactions list (windowed + searched + source) ─────
+    const typeClause =
+      txType === 'new'
+        ? { isRenewal: false }
+        : txType === 'renewal'
+          ? { isRenewal: true }
+          : txType === 'closeFriends'
+            ? { isCloseFriends: true }
+            : {};
+    const statusClause = txStatus && txStatus !== 'all' ? { status: txStatus } : {};
     const txWhere = {
       createdAt: { gte: startDate, lte: endDate },
       ...searchClause,
       ...sourceClause,
+      ...typeClause,
+      ...statusClause,
     };
     const [txTotal, txItems] = await Promise.all([
       prisma.transaction.count({ where: txWhere }),
@@ -458,6 +483,9 @@ router.get('/finance/upcoming-renewals', async (req: AuthRequest, res: Response)
 router.get('/users', async (req: AuthRequest, res: Response) => {
   try {
     const search = req.query.search as string;
+    const status = req.query.status as string; // active | overdue | grace_period | canceled | lead
+    const role = req.query.role as string;     // member | admin | superadmin
+    const period = req.query.period as string;  // filters createdAt
     const page = parseInt(req.query.page as string) || 1;
     const perPage = 20;
 
@@ -466,8 +494,13 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (status && status !== 'all') where.subscriptionStatus = status;
+    if (role && role !== 'all') where.role = role;
+    const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
+    if (window) where.createdAt = window;
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
@@ -730,7 +763,7 @@ router.post('/lessons', async (req: AuthRequest, res: Response) => {
       title: '🎓 Nova Aula Disponível!',
       body: `${title}${mod ? ` — ${mod.title}` : ''}`,
       url: '/forja',
-    }).catch(() => {});
+    }, 'system').catch(() => {});
 
     res.json({ lesson });
   } catch (error) {
@@ -1027,6 +1060,48 @@ router.get('/broadcast/audience', async (_req: AuthRequest, res: Response) => {
 });
 
 /**
+ * GET /api/admin/broadcast/users
+ * Searchable user list for hand-picking specific recipients. Supports the
+ * same status/date filters so the admin can preview exactly who matches.
+ * Query: search, status, period|from|to, limit (default 100, max 500).
+ */
+router.get('/broadcast/users', async (req: AuthRequest, res: Response) => {
+  try {
+    const search = (req.query.search as string) || '';
+    const status = req.query.status as string;
+    const period = req.query.period as string;
+    const limit = Math.min(500, Math.max(1, parseInt((req.query.limit as string) || '100', 10)));
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (status && status !== 'all') where.subscriptionStatus = status;
+    const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
+    if (window) where.createdAt = window;
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { id: true, name: true, email: true, phone: true, subscriptionStatus: true, subscriptionEnd: true },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    res.json({ users, total });
+  } catch (error) {
+    console.error('[BROADCAST] Users error:', error);
+    res.status(500).json({ error: 'Erro ao carregar usuários' });
+  }
+});
+
+/**
  * GET /api/admin/broadcast/instances
  * Lists available Komunika WhatsApp instances
  */
@@ -1064,10 +1139,10 @@ router.get('/broadcast/instances', async (_req: AuthRequest, res: Response) => {
  */
 router.post('/broadcast/preview', async (req: AuthRequest, res: Response) => {
   try {
-    const { segment, message } = req.body;
+    const { segment, message, userIds, statuses, createdFrom, createdTo } = req.body;
     if (!message) return res.status(400).json({ error: 'Mensagem obrigatória' });
 
-    const where = buildSegmentWhere(segment);
+    const where = buildAudienceWhere({ segment, userIds, statuses, createdFrom, createdTo });
     const sampleUser = await prisma.user.findFirst({ where, orderBy: { createdAt: 'desc' } });
 
     if (!sampleUser) {
@@ -1099,7 +1174,7 @@ router.post('/broadcast/preview', async (req: AuthRequest, res: Response) => {
  */
 router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
   try {
-    const { segment, message, instanceId, delayMin, delayMax, sendPush, generateCoupons, couponDiscount, couponMaxUses } = req.body;
+    const { segment, message, instanceId, delayMin, delayMax, sendPush, generateCoupons, couponDiscount, couponMaxUses, userIds, statuses, createdFrom, createdTo } = req.body;
 
     if (!message) return res.status(400).json({ error: 'Mensagem obrigatória' });
     if (!instanceId && !sendPush) return res.status(400).json({ error: 'Selecione uma instância WhatsApp ou ative Push Notification' });
@@ -1113,7 +1188,7 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
     // Only require API key if actually sending via WhatsApp
     if (sendWhatsApp && !apiKey) return res.status(400).json({ error: 'Chave da API do Komunika não configurada' });
 
-    const where = buildSegmentWhere(segment);
+    const where = buildAudienceWhere({ segment, userIds, statuses, createdFrom, createdTo });
     const users = await prisma.user.findMany({
       where,
       select: { id: true, name: true, email: true, phone: true, surveyAnswers: true },
@@ -1324,7 +1399,7 @@ async function runBroadcast(job: BroadcastJob, opts: RunBroadcastOpts) {
       title: 'Código Zero',
       body: pushBody.length > 120 ? pushBody.substring(0, 120) + '...' : pushBody,
       url: '/dashboard',
-    }).catch(() => {});
+    }, 'promotions').catch(() => {});
   }
 }
 
@@ -1405,6 +1480,73 @@ function buildSegmentWhere(segment: string): any {
     default:
       return {};
   }
+}
+
+/**
+ * Turn a period/from/to query into a Prisma date filter `{ gte?, lte? }`.
+ * Shared by the leads and users lists so the admin's "Hoje / 7 dias / Mês /
+ * Personalizado" chips behave identically everywhere. Returns null when the
+ * period is 'all' / unset (no date constraint).
+ */
+function dateWindowFromQuery(period?: string, from?: string, to?: string): { gte?: Date; lte?: Date } | null {
+  const now = new Date();
+  if (!period || period === 'all') return null;
+  if (period === 'today') {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return { gte: start };
+  }
+  if (period === '7d') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 7);
+    return { gte: start };
+  }
+  if (period === '30d') {
+    const start = new Date(now);
+    start.setDate(now.getDate() - 30);
+    return { gte: start };
+  }
+  if (period === 'custom') {
+    const win: { gte?: Date; lte?: Date } = {};
+    if (from) {
+      const d = new Date(from);
+      if (!Number.isNaN(d.getTime())) win.gte = d;
+    }
+    if (to) {
+      const d = new Date(to);
+      if (!Number.isNaN(d.getTime())) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(to)) d.setHours(23, 59, 59, 999);
+        win.lte = d;
+      }
+    }
+    return Object.keys(win).length ? win : null;
+  }
+  return null;
+}
+
+/**
+ * Build the audience `where` for a broadcast. Priority: explicit userIds >
+ * status list > named segment. Optionally narrows by account creation date.
+ */
+function buildAudienceWhere(opts: {
+  segment?: string;
+  userIds?: string[];
+  statuses?: string[];
+  createdFrom?: string;
+  createdTo?: string;
+}): any {
+  if (opts.userIds && opts.userIds.length > 0) {
+    return { id: { in: opts.userIds } };
+  }
+  const where: any = {};
+  if (opts.statuses && opts.statuses.length > 0) {
+    where.subscriptionStatus = { in: opts.statuses };
+  } else if (opts.segment) {
+    Object.assign(where, buildSegmentWhere(opts.segment));
+  }
+  const created = dateWindowFromQuery('custom', opts.createdFrom, opts.createdTo);
+  if (created) where.createdAt = created;
+  return where;
 }
 
 function substituteVariables(message: string, user: any): string {

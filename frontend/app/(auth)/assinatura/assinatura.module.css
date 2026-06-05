@@ -239,3 +239,21 @@
   .detailsGrid { grid-template-columns: 1fr; }
   .includedGrid { grid-template-columns: 1fr; }
 }
+
+/* ── Subscription validity bar (status hero) ───────────────── */
+.validityTrack {
+  width: 100%;
+  max-width: 320px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.validityFill {
+  height: 100%;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.9;
+  transition: width 0.4s ease;
+}

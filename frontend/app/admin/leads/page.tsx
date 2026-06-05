@@ -1,33 +1,60 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import styles from "../admin.module.css";
+import DateRangeFilter, { DateRange } from "@/components/admin/DateRangeFilter";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
+
+const STATUS_LABEL: Record<string, string> = {
+  active: "Assinante",
+  grace_period: "Carência",
+  overdue: "Atrasado",
+  canceled: "Cancelado",
+  lead: "Lead",
+};
+
+function statusClass(status: string) {
+  if (status === "active") return styles.badgeGreen;
+  if (status === "lead") return styles.badgeYellow;
+  if (status === "overdue" || status === "canceled") return styles.badgeRed;
+  if (status === "grace_period") return styles.badgeYellow;
+  return styles.badgeGray;
+}
 
 export default function AdminLeads() {
   const [leads, setLeads] = useState<any[]>([]);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [range, setRange] = useState<DateRange>({ period: "all" });
   const [total, setTotal] = useState(0);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (filter !== "all") params.set("filter", filter);
     if (search) params.set("search", search);
+    if (range.period !== "all") {
+      params.set("period", range.period);
+      if (range.period === "custom") {
+        if (range.from) params.set("from", range.from);
+        if (range.to) params.set("to", range.to);
+      }
+    }
     fetch(`${API}/api/admin/leads?${params}`, { headers: hdr() })
-      .then(r => r.json())
-      .then(data => { setLeads(data.leads || []); setTotal(data.total || 0); })
+      .then((r) => r.json())
+      .then((data) => { setLeads(data.leads || []); setTotal(data.total || 0); })
       .catch(console.error);
-  }, [filter, search]);
+  }, [filter, search, range]);
 
   useEffect(() => { load(); }, [load]);
 
-  const statusBadge = (lead: any) => {
-    if (lead.lojouOrderId && lead.subscriptionStatus === "active") return <span className={`${styles.badge} ${styles.badgeGreen}`}>Pago</span>;
-    if (lead.subscriptionStatus === "lead") return <span className={`${styles.badge} ${styles.badgeYellow}`}>Lead</span>;
-    return <span className={`${styles.badge} ${styles.badgeGray}`}>{lead.subscriptionStatus}</span>;
-  };
+  const badge = (lead: any) => (
+    <span className={`${styles.badge} ${statusClass(lead.subscriptionStatus)}`}>
+      {STATUS_LABEL[lead.subscriptionStatus] || lead.subscriptionStatus}
+    </span>
+  );
+
+  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
 
   return (
     <>
@@ -42,13 +69,24 @@ export default function AdminLeads() {
             className={styles.tableSearch}
             placeholder="Buscar por nome, email ou telefone..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
-          {["all", "paid", "unpaid"].map(f => (
-            <button key={f} className={`${styles.filterBtn} ${filter === f ? styles.filterBtnActive : ""}`} onClick={() => setFilter(f)}>
-              {f === "all" ? "Todos" : f === "paid" ? "Pagos" : "Não Pagos"}
+          {[
+            { id: "all", label: "Todos" },
+            { id: "subscriber", label: "Assinantes" },
+            { id: "unpaid", label: "Leads" },
+          ].map((f) => (
+            <button
+              key={f.id}
+              className={`${styles.filterBtn} ${filter === f.id ? styles.filterBtnActive : ""}`}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
             </button>
           ))}
+        </div>
+        <div className={styles.tableToolbar}>
+          <DateRangeFilter value={range} onChange={setRange} />
         </div>
 
         <table className={styles.table}>
@@ -58,23 +96,42 @@ export default function AdminLeads() {
               <th>Email</th>
               <th>Telefone</th>
               <th>Status</th>
-              <th>Data</th>
+              <th>Cadastro</th>
+              <th>Expira</th>
             </tr>
           </thead>
           <tbody>
             {leads.length === 0 ? (
-              <tr><td colSpan={5} className={styles.empty}>Nenhum lead encontrado</td></tr>
-            ) : leads.map(lead => (
+              <tr><td colSpan={6} className={styles.empty}>Nenhum lead encontrado</td></tr>
+            ) : leads.map((lead) => (
               <tr key={lead.id}>
                 <td>{lead.name}</td>
                 <td>{lead.email}</td>
                 <td>{lead.phone}</td>
-                <td>{statusBadge(lead)}</td>
-                <td>{new Date(lead.createdAt).toLocaleDateString("pt-BR")}</td>
+                <td>{badge(lead)}</td>
+                <td>{fmtDate(lead.createdAt)}</td>
+                <td>{fmtDate(lead.subscriptionEnd)}</td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        <div className={styles.mobileCards}>
+          {leads.length === 0 ? (
+            <div className={styles.empty}>Nenhum lead encontrado</div>
+          ) : leads.map((lead) => (
+            <div key={lead.id} className={styles.mCard}>
+              <div className={styles.mCardHead}>
+                <span className={styles.mCardName}>{lead.name}</span>
+                {badge(lead)}
+              </div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Email</span><span className={styles.mCardValue}>{lead.email}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Telefone</span><span className={styles.mCardValue}>{lead.phone}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Cadastro</span><span className={styles.mCardValue}>{fmtDate(lead.createdAt)}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Expira</span><span className={styles.mCardValue}>{fmtDate(lead.subscriptionEnd)}</span></div>
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

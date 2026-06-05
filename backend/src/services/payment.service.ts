@@ -21,6 +21,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { env } from '../config/env';
 import { sendPushToSuperAdmins } from './push.service';
+import { sendWhatsAppMessage } from '../lib/whatsapp';
 
 const prisma = new PrismaClient();
 
@@ -59,13 +60,6 @@ export async function sendCredentialsViaWhatsApp(opts: {
   rawPassword: string;
 }): Promise<CredentialDelivery> {
   const { phone, email, rawPassword } = opts;
-  const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-  const apiKey = sysConfig?.komunikaAdminApiKey || env.KOMUNIKA_ADMIN_API_KEY;
-  const instanceId = sysConfig?.komunikaInstanceId;
-  if (!apiKey || !instanceId) {
-    console.warn('[PAYMENT/CREDS] Komunika not configured — skipping delivery');
-    return { delivered: false, status: 'komunika-not-configured' };
-  }
 
   const message = [
     `🎉 *Bem-vindo ao Código Zero!*`,
@@ -80,36 +74,21 @@ export async function sendCredentialsViaWhatsApp(opts: {
     `Guarde essas informações em local seguro. 💬`,
   ].join('\n');
 
-  const url = (env.KOMUNIKA_API_URL || 'https://api.komunika.site') + '/api/v1/messages/send';
-  let lastStatus: number | string = 'no-attempt';
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-        body: JSON.stringify({ instanceId, to: phone, type: 'text', content: message }),
-      });
-      lastStatus = r.status;
-      if (r.ok) {
-        console.log(`[PAYMENT/CREDS] ✅ Delivered to ${phone} (status=${r.status}, attempt=${attempt})`);
-        return { delivered: true, status: r.status };
-      }
-      const body = await r.text().catch(() => '');
-      console.warn(`[PAYMENT/CREDS] attempt ${attempt} failed: ${r.status} ${body.slice(0, 160)}`);
-    } catch (e: any) {
-      lastStatus = `throw:${e?.message || 'unknown'}`;
-      console.warn(`[PAYMENT/CREDS] attempt ${attempt} threw:`, e?.message || e);
-    }
-    if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * attempt));
+  // `phone` is already normalized by the caller (Lojou/Stripe webhooks carry
+  // international numbers), so skip the MZ-specific normalization here.
+  const r = await sendWhatsAppMessage({ phone, content: message, normalize: false });
+  if (r.ok) {
+    console.log(`[PAYMENT/CREDS] ✅ Delivered to ${phone} (status=${r.status})`);
+    return { delivered: true, status: r.status };
   }
 
-  console.error(`[PAYMENT/CREDS] 🚨 Failed after 3 attempts (lastStatus=${lastStatus})`);
+  console.error(`[PAYMENT/CREDS] 🚨 Failed to deliver credentials (lastStatus=${r.status})`);
   sendPushToSuperAdmins({
     title: '🚨 Entrega de acesso falhou',
-    body: `${email} pagou mas não recebeu credenciais. Status: ${lastStatus}`,
+    body: `${email} pagou mas não recebeu credenciais. Status: ${r.status}`,
     url: '/admin/users',
   }).catch(() => {});
-  return { delivered: false, status: lastStatus };
+  return { delivered: false, status: r.status };
 }
 
 /**

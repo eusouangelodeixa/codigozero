@@ -82,6 +82,7 @@ const INCLUDED = [
 export default function AssinaturaPage() {
   const toast = useToast();
   const [user, setUser] = useState<User | null>(null);
+  const [price, setPrice] = useState<number | null>(null);
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelStep, setCancelStep] = useState<1 | 2 | 3>(1);
@@ -101,6 +102,13 @@ export default function AssinaturaPage() {
     fetch(`${API}/api/auth/me`, { headers: hdr() })
       .then((r) => r.json())
       .then((d) => d.user && setUser(d.user));
+
+    // Real subscription price (admin-configurable), so the page never shows a
+    // stale hardcoded value.
+    fetch(`${API}/api/landing/config`)
+      .then((r) => r.json())
+      .then((d) => setPrice(Number(d?.config?.priceAmount) || 497))
+      .catch(() => setPrice(497));
   }, []);
 
   const resetCancel = () => {
@@ -183,13 +191,21 @@ export default function AssinaturaPage() {
         <Badge variant={meta.badge} size="md">{meta.label}</Badge>
 
         {isActive && daysLeft !== null && (
-          <p className={styles.statusMessage}>
-            {daysLeft > 3
-              ? <>Sua assinatura renova em <strong>{daysLeft} dias</strong>.</>
-              : daysLeft > 0
-              ? <>Sua assinatura expira em <strong>{daysLeft} dia{daysLeft > 1 ? "s" : ""}</strong>.</>
-              : <strong>Sua assinatura expirou hoje.</strong>}
-          </p>
+          <>
+            <p className={styles.statusMessage}>
+              {daysLeft > 3
+                ? <>Sua assinatura renova em <strong>{daysLeft} dias</strong>.</>
+                : daysLeft > 0
+                ? <>Sua assinatura expira em <strong>{daysLeft} dia{daysLeft > 1 ? "s" : ""}</strong>.</>
+                : <strong>Sua assinatura expirou hoje.</strong>}
+            </p>
+            <div className={styles.validityTrack} aria-hidden>
+              <div
+                className={styles.validityFill}
+                style={{ width: `${Math.max(4, Math.min(100, (daysLeft / 30) * 100))}%` }}
+              />
+            </div>
+          </>
         )}
 
         {!isActive && (
@@ -229,7 +245,9 @@ export default function AssinaturaPage() {
             </div>
             <div className={styles.detail}>
               <span className={styles.detailLabel}>Valor</span>
-              <span className={cx(styles.detailValue, styles.detailValueAccent)}>797 MT / mês</span>
+              <span className={cx(styles.detailValue, styles.detailValueAccent)}>
+                {price != null ? `${price.toLocaleString("pt-BR")} MT / mês` : "—"}
+              </span>
             </div>
             {user.createdAt && (
               <div className={styles.detail}>

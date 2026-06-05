@@ -8,10 +8,13 @@ import styles from "./dashboard.module.css";
 
 interface Metrics {
   totalLeads: number;
+  totalCampaigns: number;
+  messagesSent: number;
   completedLessons: number;
   totalLessons: number;
   progressPercentage: number;
   searchesRemaining: number;
+  dailySearchLimit: number;
 }
 
 const greeting = () => {
@@ -52,8 +55,11 @@ export default function DashboardPage() {
   const completed = metrics?.completedLessons ?? 0;
   const total = metrics?.totalLessons ?? 0;
   const progress = metrics?.progressPercentage ?? 0;
-  const searchesRemaining = metrics?.searchesRemaining ?? 10;
+  const dailyLimit = metrics?.dailySearchLimit ?? 10;
+  const searchesRemaining = metrics?.searchesRemaining ?? dailyLimit;
   const leads = metrics?.totalLeads ?? 0;
+  const campaigns = metrics?.totalCampaigns ?? 0;
+  const messagesSent = metrics?.messagesSent ?? 0;
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
     { href: "/cofre", icon: <CofreIcon size={20} />, title: "Cofre", desc: "Scripts prontos para vender" },
@@ -105,7 +111,22 @@ export default function DashboardPage() {
             <div className={styles.metricValue}>
               {loading ? <Skeleton variant="title" width={64} /> : leads.toLocaleString("pt-BR")}
             </div>
-            <span className={styles.metricHint}>desde o início</span>
+            <span className={styles.metricHint}>
+              {loading ? " " : campaigns > 0 ? `em ${campaigns} ${campaigns === 1 ? "campanha" : "campanhas"}` : "desde o início"}
+            </span>
+          </div>
+        </Card>
+
+        <Card>
+          <div className={styles.metric}>
+            <div className={styles.metricHeader}>
+              <span className={styles.metricLabel}>Disparos enviados</span>
+              <span className={styles.metricIcon}><DisparadorIcon size={14} /></span>
+            </div>
+            <div className={styles.metricValue}>
+              {loading ? <Skeleton variant="title" width={64} /> : messagesSent.toLocaleString("pt-BR")}
+            </div>
+            <span className={styles.metricHint}>mensagens entregues</span>
           </div>
         </Card>
 
@@ -133,10 +154,17 @@ export default function DashboardPage() {
           <div className={styles.metric}>
             <div className={styles.metricHeader}>
               <span className={styles.metricLabel}>Buscas restantes</span>
-              <span className={styles.metricIcon}><DisparadorIcon size={14} /></span>
+              <span className={styles.metricIcon}><RadarIcon size={14} /></span>
             </div>
             <div className={styles.metricValue}>
-              {loading ? <Skeleton variant="title" width={48} /> : searchesRemaining}
+              {loading ? (
+                <Skeleton variant="title" width={48} />
+              ) : (
+                <>
+                  {searchesRemaining}
+                  <span className={styles.metricSuffix}>/ {dailyLimit}</span>
+                </>
+              )}
             </div>
             <span className={styles.metricHint}>renova diariamente</span>
           </div>

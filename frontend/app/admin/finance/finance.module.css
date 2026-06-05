@@ -296,3 +296,39 @@
   .periodChip { flex: 1; text-align: center; }
   .searchWrap { width: 100%; }
 }
+
+/* ── Transaction list filters ──────────────────────────────── */
+.txFilter {
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ── Mobile cards (replace wide tables < 720px) ────────────── */
+.txMobile { display: none; flex-direction: column; gap: 10px; padding: 4px 0; }
+.txMobileCard {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.txmHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.txmName { font-weight: 600; color: var(--text-primary); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txmAmount { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.txmRow { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.txmLabel { color: var(--text-tertiary); }
+.txmValue { color: var(--text-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+.txmTags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+@media (max-width: 720px) {
+  .table { display: none; }
+  .txMobile { display: flex; }
+}

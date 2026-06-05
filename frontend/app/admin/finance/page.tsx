@@ -150,6 +150,8 @@ export default function AdminFinance() {
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
   const [source, setSource] = useState<string>("all"); // all | principal | <coproducerId>
+  const [txType, setTxType] = useState<string>("all"); // all | new | renewal | closeFriends
+  const [txStatus, setTxStatus] = useState<string>("all"); // all | approved | failed | pending
   const [coproducers, setCoproducers] = useState<CoproducerOpt[]>([]);
 
   const [searchInput, setSearchInput] = useState("");
@@ -187,6 +189,8 @@ export default function AdminFinance() {
         limit: String(limit),
         source,
       });
+      if (txType !== "all") params.set("txType", txType);
+      if (txStatus !== "all") params.set("txStatus", txStatus);
       if (search) params.set("search", search);
       if (period === "custom" && from && to) {
         params.set("from", from);
@@ -217,7 +221,7 @@ export default function AdminFinance() {
     } finally {
       setLoading(false);
     }
-  }, [period, page, search, from, to, source, router, coproducers.length]);
+  }, [period, page, search, from, to, source, txType, txStatus, router, coproducers.length]);
 
   useEffect(() => {
     // Don't trigger a custom-range fetch until both dates are set
@@ -453,6 +457,23 @@ export default function AdminFinance() {
                 ))}
               </tbody>
             </table>
+
+            <div className={styles.txMobile}>
+              {upcoming.map((u) => (
+                <div key={u.id} className={styles.txMobileCard}>
+                  <div className={styles.txmHead}>
+                    <span className={styles.txmName}>
+                      {u.name || "Membro"}{u.closeFriends && <span className={styles.cfTag} style={{ marginLeft: 6 }}>★ CF</span>}
+                    </span>
+                    <span className={`${styles.daysLeft} ${u.daysUntilExpiry != null && u.daysUntilExpiry <= 3 ? styles.daysLeftUrgent : ""}`}>
+                      {u.daysUntilExpiry ?? "—"}d
+                    </span>
+                  </div>
+                  <div className={styles.txmRow}><span className={styles.txmLabel}>Telefone</span><span className={styles.txmValue}>{u.phone}</span></div>
+                  <div className={styles.txmRow}><span className={styles.txmLabel}>Expira em</span><span className={styles.txmValue}>{fmtDate(u.subscriptionEnd)}</span></div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -461,13 +482,36 @@ export default function AdminFinance() {
       <div className={styles.txCard}>
         <div className={styles.txHead}>
           <span className={styles.txTitle}>Transações</span>
-          <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-            {data ? `${data.transactions.items.length} de ${data.transactions.total} registros` : "—"}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <select
+              value={txType}
+              onChange={(e) => { setTxType(e.target.value); setPage(1); }}
+              className={styles.txFilter}
+            >
+              <option value="all">Tipo: Todos</option>
+              <option value="new">Novas</option>
+              <option value="renewal">Renovações</option>
+              <option value="closeFriends">Close Friends</option>
+            </select>
+            <select
+              value={txStatus}
+              onChange={(e) => { setTxStatus(e.target.value); setPage(1); }}
+              className={styles.txFilter}
+            >
+              <option value="all">Status: Todos</option>
+              <option value="approved">Aprovadas</option>
+              <option value="failed">Falhadas</option>
+              <option value="pending">Pendentes</option>
+            </select>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+              {data ? `${data.transactions.items.length} de ${data.transactions.total}` : "—"}
+            </span>
+          </div>
         </div>
 
         <div className={styles.txWrap}>
           {data?.transactions.items.length ? (
+            <>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -476,10 +520,10 @@ export default function AdminFinance() {
                   <th>Origem</th>
                   <th>Data</th>
                   <th>Método</th>
-                  <th style={{ textAlign: "right" }}>Bruto</th>
-                  <th style={{ textAlign: "right" }}>Taxa Lojou</th>
-                  <th style={{ textAlign: "right" }}>Split coprod.</th>
-                  <th style={{ textAlign: "right" }}>Líquido</th>
+                  <th style={{ textAlign: "right" }} title="Valor total pago pelo cliente (produto + bumps), antes das taxas">Bruto</th>
+                  <th style={{ textAlign: "right" }} title="Taxa da Lojou: 10% + 10 MT por item">Taxa Lojou</th>
+                  <th style={{ textAlign: "right" }} title="Parte repassada ao coprodutor">Split coprod.</th>
+                  <th style={{ textAlign: "right" }} title="O que entrou de fato, depois das taxas">Líquido</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -556,6 +600,35 @@ export default function AdminFinance() {
                 ))}
               </tbody>
             </table>
+
+            <div className={styles.txMobile}>
+              {data.transactions.items.map((tx) => (
+                <div key={tx.id} className={styles.txMobileCard}>
+                  <div className={styles.txmHead}>
+                    <span className={styles.txmName}>{tx.userName || "Cliente"}</span>
+                    <span className={styles.txmAmount}>{fmtMoney(tx.amount)}</span>
+                  </div>
+                  <div className={styles.txmTags}>
+                    {tx.isRenewal ? <Badge variant="info" size="sm">Renovação</Badge> : <Badge variant="success" size="sm">Nova</Badge>}
+                    {tx.isCloseFriends && <span className={styles.cfTag} title="Close Friends">★ CF</span>}
+                    {statusBadge(tx.status)}
+                    {tx.coproducer && (
+                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(168,85,247,0.12)", color: "#a855f7", fontWeight: 600 }}>
+                        {tx.coproducer.displayName || tx.coproducer.user.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className={styles.txmRow}><span className={styles.txmLabel}>Data</span><span className={styles.txmValue}>{fmtDateTime(tx.createdAt)}</span></div>
+                  <div className={styles.txmRow}><span className={styles.txmLabel}>Método</span><span className={styles.txmValue}>{tx.paymentMethod || "M-Pesa"}{tx.gateway && tx.gateway !== "lojou" ? ` · ${tx.gateway.toUpperCase()}` : ""}</span></div>
+                  <div className={styles.txmRow}><span className={styles.txmLabel}>Bruto</span><span className={styles.txmValue}>{tx.grossAmount != null ? fmtMoney(tx.grossAmount) : "—"}</span></div>
+                  <div className={styles.txmRow}><span className={styles.txmLabel}>Taxa Lojou</span><span className={styles.txmValue}>{tx.lojouFee != null ? `−${fmtMoney(tx.lojouFee)}` : "—"}</span></div>
+                  {tx.coproducerFee != null && tx.coproducerFee > 0 && (
+                    <div className={styles.txmRow}><span className={styles.txmLabel}>Split coprod.</span><span className={styles.txmValue}>−{fmtMoney(tx.coproducerFee)}</span></div>
+                  )}
+                </div>
+              ))}
+            </div>
+            </>
           ) : loading ? (
             <div className={styles.empty}>Carregando…</div>
           ) : (

@@ -127,3 +127,37 @@
   .container { padding: var(--space-4); }
   .card { padding: var(--space-7) var(--space-5); }
 }
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--accent, #2DD4BF);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px;
+  margin-top: 10px;
+  text-align: center;
+  width: 100%;
+}
+.linkBtn:hover { text-decoration: underline; }
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(45, 212, 191, 0.08);
+  border: 1px solid rgba(45, 212, 191, 0.25);
+  color: var(--accent, #2DD4BF);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.helpText {
+  font-size: 13px;
+  color: var(--text-secondary, #9ca3af);
+  line-height: 1.5;
+  margin: 0;
+}

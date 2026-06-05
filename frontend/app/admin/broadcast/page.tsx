@@ -1,9 +1,33 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "../admin.module.css";
+import DateRangeFilter, { DateRange } from "@/components/admin/DateRangeFilter";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
+
+const STATUS_LABEL: Record<string, string> = {
+  active: "Ativo", grace_period: "Carência", overdue: "Atrasado", canceled: "Cancelado", lead: "Lead",
+};
+
+/** Convert a DateRange chip into ISO {from, to} for the broadcast payload. */
+function dateWindow(range: DateRange): { from?: string; to?: string } {
+  const now = new Date();
+  if (range.period === "today") {
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    return { from: start.toISOString() };
+  }
+  if (range.period === "7d") {
+    const start = new Date(now); start.setDate(now.getDate() - 7);
+    return { from: start.toISOString() };
+  }
+  if (range.period === "30d") {
+    const start = new Date(now); start.setDate(now.getDate() - 30);
+    return { from: start.toISOString() };
+  }
+  if (range.period === "custom") return { from: range.from, to: range.to };
+  return {};
+}
 
 interface Variable { key: string; label: string; field: string }
 interface Instance { id: string; name: string; status?: string; instanceName?: string }
@@ -17,7 +41,15 @@ const SEGMENTS = [
 ];
 
 export default function BroadcastPage() {
+  const [audienceMode, setAudienceMode] = useState<"segment" | "users">("segment");
   const [segment, setSegment] = useState("all");
+  const [range, setRange] = useState<DateRange>({ period: "all" });
+  // Specific-user picker
+  const [userQuery, setUserQuery] = useState("");
+  const [userStatus, setUserStatus] = useState("all");
+  const [userList, setUserList] = useState<any[]>([]);
+  const [userTotal, setUserTotal] = useState(0);
+  const [pickedUsers, setPickedUsers] = useState<Record<string, { name: string; phone: string }>>({});
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [variables, setVariables] = useState<Variable[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -133,13 +165,28 @@ export default function BroadcastPage() {
     previewTimeout.current = setTimeout(() => {
       fetch(`${API}/api/admin/broadcast/preview`, {
         method: "POST", headers: hdr(),
-        body: JSON.stringify({ segment, message }),
+        body: JSON.stringify({ ...audiencePayload(), message }),
       })
         .then(r => r.json())
         .then(d => { setPreview(d.preview || message); setPreviewSample(d.sample || null); })
         .catch(() => {});
     }, 600);
-  }, [message, segment]);
+  }, [message, segment, audienceMode, range, pickedUsers]);
+
+  // Load the searchable user list when picking specific recipients.
+  useEffect(() => {
+    if (audienceMode !== "users") return;
+    const t = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (userQuery) params.set("search", userQuery);
+      if (userStatus !== "all") params.set("status", userStatus);
+      fetch(`${API}/api/admin/broadcast/users?${params}`, { headers: hdr() })
+        .then((r) => r.json())
+        .then((d) => { setUserList(d.users || []); setUserTotal(d.total || 0); })
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [audienceMode, userQuery, userStatus]);
 
   const insertVariable = useCallback((key: string) => {
     const textarea = textareaRef.current;
@@ -154,13 +201,42 @@ export default function BroadcastPage() {
     }, 0);
   }, [message]);
 
+  const getSegmentCount = (id: string) => {
+    if (id === "all") return counts.total || 0;
+    return counts[id] || 0;
+  };
+
+  // Build the audience portion of the request from the active mode.
+  const audiencePayload = useCallback(() => {
+    if (audienceMode === "users") {
+      return { userIds: Object.keys(pickedUsers) };
+    }
+    const payload: any = { segment };
+    if (range.period !== "all") {
+      const win = dateWindow(range);
+      if (win.from) payload.createdFrom = win.from;
+      if (win.to) payload.createdTo = win.to;
+    }
+    return payload;
+  }, [audienceMode, pickedUsers, segment, range]);
+
+  // Recipient count for the confirm dialog / button. Exact for the user
+  // picker; for segments it's the segment total (a date filter narrows it
+  // server-side, so the real send may be smaller).
+  const recipientCount = audienceMode === "users"
+    ? Object.keys(pickedUsers).length
+    : getSegmentCount(segment);
+
   const handleSend = async () => {
     if (!message.trim()) return showToast("❌ Escreva uma mensagem");
     if (!instanceId && !sendPush) return showToast("❌ Selecione uma instância WhatsApp ou ative Push");
+    if (audienceMode === "users" && Object.keys(pickedUsers).length === 0) {
+      return showToast("❌ Selecione ao menos um usuário");
+    }
 
-    const segCount = segment === "all" ? counts.total : counts[segment] || 0;
     const channels = [instanceId ? 'WhatsApp' : '', sendPush ? 'Push' : ''].filter(Boolean).join(' + ');
-    if (!confirm(`Enviar via ${channels} para ${segCount} leads?\n\nIntervalo: ${delayMin}s - ${delayMax}s entre cada envio.`)) return;
+    const countLabel = audienceMode === "segment" && range.period !== "all" ? `até ${recipientCount}` : `${recipientCount}`;
+    if (!confirm(`Enviar via ${channels} para ${countLabel} destinatário(s)?\n\nIntervalo: ${delayMin}s - ${delayMax}s entre cada envio.`)) return;
 
     setSending(true);
     setLog([]);
@@ -171,7 +247,7 @@ export default function BroadcastPage() {
       const res = await fetch(`${API}/api/admin/broadcast/send`, {
         method: "POST",
         headers: hdr(),
-        body: JSON.stringify({ segment, message, instanceId: instanceId || undefined, delayMin, delayMax, sendPush, generateCoupons, couponDiscount, couponMaxUses }),
+        body: JSON.stringify({ ...audiencePayload(), message, instanceId: instanceId || undefined, delayMin, delayMax, sendPush, generateCoupons, couponDiscount, couponMaxUses }),
       });
 
       if (!res.ok) {
@@ -194,10 +270,20 @@ export default function BroadcastPage() {
     }
   };
 
-  const getSegmentCount = (id: string) => {
-    if (id === "all") return counts.total || 0;
-    return counts[id] || 0;
-  };
+  const togglePick = (u: any) =>
+    setPickedUsers((prev) => {
+      const next = { ...prev };
+      if (next[u.id]) delete next[u.id];
+      else next[u.id] = { name: u.name, phone: u.phone };
+      return next;
+    });
+  const pickAllVisible = () =>
+    setPickedUsers((prev) => {
+      const next = { ...prev };
+      userList.forEach((u) => { next[u.id] = { name: u.name, phone: u.phone }; });
+      return next;
+    });
+  const clearPicks = () => setPickedUsers({});
 
   const progressPct = progress?.total ? Math.round(((progress.sent || 0) + (progress.failed || 0)) / progress.total * 100) : 0;
 
@@ -208,26 +294,104 @@ export default function BroadcastPage() {
         <p className={styles.pageDesc}>Disparo em massa via WhatsApp com personalização e anti-bloqueio</p>
       </div>
 
-      {/* ── Audience Segments ── */}
-      <div className={styles.kpiGrid}>
-        {SEGMENTS.map(seg => (
+      {/* ── Audience ── */}
+      <div className={styles.card}>
+        <h3 className={styles.cardTitle}>🎯 Público-alvo</h3>
+
+        <div className={styles.tableToolbar} style={{ padding: 0, border: "none", background: "none", marginBottom: 12 }}>
           <button
-            key={seg.id}
-            className={styles.kpiCard}
-            onClick={() => setSegment(seg.id)}
-            style={{
-              cursor: "pointer",
-              borderColor: segment === seg.id ? "rgba(45,212,191,0.5)" : undefined,
-              background: segment === seg.id ? "rgba(45,212,191,0.06)" : undefined,
-            }}
+            className={`${styles.filterBtn} ${audienceMode === "segment" ? styles.filterBtnActive : ""}`}
+            onClick={() => setAudienceMode("segment")}
           >
-            <div className={styles.kpiLabel}>{seg.icon} {seg.desc}</div>
-            <div className={`${styles.kpiValue} ${segment === seg.id ? styles.kpiValueTeal : ""}`}>
-              {getSegmentCount(seg.id)}
-            </div>
-            <div className={styles.kpiSub}>{seg.label}</div>
+            Por segmento
           </button>
-        ))}
+          <button
+            className={`${styles.filterBtn} ${audienceMode === "users" ? styles.filterBtnActive : ""}`}
+            onClick={() => setAudienceMode("users")}
+          >
+            Selecionar usuários
+          </button>
+        </div>
+
+        {audienceMode === "segment" ? (
+          <>
+            <div className={styles.kpiGrid}>
+              {SEGMENTS.map((seg) => (
+                <button
+                  key={seg.id}
+                  className={styles.kpiCard}
+                  onClick={() => setSegment(seg.id)}
+                  style={{
+                    cursor: "pointer",
+                    borderColor: segment === seg.id ? "rgba(45,212,191,0.5)" : undefined,
+                    background: segment === seg.id ? "rgba(45,212,191,0.06)" : undefined,
+                  }}
+                >
+                  <div className={styles.kpiLabel}>{seg.icon} {seg.desc}</div>
+                  <div className={`${styles.kpiValue} ${segment === seg.id ? styles.kpiValueTeal : ""}`}>
+                    {getSegmentCount(seg.id)}
+                  </div>
+                  <div className={styles.kpiSub}>{seg.label}</div>
+                </button>
+              ))}
+            </div>
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <label className={styles.formLabel} style={{ marginBottom: 0 }}>Filtrar por data de cadastro</label>
+              <DateRangeFilter value={range} onChange={setRange} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={styles.tableToolbar} style={{ padding: 0, border: "none", background: "none" }}>
+              <input
+                className={styles.tableSearch}
+                placeholder="Buscar usuário por nome, email ou telefone..."
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+              />
+              <select className={styles.formSelect} style={{ maxWidth: 170 }} value={userStatus} onChange={(e) => setUserStatus(e.target.value)}>
+                <option value="all">Todos os status</option>
+                <option value="active">Ativos</option>
+                <option value="grace_period">Carência</option>
+                <option value="overdue">Atrasados</option>
+                <option value="canceled">Cancelados</option>
+                <option value="lead">Leads</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0", fontSize: 12, color: "#888" }}>
+              <span>
+                <strong style={{ color: "#2DD4BF" }}>{Object.keys(pickedUsers).length}</strong> selecionado(s)
+                {userTotal > userList.length ? ` · mostrando ${userList.length} de ${userTotal}` : ""}
+              </span>
+              <span style={{ display: "flex", gap: 6 }}>
+                <button className={styles.filterBtn} onClick={pickAllVisible}>Selecionar visíveis</button>
+                <button className={styles.filterBtn} onClick={clearPicks}>Limpar</button>
+              </span>
+            </div>
+            <div style={{ maxHeight: 320, overflow: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+              {userList.length === 0 ? (
+                <div className={styles.empty}>Nenhum usuário encontrado</div>
+              ) : userList.map((u) => {
+                const picked = !!pickedUsers[u.id];
+                return (
+                  <label
+                    key={u.id}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
+                      background: picked ? "rgba(45,212,191,0.06)" : "rgba(255,255,255,0.02)",
+                      border: picked ? "1px solid rgba(45,212,191,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <input type="checkbox" checked={picked} onChange={() => togglePick(u)} style={{ width: 16, height: 16, accentColor: "#2DD4BF" }} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</span>
+                    <span style={{ fontSize: 12, color: "#888", fontFamily: "monospace" }}>{u.phone}</span>
+                    <span className={`${styles.badge} ${styles.badgeGray}`}>{STATUS_LABEL[u.subscriptionStatus] || u.subscriptionStatus}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Instance + Delay Config ── */}
@@ -417,10 +581,12 @@ export default function BroadcastPage() {
         <button
           className={styles.btnPrimary}
           onClick={handleSend}
-          disabled={sending || !message.trim() || (!instanceId && !sendPush)}
+          disabled={sending || !message.trim() || (!instanceId && !sendPush) || (audienceMode === "users" && recipientCount === 0)}
           style={{ opacity: sending ? 0.7 : 1 }}
         >
-          {sending ? "⏳ Enviando..." : `🚀 Disparar para ${getSegmentCount(segment)} leads`}
+          {sending
+            ? "⏳ Enviando..."
+            : `🚀 Disparar para ${audienceMode === "segment" && range.period !== "all" ? "até " : ""}${recipientCount} ${audienceMode === "users" ? "usuário(s)" : "leads"}`}
         </button>
       </div>
 

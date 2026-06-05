@@ -110,3 +110,20 @@
   .fieldsGrid { grid-template-columns: 1fr; }
   .avatarButton { width: 64px; height: 64px; font-size: 22px; }
 }
+
+/* ── Notification preference toggles ───────────────────────── */
+.prefList { display: flex; flex-direction: column; gap: 4px; }
+.prefRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+.prefRow:last-child { border-bottom: none; }
+.prefText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.prefLabel { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.prefDesc { font-size: 12px; color: var(--text-tertiary); line-height: 1.4; }
+.prefSwitch { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }

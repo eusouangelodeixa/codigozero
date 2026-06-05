@@ -1,13 +1,45 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import styles from "../admin.module.css";
+import DateRangeFilter, { DateRange } from "@/components/admin/DateRangeFilter";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
 
+const STATUS_LABEL: Record<string, string> = {
+  active: "Ativo", grace_period: "Carência", overdue: "Atrasado", canceled: "Cancelado", lead: "Lead",
+};
+
+function statusBadgeClass(s: string) {
+  const map: Record<string, string> = {
+    active: styles.badgeGreen, lead: styles.badgeYellow, canceled: styles.badgeRed,
+    overdue: styles.badgeRed, grace_period: styles.badgeYellow,
+  };
+  return map[s] || styles.badgeGray;
+}
+
+/** Renders the subscription expiry date + a "em N dias" / "há N dias" hint. */
+function Expiry({ end }: { end?: string }) {
+  if (!end) return <span className={styles.mCardLabel}>—</span>;
+  const date = new Date(end);
+  const days = Math.ceil((date.getTime() - Date.now()) / 86_400_000);
+  const cls = days < 0 ? styles.expiryUrgent : days <= 3 ? styles.expiryUrgent : days <= 7 ? styles.expiryWarn : "";
+  const hint =
+    days < 0 ? `expirou há ${Math.abs(days)}d` : days === 0 ? "expira hoje" : `em ${days}d`;
+  return (
+    <span className={`${styles.expiry} ${cls}`}>
+      <span className={styles.expiryDate}>{date.toLocaleDateString("pt-BR")}</span>
+      <span className={styles.expiryDays}>{hint}</span>
+    </span>
+  );
+}
+
 export default function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [role, setRole] = useState("all");
+  const [range, setRange] = useState<DateRange>({ period: "all" });
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<any>(null);
   const [toast, setToast] = useState("");
@@ -15,10 +47,19 @@ export default function AdminUsers() {
   const load = useCallback(() => {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
+    if (status !== "all") params.set("status", status);
+    if (role !== "all") params.set("role", role);
+    if (range.period !== "all") {
+      params.set("period", range.period);
+      if (range.period === "custom") {
+        if (range.from) params.set("from", range.from);
+        if (range.to) params.set("to", range.to);
+      }
+    }
     fetch(`${API}/api/admin/users?${params}`, { headers: hdr() })
-      .then(r => r.json())
-      .then(data => { setUsers(data.users || []); setTotal(data.total || 0); });
-  }, [search]);
+      .then((r) => r.json())
+      .then((data) => { setUsers(data.users || []); setTotal(data.total || 0); });
+  }, [search, status, role, range]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -27,8 +68,7 @@ export default function AdminUsers() {
   const handleSave = async () => {
     if (!editing) return;
     await fetch(`${API}/api/admin/users/${editing.id}`, {
-      method: "PATCH", headers: hdr(),
-      body: JSON.stringify(editing),
+      method: "PATCH", headers: hdr(), body: JSON.stringify(editing),
     });
     showToast("Usuário atualizado ✓");
     setEditing(null);
@@ -44,17 +84,17 @@ export default function AdminUsers() {
 
   const toggleActive = async (user: any) => {
     await fetch(`${API}/api/admin/users/${user.id}`, {
-      method: "PATCH", headers: hdr(),
-      body: JSON.stringify({ isActive: !user.isActive }),
+      method: "PATCH", headers: hdr(), body: JSON.stringify({ isActive: !user.isActive }),
     });
     showToast(user.isActive ? "Usuário desativado" : "Usuário ativado");
     load();
   };
 
-  const statusBadge = (s: string) => {
-    const map: Record<string, string> = { active: styles.badgeGreen, lead: styles.badgeYellow, canceled: styles.badgeRed, overdue: styles.badgeRed, grace_period: styles.badgeYellow };
-    return <span className={`${styles.badge} ${map[s] || styles.badgeGray}`}>{s}</span>;
-  };
+  const statusBadge = (s: string) => (
+    <span className={`${styles.badge} ${statusBadgeClass(s)}`}>{STATUS_LABEL[s] || s}</span>
+  );
+
+  const toDateInput = (d?: string) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 
   return (
     <>
@@ -65,19 +105,40 @@ export default function AdminUsers() {
 
       <div className={styles.tableWrap}>
         <div className={styles.tableToolbar}>
-          <input className={styles.tableSearch} placeholder="Buscar por nome ou email..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className={styles.tableSearch} placeholder="Buscar por nome, email ou telefone..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className={styles.formSelect} style={{ maxWidth: 170 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="all">Todos os status</option>
+            <option value="active">Ativos</option>
+            <option value="grace_period">Carência</option>
+            <option value="overdue">Atrasados</option>
+            <option value="canceled">Cancelados</option>
+            <option value="lead">Leads</option>
+          </select>
+          <select className={styles.formSelect} style={{ maxWidth: 150 }} value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="all">Todos os papéis</option>
+            <option value="member">Membros</option>
+            <option value="admin">Admins</option>
+            <option value="superadmin">Superadmins</option>
+          </select>
         </div>
+        <div className={styles.tableToolbar}>
+          <DateRangeFilter value={range} onChange={setRange} />
+        </div>
+
         <table className={styles.table}>
           <thead>
-            <tr><th>Nome</th><th>Email</th><th>Role</th><th>Status</th><th>Ativo</th><th>Criado</th><th>Ações</th></tr>
+            <tr><th>Nome</th><th>Email</th><th>Role</th><th>Status</th><th>Expira</th><th>Ativo</th><th>Criado</th><th>Ações</th></tr>
           </thead>
           <tbody>
-            {users.map(u => (
+            {users.length === 0 ? (
+              <tr><td colSpan={8} className={styles.empty}>Nenhum usuário encontrado</td></tr>
+            ) : users.map((u) => (
               <tr key={u.id}>
                 <td>{u.name}</td>
                 <td>{u.email}</td>
-                <td><span className={`${styles.badge} ${u.role === "admin" ? styles.badgeTeal : styles.badgeGray}`}>{u.role}</span></td>
+                <td><span className={`${styles.badge} ${u.role === "member" ? styles.badgeGray : styles.badgeTeal}`}>{u.role}</span></td>
                 <td>{statusBadge(u.subscriptionStatus)}</td>
+                <td><Expiry end={u.subscriptionEnd} /></td>
                 <td>{u.isActive ? "✅" : "❌"}</td>
                 <td>{new Date(u.createdAt).toLocaleDateString("pt-BR")}</td>
                 <td>
@@ -91,31 +152,53 @@ export default function AdminUsers() {
             ))}
           </tbody>
         </table>
+
+        <div className={styles.mobileCards}>
+          {users.length === 0 ? (
+            <div className={styles.empty}>Nenhum usuário encontrado</div>
+          ) : users.map((u) => (
+            <div key={u.id} className={styles.mCard}>
+              <div className={styles.mCardHead}>
+                <span className={styles.mCardName}>{u.name}</span>
+                {statusBadge(u.subscriptionStatus)}
+              </div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Email</span><span className={styles.mCardValue}>{u.email}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Telefone</span><span className={styles.mCardValue}>{u.phone}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Expira</span><span className={styles.mCardValue}><Expiry end={u.subscriptionEnd} /></span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Ativo</span><span className={styles.mCardValue}>{u.isActive ? "Sim" : "Não"}</span></div>
+              <div className={styles.mCardActions}>
+                <button className={styles.actionBtn} onClick={() => setEditing({ ...u })}>Editar</button>
+                <button className={styles.actionBtn} onClick={() => toggleActive(u)}>{u.isActive ? "Desativar" : "Ativar"}</button>
+                <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={() => handleDelete(u.id, u.name)}>Remover</button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {editing && (
         <div className={styles.modalOverlay} onClick={() => setEditing(null)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h2 className={styles.modalTitle}>Editar Usuário</h2>
             <div className={styles.formGrid}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Nome</label>
-                <input className={styles.formInput} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} />
+                <input className={styles.formInput} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Email</label>
-                <input className={styles.formInput} value={editing.email} onChange={e => setEditing({ ...editing, email: e.target.value })} />
+                <input className={styles.formInput} value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Role</label>
-                <select className={styles.formSelect} value={editing.role} onChange={e => setEditing({ ...editing, role: e.target.value })}>
+                <select className={styles.formSelect} value={editing.role} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>
                   <option value="member">Membro</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Status Assinatura</label>
-                <select className={styles.formSelect} value={editing.subscriptionStatus} onChange={e => setEditing({ ...editing, subscriptionStatus: e.target.value })}>
+                <select className={styles.formSelect} value={editing.subscriptionStatus} onChange={(e) => setEditing({ ...editing, subscriptionStatus: e.target.value })}>
                   <option value="active">Ativo</option>
                   <option value="lead">Lead</option>
                   <option value="grace_period">Período de Graça</option>
@@ -124,8 +207,17 @@ export default function AdminUsers() {
                 </select>
               </div>
               <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Assinatura expira em</label>
+                <input
+                  className={styles.formInput}
+                  type="date"
+                  value={toDateInput(editing.subscriptionEnd)}
+                  onChange={(e) => setEditing({ ...editing, subscriptionEnd: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                />
+              </div>
+              <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Nova Senha (opcional)</label>
-                <input className={styles.formInput} type="password" placeholder="Deixar vazio para manter" onChange={e => setEditing({ ...editing, password: e.target.value })} />
+                <input className={styles.formInput} type="password" placeholder="Deixar vazio para manter" onChange={(e) => setEditing({ ...editing, password: e.target.value })} />
               </div>
             </div>
             <div className={styles.btnRow}>

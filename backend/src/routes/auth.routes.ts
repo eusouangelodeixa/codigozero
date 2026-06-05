@@ -5,10 +5,13 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import rateLimit from 'express-rate-limit';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { lojouService } from '../services/lojou.service';
 import { getActivePrice } from '../lib/pricing';
+import { createAndSendOtp, verifyOtp } from '../services/otp.service';
+import { normalizeMzPhone } from '../lib/whatsapp';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -185,18 +188,51 @@ router.patch('/integrations', authMiddleware, async (req: AuthRequest, res: Resp
   }
 });
 
-// PATCH /api/auth/password — change own password
+// Limit OTP requests: at most 4 per 10 minutes per IP, to curb abuse/cost.
+const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 4,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas solicitações de código. Tente novamente em alguns minutos.' },
+});
+
+// POST /api/auth/password/request-otp — send a WhatsApp code to confirm a
+// password change in /perfil. Code is delivered to the user's saved phone.
+router.post('/password/request-otp', authMiddleware, otpLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (!user.phone) return res.status(400).json({ error: 'Nenhum telefone cadastrado no seu perfil.' });
+
+    const { sent } = await createAndSendOtp({ phone: user.phone, purpose: 'password_change', userId: user.id });
+    if (!sent) return res.status(502).json({ error: 'Não foi possível enviar o código pelo WhatsApp. Tente novamente.' });
+
+    // Hint the masked phone so the user knows where the code went.
+    const masked = user.phone.replace(/\d(?=\d{2})/g, '•');
+    return res.json({ success: true, phoneHint: masked });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao enviar código' });
+  }
+});
+
+// PATCH /api/auth/password — change own password (requires current password
+// + a WhatsApp OTP confirming the change).
 router.patch('/password', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword, code } = req.body;
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Preencha ambos os campos.' });
     if (newPassword.length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    if (!code) return res.status(400).json({ error: 'Informe o código enviado no seu WhatsApp.' });
 
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     const match = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Senha atual incorreta.' });
+
+    const otp = await verifyOtp({ phone: user.phone, purpose: 'password_change', code });
+    if (!otp.valid) return res.status(401).json({ error: 'Código inválido ou expirado.' });
 
     await prisma.user.update({
       where: { id: req.user!.id },
@@ -206,6 +242,107 @@ router.patch('/password', authMiddleware, async (req: AuthRequest, res: Response
     return res.json({ success: true, message: 'Senha atualizada com sucesso.' });
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao alterar senha' });
+  }
+});
+
+// POST /api/auth/forgot-password/request — start password recovery.
+// The user enters the phone they registered; if it matches an account, we
+// send a WhatsApp code. Always returns a generic success so the endpoint
+// never reveals whether a phone is registered.
+router.post('/forgot-password/request', otpLimiter, async (req: Request, res: Response) => {
+  try {
+    const phoneRaw = String(req.body?.phone || '').trim();
+    if (!phoneRaw) return res.status(400).json({ error: 'Informe o número de telefone.' });
+
+    const phone = normalizeMzPhone(phoneRaw);
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ phone: phoneRaw }, { phone }] },
+    });
+
+    // Only send if the phone matches a real account, but respond the same way
+    // regardless (no account enumeration).
+    if (user) {
+      await createAndSendOtp({ phone: user.phone, purpose: 'password_reset', userId: user.id });
+    }
+    return res.json({ success: true, message: 'Se o número estiver cadastrado, enviamos um código pelo WhatsApp.' });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao solicitar recuperação' });
+  }
+});
+
+// POST /api/auth/forgot-password/reset — finish recovery with phone+code.
+router.post('/forgot-password/reset', async (req: Request, res: Response) => {
+  try {
+    const { phone, code, newPassword } = req.body || {};
+    if (!phone || !code || !newPassword) return res.status(400).json({ error: 'Preencha telefone, código e nova senha.' });
+    if (String(newPassword).length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+
+    const normalized = normalizeMzPhone(String(phone));
+    const user = await prisma.user.findFirst({
+      where: { OR: [{ phone: String(phone).trim() }, { phone: normalized }] },
+    });
+    if (!user) return res.status(400).json({ error: 'Código inválido ou expirado.' });
+
+    const otp = await verifyOtp({ phone: user.phone, purpose: 'password_reset', code: String(code) });
+    if (!otp.valid) return res.status(400).json({ error: 'Código inválido ou expirado.' });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await bcrypt.hash(String(newPassword), 10) },
+    });
+
+    return res.json({ success: true, message: 'Senha redefinida com sucesso. Faça login com a nova senha.' });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao redefinir senha' });
+  }
+});
+
+// POST /api/auth/pwa-installed — mark that the app is running standalone
+// (added to the home screen). Idempotent: only stamps the first time. The
+// daily cron uses this to decide who still needs an install nudge.
+router.post('/pwa-installed', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { pwaInstalledAt: true } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    if (!user.pwaInstalledAt) {
+      await prisma.user.update({ where: { id: req.user!.id }, data: { pwaInstalledAt: new Date() } });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao registrar instalação' });
+  }
+});
+
+// GET /api/auth/notification-prefs — current per-channel toggles.
+router.get('/notification-prefs', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { notifyCommunity: true, notifyPromotions: true, notifySystem: true, notifyExpiration: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    return res.json({ prefs: user });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao carregar preferências' });
+  }
+});
+
+// PATCH /api/auth/notification-prefs — update the toggles the user controls.
+router.patch('/notification-prefs', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const data: Record<string, boolean> = {};
+    for (const key of ['notifyCommunity', 'notifyPromotions', 'notifySystem', 'notifyExpiration'] as const) {
+      if (typeof req.body?.[key] === 'boolean') data[key] = req.body[key];
+    }
+    if (Object.keys(data).length === 0) return res.status(400).json({ error: 'Nada para atualizar' });
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data,
+      select: { notifyCommunity: true, notifyPromotions: true, notifySystem: true, notifyExpiration: true },
+    });
+    return res.json({ prefs: user });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao salvar preferências' });
   }
 });
 

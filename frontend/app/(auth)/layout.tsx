@@ -70,6 +70,26 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     return () => window.removeEventListener("cz-user-updated", handler);
   }, []);
 
+  // Detect when the app is running as an installed PWA (added to the home
+  // screen / standalone display) and record it once. The PWA-install cron
+  // uses this to skip nudging users who already installed.
+  useEffect(() => {
+    const token = localStorage.getItem("cz_token");
+    if (!token) return;
+    const isStandalone =
+      window.matchMedia?.("(display-mode: standalone)")?.matches ||
+      (window.navigator as any).standalone === true;
+    if (!isStandalone) return;
+    if (localStorage.getItem("cz_pwa_reported")) return;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    fetch(`${API_URL}/api/auth/pwa-installed`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(() => localStorage.setItem("cz_pwa_reported", "1"))
+      .catch(() => {});
+  }, []);
+
   const logout = () => {
     localStorage.removeItem("cz_token");
     localStorage.removeItem("cz_user");

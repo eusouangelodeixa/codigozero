@@ -7,6 +7,7 @@ import { processDueDispatches, processDispatch } from '../services/dispatch.serv
 import { transitionDuePending } from '../services/affiliate.service';
 import { transitionDuePartnerPending } from '../services/partner.service';
 import { getActivePrice } from '../lib/pricing';
+import { sendWhatsAppMessage } from '../lib/whatsapp';
 
 const prisma = new PrismaClient();
 
@@ -235,7 +236,7 @@ export function startCronJobs() {
               title: pushTitle,
               body: pushBody,
               url: '/assinatura',
-            }).catch(() => {});
+            }, 'expiration').catch(() => {});
           }
         } catch (e) {
           console.error(`[CRON] Failed to send alert to ${user.email}:`, e);
@@ -577,7 +578,7 @@ export function startCronJobs() {
           title: '👋 Sentimos sua falta!',
           body: randomMsg,
           url: '/forja',
-        }).catch(() => {});
+        }, 'system').catch(() => {});
       }
 
       console.log(`[CRON] 💤 Inactivity reminders sent: ${inactiveUsers.length}`);
@@ -587,6 +588,51 @@ export function startCronJobs() {
   });
 
   console.log('[CRON] ⏰ Inactivity reminder scheduled (10:00 daily)');
+
+  // ── PWA install reminder (11:00 every day) ──
+  // One day after subscribing, nudge paid users who haven't added the app to
+  // their home screen (pwaInstalledAt is stamped client-side in standalone
+  // mode). Sent once per user (pwaReminderSentAt) over WhatsApp.
+  cron.schedule('0 11 * * *', async () => {
+    console.log('[CRON] 📲 Running PWA install reminder...');
+    try {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const candidates = await prisma.user.findMany({
+        where: {
+          subscriptionStatus: 'active',
+          isActive: true,
+          role: 'member',
+          lojouOrderId: { not: null },
+          pwaInstalledAt: null,
+          pwaReminderSentAt: null,
+          createdAt: { lt: oneDayAgo },
+        },
+        select: { id: true, name: true, phone: true },
+        take: 200,
+      });
+
+      let sent = 0;
+      for (const user of candidates) {
+        const firstName = (user.name || 'membro').split(' ')[0];
+        const message = [
+          `📲 *${firstName}, instale o Código Zero no seu celular!*`,
+          ``,
+          `Adicionando o app à tela inicial você acessa tudo com um toque — e ainda recebe avisos de novas aulas e leads.`,
+          ``,
+          `Veja como em 30 segundos: ${env.FRONTEND_URL}/instalar`,
+        ].join('\n');
+        const r = await sendWhatsAppMessage({ phone: user.phone, content: message });
+        await prisma.user.update({ where: { id: user.id }, data: { pwaReminderSentAt: new Date() } });
+        if (r.ok) sent++;
+        await new Promise((res) => setTimeout(res, 2000));
+      }
+      console.log(`[CRON] 📲 PWA install reminders sent: ${sent}/${candidates.length}`);
+    } catch (error) {
+      console.error('[CRON] ❌ PWA install reminder failed:', error);
+    }
+  });
+
+  console.log('[CRON] ⏰ PWA install reminder scheduled (11:00 daily)');
 
   // ── Scheduled WhatsApp dispatches (every 30 seconds) ──
   cron.schedule('*/30 * * * * *', async () => {

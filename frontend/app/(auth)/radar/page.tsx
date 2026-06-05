@@ -39,6 +39,16 @@ interface Lead {
   city?: string | null;
 }
 
+interface Campaign {
+  id: string;
+  name: string;
+  query: string;
+  cities: string[];
+  status: string;
+  leadsCount: number;
+  createdAt: string;
+}
+
 interface Script {
   id: string;
   title: string;
@@ -134,7 +144,12 @@ export default function RadarPage() {
   const [query, setQuery] = useState("");
   const [cities, setCities] = useState<string[]>([]);
   const [cityInput, setCityInput] = useState("");
-  const [savedJobs, setSavedJobs] = useState<{ leads?: Lead[] }[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [openCampaign, setOpenCampaign] = useState<Campaign | null>(null);
+  const [campaignLeads, setCampaignLeads] = useState<Lead[]>([]);
+  const [loadingCampaignLeads, setLoadingCampaignLeads] = useState(false);
+  const [renaming, setRenaming] = useState<Campaign | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [tab, setTab] = useState<"current" | "history">("current");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -179,7 +194,7 @@ export default function RadarPage() {
   const [exportingCrm, setExportingCrm] = useState(false);
 
   useEffect(() => {
-    loadHistory();
+    loadCampaigns();
     loadScripts();
   }, []);
 
@@ -193,14 +208,54 @@ export default function RadarPage() {
   }, [status]);
 
   useEffect(() => {
-    if (status === "completed" && results.length > 0) loadHistory();
+    if (status === "completed" && results.length > 0) loadCampaigns();
   }, [status, results.length]);
 
-  const loadHistory = async () => {
+  const loadCampaigns = async () => {
     try {
-      const data = await apiClient.getSearchHistory();
-      setSavedJobs(data.jobs || []);
+      const data = await apiClient.getRadarCampaigns();
+      setCampaigns(data.campaigns || []);
     } catch {}
+  };
+
+  const openCampaignLeads = async (c: Campaign) => {
+    setOpenCampaign(c);
+    setLoadingCampaignLeads(true);
+    setCampaignLeads([]);
+    try {
+      const data = await apiClient.getRadarLeads(c.id);
+      setCampaignLeads(data.leads || []);
+    } catch {
+      toast.error("Erro ao carregar leads", "Tente novamente em instantes.");
+    }
+    setLoadingCampaignLeads(false);
+  };
+
+  const submitRename = async () => {
+    if (!renaming || !renameValue.trim()) return;
+    const id = renaming.id;
+    const name = renameValue.trim();
+    try {
+      await apiClient.renameRadarCampaign(id, name);
+      setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, name } : c)));
+      if (openCampaign?.id === id) setOpenCampaign({ ...openCampaign, name });
+      toast.success("Campanha renomeada");
+    } catch {
+      toast.error("Não foi possível renomear");
+    }
+    setRenaming(null);
+  };
+
+  const deleteCampaign = async (c: Campaign) => {
+    if (!confirm(`Excluir a campanha "${c.name}" e seus ${c.leadsCount} leads? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await apiClient.deleteRadarCampaign(c.id);
+      setCampaigns((prev) => prev.filter((x) => x.id !== c.id));
+      if (openCampaign?.id === c.id) setOpenCampaign(null);
+      toast.success("Campanha excluída");
+    } catch {
+      toast.error("Não foi possível excluir");
+    }
   };
 
   const loadScripts = async () => {
@@ -283,10 +338,10 @@ export default function RadarPage() {
     }
   };
 
-  const allHistoryLeads: Lead[] = savedJobs.flatMap((j) => j.leads || []);
   // Filters are applied server-side at scrape time. Whatever comes through
   // already respects the user's choices, so the UI just renders it.
-  const displayLeads: Lead[] = tab === "current" ? results : allHistoryLeads;
+  // In the history tab the table only renders once a campaign folder is open.
+  const displayLeads: Lead[] = tab === "current" ? results : openCampaign ? campaignLeads : [];
 
   const exportCsv = () => {
     if (displayLeads.length === 0) return;
@@ -364,7 +419,7 @@ export default function RadarPage() {
     setExportingCrm(false);
   };
 
-  const hasAnyResults = results.length > 0 || allHistoryLeads.length > 0;
+  const hasAnyResults = results.length > 0 || campaigns.length > 0;
 
   return (
     <div className={styles.page}>
@@ -488,14 +543,30 @@ export default function RadarPage() {
         <div className={styles.resultsHead}>
           <Tabs
             value={tab}
-            onChange={(v) => setTab(v)}
+            onChange={(v) => {
+              setTab(v);
+              if (v === "history") {
+                setOpenCampaign(null);
+                loadCampaigns();
+              }
+            }}
             items={[
               { value: "current", label: "Última busca", count: results.length },
-              { value: "history", label: "Histórico", count: allHistoryLeads.length },
+              { value: "history", label: "Campanhas", count: campaigns.length },
             ]}
           />
           {displayLeads.length > 0 && (
             <div className={styles.resultsActions}>
+              {tab === "history" && openCampaign && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => router.push(`/disparador?campaign=${openCampaign.id}`)}
+                  iconStart={<Icon.Send />}
+                >
+                  Disparar campanha
+                </Button>
+              )}
               <Button
                 variant="accent"
                 size="sm"
@@ -516,6 +587,79 @@ export default function RadarPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Campaigns: folder grid (history tab, no campaign open) ── */}
+      {tab === "history" && !openCampaign && status !== "processing" && (
+        campaigns.length > 0 ? (
+          <div className={styles.campaignGrid}>
+            {campaigns.map((c) => (
+              <Card key={c.id} padding="md" className={styles.campaignCard}>
+                <button
+                  type="button"
+                  className={styles.campaignOpen}
+                  onClick={() => openCampaignLeads(c)}
+                >
+                  <span className={styles.campaignIcon}><RadarIcon size={18} /></span>
+                  <span className={styles.campaignInfo}>
+                    <span className={styles.campaignName}>{c.name}</span>
+                    <span className={styles.campaignMeta}>
+                      {c.leadsCount} {c.leadsCount === 1 ? "lead" : "leads"}
+                      {c.cities?.length ? ` · ${c.cities.join(", ")}` : ""}
+                    </span>
+                    <span className={styles.campaignDate}>
+                      {new Date(c.createdAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                    </span>
+                  </span>
+                </button>
+                <div className={styles.campaignActions}>
+                  <button
+                    type="button"
+                    className={styles.campaignActionBtn}
+                    title="Disparar para esta campanha"
+                    onClick={() => router.push(`/disparador?campaign=${c.id}`)}
+                  >
+                    <Icon.Send size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.campaignActionBtn}
+                    title="Renomear"
+                    onClick={() => { setRenaming(c); setRenameValue(c.name); }}
+                  >
+                    <Icon.Copy size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className={cx(styles.campaignActionBtn, styles.campaignActionDanger)}
+                    title="Excluir"
+                    onClick={() => deleteCampaign(c)}
+                  >
+                    ×
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<RadarIcon size={26} />}
+            title="Nenhuma campanha ainda"
+            description="Cada prospecção que você faz vira uma campanha aqui — pronta para revisar e disparar quando quiser."
+          />
+        )
+      )}
+
+      {/* ── Open campaign: breadcrumb back ── */}
+      {tab === "history" && openCampaign && (
+        <button type="button" className={styles.campaignBack} onClick={() => setOpenCampaign(null)}>
+          ← Voltar para campanhas · <strong>{openCampaign.name}</strong>
+        </button>
+      )}
+
+      {/* ── Loading a campaign's leads ── */}
+      {tab === "history" && openCampaign && loadingCampaignLeads && (
+        <Card padding="lg"><div className={styles.dim}>Carregando leads…</div></Card>
       )}
 
       {/* ── Results: table (desktop) ── */}
@@ -723,13 +867,36 @@ export default function RadarPage() {
       )}
 
       {/* ── Empty ── */}
-      {status === "idle" && results.length === 0 && allHistoryLeads.length === 0 && (
+      {status === "idle" && tab === "current" && results.length === 0 && campaigns.length === 0 && (
         <EmptyState
           icon={<RadarIcon size={26} />}
           title="Nenhum lead ainda"
           description="Faça sua primeira busca para começar a prospectar com inteligência. Em menos de 2 minutos você terá uma lista qualificada e os scripts certos para abordar."
         />
       )}
+
+      {/* ── Modal: rename campaign ── */}
+      <Modal
+        open={!!renaming}
+        onClose={() => setRenaming(null)}
+        title="Renomear campanha"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRenaming(null)}>Cancelar</Button>
+            <Button variant="primary" onClick={submitRename} disabled={!renameValue.trim()}>Salvar</Button>
+          </>
+        }
+      >
+        <Input
+          label="Nome da campanha"
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          placeholder="Ex: Dentistas — Maputo"
+          autoFocus
+          onKeyDown={(e) => { if (e.key === "Enter") submitRename(); }}
+        />
+      </Modal>
 
       {/* ── Modal: script ── */}
       <Modal

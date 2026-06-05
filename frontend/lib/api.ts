@@ -74,6 +74,9 @@ export const apiClient = {
 
   getSearchHistory: () => api('/api/radar/history'),
 
+  // Authoritative job snapshot (status + leads) — used as SSE fallback
+  getRadarJob: (jobId: string) => api(`/api/radar/job/${jobId}`),
+
   // Cofre
   getScripts: () => api('/api/cofre/scripts'),
 

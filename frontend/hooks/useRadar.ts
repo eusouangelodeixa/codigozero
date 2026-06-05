@@ -44,13 +44,28 @@ export function useRadar() {
     results: [],
   });
   const eventSourceRef = useRef<EventSource | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopStreaming = useCallback(() => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   }, []);
+
+  // Merge leads by id: never lose a lead the SSE stream already showed, never
+  // duplicate one the DB poll returns. The DB is the source of truth, so this
+  // recovers anything missed while the connection was dropped.
+  const mergeLeads = (prev: Lead[], incoming: Lead[]): Lead[] => {
+    const byId = new Map<string, Lead>();
+    for (const l of prev) byId.set(l.id, l);
+    for (const l of incoming) byId.set(l.id, l);
+    return Array.from(byId.values());
+  };
 
   const startSearch = useCallback(async (query: string, cities: string[], filters?: RadarFilters) => {
     stopStreaming();
@@ -58,13 +73,14 @@ export function useRadar() {
 
     try {
       const data = await apiClient.startSearch(query, cities, filters);
+      const jobId = data.jobId;
       const token = localStorage.getItem("cz_token");
 
       setState(prev => ({ ...prev, remaining: data.remaining }));
 
-      // Setup Server-Sent Events Connection
-      // Using URL parameters for auth because EventSource doesn't support headers natively
-      const sseUrl = `${API_URL}/api/radar/stream/${data.jobId}?token=${token}`;
+      // ── Live stream (Server-Sent Events) ──
+      // Token goes in the URL because EventSource can't send headers.
+      const sseUrl = `${API_URL}/api/radar/stream/${jobId}?token=${token}`;
       const eventSource = new EventSource(sseUrl);
       eventSourceRef.current = eventSource;
 
@@ -81,17 +97,52 @@ export function useRadar() {
           // This is a scraped lead
           setState(prev => ({
             ...prev,
-            results: [...prev.results, leadOrEvent]
+            results: mergeLeads(prev.results, [leadOrEvent]),
           }));
         }
       };
 
       eventSource.onerror = () => {
-        // SSE will try to reconnect automatically, but if we get an error it's safer to show some issue
+        // EventSource auto-reconnects, but on mobile the connection can drop
+        // for good (carrier NAT / backgrounded tab). The poll below is the
+        // safety net that still finishes the job, so just log here.
         console.error("SSE Connection Error");
       };
 
+      // ── Polling fallback ──
+      // Mobile connections frequently drop mid-scrape; when SSE reconnects it
+      // gets a fresh Redis subscriber and misses everything published during
+      // the gap (incl. COMPLETED). Polling the DB snapshot guarantees the user
+      // still gets every lead and a final status. Stops itself after ~6min.
+      const startedAt = Date.now();
+      pollRef.current = setInterval(async () => {
+        try {
+          if (Date.now() - startedAt > 6 * 60 * 1000) {
+            stopStreaming();
+            setState(prev => prev.status === 'processing' ? { ...prev, status: 'completed' } : prev);
+            return;
+          }
+          const snap = await apiClient.getRadarJob(jobId);
+          setState(prev => {
+            const merged = mergeLeads(prev.results, snap.leads || []);
+            if (snap.status === 'completed' || snap.status === 'failed') {
+              stopStreaming();
+              return {
+                ...prev,
+                results: merged,
+                status: snap.status,
+                error: snap.status === 'failed' ? 'Falha na extração de dados.' : prev.error,
+              };
+            }
+            return { ...prev, results: merged };
+          });
+        } catch {
+          // transient — keep trying until the time cap
+        }
+      }, 6000);
+
     } catch (error: any) {
+      stopStreaming();
       setState({
         status: 'failed',
         results: [],

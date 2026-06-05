@@ -152,22 +152,45 @@ router.post('/start', authMiddleware, subscriptionMiddleware, async (req: AuthRe
 router.get('/stream/:jobId', authMiddleware, async (req: AuthRequest, res: Response) => {
   const { jobId } = req.params;
 
-  // Setup SSE Headers
+  // Setup SSE Headers.
+  // `X-Accel-Buffering: no` tells nginx to stream this response without
+  // buffering — without it nginx holds the events and mobile clients drop the
+  // (apparently idle) connection before any data arrives.
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
+    'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
-  
+  res.flushHeaders();
+
   // Enviar evento inicial de conexão
   res.write(`data: ${JSON.stringify({ event: 'CONNECTED', jobId })}\n\n`);
 
   // Usar uma conexão Redis duplicada para usar o Pub/Sub sem bloquear a principal
   const subscriber = redisConnection.duplicate();
 
+  // Heartbeat: a scrape can stay silent for 30-90s while Playwright works.
+  // Mobile carrier NATs / iOS kill idle connections in ~30s, so send an SSE
+  // comment line every 15s to keep the pipe warm. Comments (lines starting
+  // with ':') are ignored by EventSource.
+  const heartbeat = setInterval(() => {
+    res.write(`: ping\n\n`);
+  }, 15000);
+
+  let closed = false;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    subscriber.unsubscribe(`job:${jobId}`).catch(() => {});
+    subscriber.quit().catch(() => {});
+  };
+
   subscriber.subscribe(`job:${jobId}`, (err) => {
     if (err) {
       console.error('[SSE] Redis subscribe error:', err);
+      cleanup();
       res.end();
     }
   });
@@ -176,21 +199,42 @@ router.get('/stream/:jobId', authMiddleware, async (req: AuthRequest, res: Respo
     if (channel === `job:${jobId}`) {
       const data = JSON.parse(message);
       res.write(`data: ${JSON.stringify(data)}\n\n`);
-      
+
       // Fechar a conexão se o worker avisar que terminou ou falhou
       if (data.event === 'COMPLETED' || data.event === 'FAILED') {
-        subscriber.unsubscribe(`job:${jobId}`);
-        subscriber.quit();
+        cleanup();
         res.end();
       }
     }
   });
 
   // Limpar recursos se o cliente fechar a aba
-  req.on('close', () => {
-    subscriber.unsubscribe(`job:${jobId}`);
-    subscriber.quit();
-  });
+  req.on('close', cleanup);
+});
+
+/**
+ * GET /api/radar/job/:jobId
+ * Authoritative job snapshot straight from the DB (status + all leads).
+ * Used as a fallback when the SSE stream drops (common on mobile networks):
+ * the client polls this to recover leads/COMPLETED published during the gap,
+ * since Redis Pub/Sub has no replay.
+ */
+router.get('/job/:jobId', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { jobId } = req.params;
+    const job = await prisma.scrapeJob.findUnique({
+      where: { id: jobId },
+      include: { leads: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (!job || job.userId !== userId) {
+      return res.status(404).json({ error: 'Busca não encontrada' });
+    }
+    return res.json({ status: job.status, leads: job.leads });
+  } catch (error) {
+    console.error('[RADAR] Job snapshot error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar busca' });
+  }
 });
 
 /**

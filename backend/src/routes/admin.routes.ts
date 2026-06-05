@@ -13,6 +13,7 @@ import {
 import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
+import { sendWhatsAppMessage } from '../lib/whatsapp';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1574,24 +1575,14 @@ const KOMUNIKA_URL = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site'
  * Send a WhatsApp message via Komunika API
  */
 async function sendKomunika(phone: string, message: string): Promise<boolean> {
-  const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-  const apiKey = config?.komunikaAdminApiKey;
-  const instanceId = config?.komunikaInstanceId;
-  if (!apiKey || !instanceId) { console.warn('[KOMUNIKA] Not configured (missing apiKey or instanceId)'); return false; }
-
-  let cleanPhone = phone.replace(/\D/g, '');
-  if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
-
-  try {
-    const res = await fetch(`${KOMUNIKA_URL}/api/v1/messages/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-      body: JSON.stringify({ instanceId, to: cleanPhone, type: 'text', content: message }),
-    });
-    if (res.ok) { console.log(`[KOMUNIKA] Message sent to ${cleanPhone}`); return true; }
-    console.warn(`[KOMUNIKA] Send failed: ${res.status} ${await res.text().catch(() => '')}`);
-    return false;
-  } catch (e) { console.error('[KOMUNIKA] Error:', e); return false; }
+  // Delegate to the shared sender so milestone/status alerts use the SAME
+  // credential resolution as the rest of the app: SystemConfig FIRST, then
+  // env.KOMUNIKA_ADMIN_API_KEY as a fallback (+ MZ phone normalization + 3
+  // retries). The previous inline version read ONLY from SystemConfig, so if
+  // the Komunika key/instance lived in the env (docker-compose) the alert
+  // failed silently — which is why Status WhatsApp alerts never arrived.
+  const r = await sendWhatsAppMessage({ phone, content: message });
+  return r.ok;
 }
 
 /**
@@ -1891,6 +1882,32 @@ router.post('/platform-check-milestones', async (_req: AuthRequest, res: Respons
   } catch (error) {
     console.error('[ADMIN] Check milestones error:', error);
     return res.status(500).json({ error: 'Erro ao verificar metas' });
+  }
+});
+
+/**
+ * POST /api/admin/platform-test-alert
+ * Sends a test WhatsApp to the configured alert phone (or a phone from the
+ * body) so the admin can confirm the channel works without waiting for a
+ * milestone. Returns the real delivery status instead of failing silently.
+ */
+router.post('/platform-test-alert', async (req: AuthRequest, res: Response) => {
+  try {
+    const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+    const phone = (req.body?.phone as string)?.trim() || config?.milestoneAlertPhone;
+    if (!phone) {
+      return res.status(400).json({ error: 'Nenhum telefone de alerta configurado. Salve o número primeiro.' });
+    }
+    const name = config?.milestoneAlertName || 'Admin';
+    const content = `*Código Zero — Teste de Alerta* ✅\n\nOlá ${name}! Se você recebeu esta mensagem, os alertas por WhatsApp do painel Status estão funcionando.`;
+    const r = await sendWhatsAppMessage({ phone, content });
+    if (r.ok) return res.json({ success: true, message: 'Mensagem de teste enviada. Confira o WhatsApp.' });
+    return res.status(502).json({
+      error: `Falha ao enviar (status: ${r.status}). Verifique se a instância Komunika está conectada e a chave configurada.`,
+    });
+  } catch (error) {
+    console.error('[ADMIN] Test alert error:', error);
+    return res.status(500).json({ error: 'Erro ao enviar alerta de teste' });
   }
 });
 

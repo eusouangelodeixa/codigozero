@@ -515,19 +515,16 @@ export function startCronJobs() {
             ? `${m.targetValue.toLocaleString('pt-BR')} MT em faturamento`
             : `${m.targetValue} assinante(s)`;
 
-          // WhatsApp alert
-          if (config?.milestoneAlertPhone && config.komunikaAdminApiKey && config.komunikaInstanceId) {
-            const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
-            let phone = config.milestoneAlertPhone.replace(/\D/g, '');
-            if (phone.length === 9 && phone.startsWith('8')) phone = `258${phone}`;
-
-            await fetch(`${apiUrl}/api/v1/messages/send`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-API-Key': config.komunikaAdminApiKey },
-              body: JSON.stringify({ instanceId: config.komunikaInstanceId, to: phone, type: 'text', content: `*Código Zero — Meta Alcançada*\n\nParabéns ${config.milestoneAlertName || 'Admin'}!\n\nA meta de *${label}* foi atingida!` }),
-            });
-            await prisma.platformMilestone.update({ where: { id: m.id }, data: { notified: true } });
-            console.log(`[CRON] Milestone reached: ${m.category} ${m.targetValue}`);
+          // WhatsApp alert — uses the shared sender (SystemConfig creds with
+          // env fallback + retries), so it works even when the Komunika key
+          // lives only in the env. Only requires the alert phone to be set.
+          if (config?.milestoneAlertPhone) {
+            const content = `*Código Zero — Meta Alcançada*\n\nParabéns ${config.milestoneAlertName || 'Admin'}!\n\nA meta de *${label}* foi atingida!`;
+            const r = await sendWhatsAppMessage({ phone: config.milestoneAlertPhone, content });
+            if (r.ok) {
+              await prisma.platformMilestone.update({ where: { id: m.id }, data: { notified: true } });
+            }
+            console.log(`[CRON] Milestone reached: ${m.category} ${m.targetValue} (whatsapp=${r.ok})`);
           }
 
           // 🔔 Push to superadmin

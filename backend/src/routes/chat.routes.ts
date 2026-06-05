@@ -15,6 +15,12 @@ const SENDER_SELECT = {
   id: true, name: true, role: true, avatarUrl: true,
 };
 
+// Both 'admin' and 'superadmin' act as the support agent. Checking only
+// 'admin' silently broke support for superadmin owners: GET/POST /support
+// fell back to the superadmin's own id (so the member's conversation looked
+// empty and replies went nowhere) and new-message pushes skipped them.
+const isAdminRole = (role?: string) => role === 'admin' || role === 'superadmin';
+
 // ═══════════════════════════════════════
 // COMMUNITY CHAT
 // ═══════════════════════════════════════
@@ -144,7 +150,7 @@ router.delete('/messages/:id', async (req: AuthRequest, res: Response) => {
  */
 router.get('/support', async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role === 'admin';
+    const isAdmin = isAdminRole(req.user!.role);
     const targetUserId = isAdmin ? (req.query.userId as string) : req.user!.id;
 
     if (!targetUserId) {
@@ -197,7 +203,7 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Mensagem vazia' });
     }
 
-    const isAdmin = req.user!.role === 'admin';
+    const isAdmin = isAdminRole(req.user!.role);
     const targetUserId = isAdmin ? userId : req.user!.id;
 
     if (!targetUserId) {
@@ -226,7 +232,7 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
       }).catch((e) => console.error('[CHAT] support push error:', e));
     } else {
       const admins = await prisma.user.findMany({
-        where: { role: 'admin' },
+        where: { role: { in: ['admin', 'superadmin'] } },
         select: { id: true },
       });
       sendPushToUsers(
@@ -246,7 +252,7 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
  */
 router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
   try {
-    if (req.user!.role !== 'admin' && req.user!.role !== 'superadmin') {
+    if (!isAdminRole(req.user!.role)) {
       return res.status(403).json({ error: 'Admin only' });
     }
 
@@ -305,7 +311,7 @@ router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
  */
 router.get('/unread', async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user!.role === 'admin';
+    const isAdmin = isAdminRole(req.user!.role);
 
     let supportUnread = 0;
     if (isAdmin) {

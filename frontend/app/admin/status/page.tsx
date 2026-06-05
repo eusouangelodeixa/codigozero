@@ -54,9 +54,25 @@ export default function StatusPage() {
 
   useEffect(() => { load(); }, []);
 
+  const [testing, setTesting] = useState(false);
+
   const saveConfig = async () => {
     await fetch(`${API}/api/admin/platform-config`, { method: "PATCH", headers: hdr(), body: JSON.stringify({ alertPhone, alertName }) });
     showToast("Configuração salva");
+  };
+
+  const testAlert = async () => {
+    setTesting(true);
+    try {
+      // Save first so the test hits the number currently in the field.
+      await fetch(`${API}/api/admin/platform-config`, { method: "PATCH", headers: hdr(), body: JSON.stringify({ alertPhone, alertName }) });
+      const res = await fetch(`${API}/api/admin/platform-test-alert`, { method: "POST", headers: hdr(), body: JSON.stringify({ phone: alertPhone }) });
+      const d = await res.json();
+      showToast(res.ok ? (d.message || "Teste enviado ✓") : `Falha: ${d.error || "erro"}`);
+    } catch {
+      showToast("Erro de conexão ao testar");
+    }
+    setTesting(false);
   };
 
   const addMilestone = async () => {
@@ -223,9 +239,14 @@ export default function StatusPage() {
                 </label>
                 <input className={styles.formInput} value={alertPhone} onChange={e => setAlertPhone(e.target.value)} placeholder="258841234567" />
               </div>
-              <button onClick={saveConfig} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#0A0A0A", fontWeight: 600, fontSize: 12, cursor: "pointer", alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6 }}>
-                <I d={ic.check} size={13} color="#0A0A0A" /> Salvar
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={saveConfig} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#0A0A0A", fontWeight: 600, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <I d={ic.check} size={13} color="#0A0A0A" /> Salvar
+                </button>
+                <button onClick={testAlert} disabled={testing || !alertPhone} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "#aaa", fontSize: 12, cursor: alertPhone ? "pointer" : "not-allowed", opacity: testing || !alertPhone ? 0.6 : 1, display: "flex", alignItems: "center", gap: 6 }}>
+                  <I d={ic.phone} size={13} /> {testing ? "Enviando..." : "Testar WhatsApp"}
+                </button>
+              </div>
             </div>
           </div>
 

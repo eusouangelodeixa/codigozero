@@ -12,10 +12,12 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  /* iOS Safari ignores body's overflow-x:hidden for the zoom-out gesture —
-     a wider-than-viewport child still lets the page zoom out and breaks the
-     sticky topbar. Constraining html too is the canonical fix. */
-  overflow-x: hidden;
+  /* Prevent horizontal overflow / iOS zoom-out WITHOUT breaking the sticky
+     sidebar. `overflow-x: hidden` makes <html> a scroll container, which
+     stops position:sticky from sticking to the viewport (the sidebar scrolled
+     with the page). `overflow-x: clip` clips the overflow but does NOT create
+     a scroll container, so sticky keeps working. */
+  overflow-x: clip;
   width: 100%;
 }
 
@@ -25,9 +27,8 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100%;
-  position: relative;
 }
 
 img, video { max-width: 100%; display: block; }

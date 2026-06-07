@@ -242,8 +242,10 @@ export function startCronJobs() {
           console.error(`[CRON] Failed to send alert to ${user.email}:`, e);
         }
 
-        // Small delay between sends
-        await new Promise(r => setTimeout(r, 2000));
+        // Randomized gap between sends (≈20–50s) to avoid a robotic burst
+        // pattern that risks WhatsApp bans. Volume here is small (only users
+        // within the 3-day expiry window), so this stays prompt enough.
+        await new Promise((r) => setTimeout(r, 20_000 + Math.floor(Math.random() * 30_000)));
       }
 
       console.log(`[CRON] 🔔 Expiration alerts complete: ${alertsSent} sent.`);
@@ -594,6 +596,10 @@ export function startCronJobs() {
     console.log('[CRON] 📲 Running PWA install reminder...');
     try {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // Small daily batch sent as a slow drip with LONG RANDOM gaps. Blasting
+      // everyone at once (or with a tiny fixed gap) is the pattern WhatsApp
+      // bans for. Each day clears a few; the rest are picked up on following
+      // days (already-messaged users are excluded via pwaReminderSentAt).
       const candidates = await prisma.user.findMany({
         where: {
           subscriptionStatus: 'active',
@@ -605,11 +611,12 @@ export function startCronJobs() {
           createdAt: { lt: oneDayAgo },
         },
         select: { id: true, name: true, phone: true },
-        take: 200,
+        take: 20,
       });
 
       let sent = 0;
-      for (const user of candidates) {
+      for (let i = 0; i < candidates.length; i++) {
+        const user = candidates[i];
         const firstName = (user.name || 'membro').split(' ')[0];
         const message = [
           `📲 *${firstName}, instale o Código Zero no seu celular!*`,
@@ -621,7 +628,11 @@ export function startCronJobs() {
         const r = await sendWhatsAppMessage({ phone: user.phone, content: message });
         await prisma.user.update({ where: { id: user.id }, data: { pwaReminderSentAt: new Date() } });
         if (r.ok) sent++;
-        await new Promise((res) => setTimeout(res, 2000));
+        // Long, randomized interval (≈2–5 min) between sends. Skip after last.
+        if (i < candidates.length - 1) {
+          const waitMs = 120_000 + Math.floor(Math.random() * 180_000); // 120s–300s
+          await new Promise((res) => setTimeout(res, waitMs));
+        }
       }
       console.log(`[CRON] 📲 PWA install reminders sent: ${sent}/${candidates.length}`);
     } catch (error) {

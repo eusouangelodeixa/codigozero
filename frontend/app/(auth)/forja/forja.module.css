@@ -51,17 +51,38 @@
 }
 
 .videoFrame {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #000;
-  position: relative;
+  overflow: hidden;
 }
 
+/* The page injects the embed inside a <div> wrapper. Make that wrapper a
+   definite-size box (absolute, inset:0) filling the 16/9 frame — that's what
+   lets the iframe's height:100% resolve reliably on mobile Safari, where a
+   percentage height does NOT resolve against an aspect-ratio box and the
+   player would otherwise blow up to a fixed/huge height. */
+.videoFrame > div {
+  position: absolute;
+  inset: 0;
+}
+
+/* Any embed iframe fills its container (the wrapper above for plain embeds,
+   or the embed's own responsive aspect wrapper for Kilax-style embeds —
+   both resolve to the same 16/9 box). */
 .videoFrame iframe {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   border: 0;
   display: block;
+}
+
+.videoFrame > .videoPlaceholder {
+  position: absolute;
+  inset: 0;
 }
 
 .videoPlaceholder {
@@ -264,6 +285,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-width: 0;
   max-height: calc(100vh - 140px);
   overflow-y: auto;
   position: sticky;

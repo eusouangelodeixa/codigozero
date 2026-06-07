@@ -397,6 +397,7 @@ router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: Aut
       delayMinSec,
       delayMaxSec,
       scheduledAt,
+      campaignName,
     } = req.body;
 
     // Normalize to batch format
@@ -455,7 +456,15 @@ router.post('/dispatch', authMiddleware, subscriptionMiddleware, async (req: Aut
       delayMaxSec: maxSec,
     };
 
-    const row = await createScheduledDispatch(userId, when, payload);
+    // Campaign label: use the provided name, else auto-name from the message
+    // preview, else a generic "Disparo para N contato(s)".
+    const autoName =
+      (typeof msgContent === 'string' && msgContent.trim()
+        ? msgContent.trim().replace(/\s+/g, ' ').slice(0, 40)
+        : '') || `Disparo para ${contactList.length} contato${contactList.length !== 1 ? 's' : ''}`;
+    const name = (typeof campaignName === 'string' && campaignName.trim()) ? campaignName : autoName;
+
+    const row = await createScheduledDispatch(userId, when, payload, name);
     const immediate = when.getTime() <= Date.now() + 1_000;
 
     if (immediate) {
@@ -508,6 +517,7 @@ router.get('/scheduled-dispatches', authMiddleware, subscriptionMiddleware, asyn
     return res.json({
       schedules: rows.map((r) => ({
         id: r.id,
+        name: r.name,
         scheduledAt: r.scheduledAt,
         startedAt: r.startedAt,
         completedAt: r.completedAt,
@@ -558,16 +568,65 @@ router.delete('/scheduled-dispatches/:id', authMiddleware, subscriptionMiddlewar
 });
 
 /**
- * GET /api/radar/dispatch-history
- * Returns dispatch log for the user
+ * GET /api/radar/dispatch-campaigns
+ * Lists the user's dispatch campaigns (each ScheduledDispatch is one send
+ * batch), newest first, with their stats. Mirrors the Radar campaigns view so
+ * sends are organised and analysable instead of one flat log.
+ */
+router.get('/dispatch-campaigns', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const rows = await prisma.scheduledDispatch.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return res.json({
+      campaigns: rows.map((r) => {
+        const p = (typeof r.payload === 'object' && r.payload !== null ? r.payload : {}) as any;
+        return {
+          id: r.id,
+          name: r.name || 'Disparo',
+          status: r.status,
+          total: r.total,
+          sent: r.sent,
+          failed: r.failed,
+          error: r.error,
+          createdAt: r.createdAt,
+          scheduledAt: r.scheduledAt,
+          completedAt: r.completedAt,
+          mode: p.dispatchMode ?? 'message',
+          preview: String(p.message ?? '').slice(0, 120),
+        };
+      }),
+    });
+  } catch (error) {
+    console.error('[DISPATCH] Campaigns error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar campanhas de envio' });
+  }
+});
+
+/**
+ * GET /api/radar/dispatch-history[?scheduleId=]
+ * Returns dispatch logs for the user. With `scheduleId`, scopes to a single
+ * campaign (the individual sends of that batch).
  */
 router.get('/dispatch-history', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
+    const scheduleId = typeof req.query.scheduleId === 'string' ? req.query.scheduleId : undefined;
+
+    // When scoping to a campaign, verify the campaign belongs to the user.
+    if (scheduleId) {
+      const owner = await prisma.scheduledDispatch.findUnique({ where: { id: scheduleId }, select: { userId: true } });
+      if (!owner || owner.userId !== userId) {
+        return res.status(404).json({ error: 'Campanha não encontrada' });
+      }
+    }
+
     const logs = await prisma.dispatchLog.findMany({
-      where: { userId },
+      where: { userId, ...(scheduleId ? { scheduleId } : {}) },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take: scheduleId ? 1000 : 100,
     });
 
     return res.json({ logs });

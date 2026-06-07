@@ -52,6 +52,21 @@ interface KomunikaInfo {
   funnels?: KomunikaFunnel[];
 }
 
+interface DispatchCampaign {
+  id: string;
+  name: string;
+  status: string;
+  total: number;
+  sent: number;
+  failed: number;
+  error: string | null;
+  createdAt: string;
+  scheduledAt: string;
+  completedAt: string | null;
+  mode: string;
+  preview: string;
+}
+
 interface ScheduleSummary {
   id: string;
   scheduledAt: string;
@@ -154,7 +169,14 @@ export default function DisparadorPage() {
   const [scheduledLocal, setScheduledLocal] = useState("");
   const [schedules, setSchedules] = useState<ScheduleSummary[]>([]);
 
+  const [campaignName, setCampaignName] = useState("");
+
+  // Dispatch history grouped into campaigns (one per send batch). Clicking a
+  // campaign loads its individual sends (logs) — same dynamic as the Radar.
+  const [dispatchCampaigns, setDispatchCampaigns] = useState<DispatchCampaign[]>([]);
+  const [openCampaign, setOpenCampaign] = useState<DispatchCampaign | null>(null);
   const [history, setHistory] = useState<DispatchLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -220,11 +242,22 @@ export default function DisparadorPage() {
       .catch(() => {});
   }, [hdr]);
 
-  const loadHistory = useCallback(() => {
-    fetch(`${API}/api/radar/dispatch-history`, { headers: hdr() })
+  const loadDispatchCampaigns = useCallback(() => {
+    fetch(`${API}/api/radar/dispatch-campaigns`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((data) => setDispatchCampaigns(data.campaigns || []))
+      .catch(() => {});
+  }, [hdr]);
+
+  const openCampaignLogs = useCallback((c: DispatchCampaign) => {
+    setOpenCampaign(c);
+    setLoadingLogs(true);
+    setHistory([]);
+    fetch(`${API}/api/radar/dispatch-history?scheduleId=${encodeURIComponent(c.id)}`, { headers: hdr() })
       .then((r) => r.json())
       .then((data) => setHistory(data.logs || []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoadingLogs(false));
   }, [hdr]);
 
   const loadSchedules = useCallback(() => {
@@ -235,9 +268,9 @@ export default function DisparadorPage() {
   }, [hdr]);
 
   useEffect(() => {
-    loadHistory();
+    loadDispatchCampaigns();
     loadSchedules();
-  }, [loadHistory, loadSchedules]);
+  }, [loadDispatchCampaigns, loadSchedules]);
 
   // Poll schedules while any are pending/running so the UI tracks progress.
   useEffect(() => {
@@ -245,10 +278,10 @@ export default function DisparadorPage() {
     if (!hasActive) return;
     const id = setInterval(() => {
       loadSchedules();
-      loadHistory();
+      loadDispatchCampaigns();
     }, 4000);
     return () => clearInterval(id);
-  }, [schedules, loadSchedules, loadHistory]);
+  }, [schedules, loadSchedules, loadDispatchCampaigns]);
 
   const cancelSchedule = async (id: string) => {
     if (!confirm("Cancelar este agendamento?")) return;
@@ -500,6 +533,7 @@ export default function DisparadorPage() {
           delayMinSec,
           delayMaxSec,
           scheduledAt,
+          campaignName: campaignName.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -511,11 +545,14 @@ export default function DisparadorPage() {
         );
         setScheduleEnabled(false);
         setScheduledLocal("");
+        setCampaignName("");
         loadSchedules();
+        loadDispatchCampaigns();
       } else if (res.ok && data.queued) {
         toast.success("Disparo iniciado", `${data.total} contato(s) na fila. Acompanhe o histórico.`);
+        setCampaignName("");
         loadSchedules();
-        loadHistory();
+        loadDispatchCampaigns();
       } else if (data.error === "KOMUNIKA_NOT_CONFIGURED") {
         toast.warning("Configure o Komunika primeiro");
         setTimeout(() => router.push("/integracoes?setup=komunika"), 800);
@@ -549,6 +586,21 @@ export default function DisparadorPage() {
     const tz = d.getTimezoneOffset() * 60_000;
     return new Date(d.getTime() - tz).toISOString().slice(0, 16);
   })();
+
+  const fmtDateTime = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+
+  const campaignStatusBadge = (status: string) => {
+    const map: Record<string, { v: "success" | "warning" | "error" | "info" | "neutral"; label: string }> = {
+      pending: { v: "warning", label: "Agendado" },
+      running: { v: "info", label: "Enviando" },
+      completed: { v: "success", label: "Concluído" },
+      cancelled: { v: "neutral", label: "Cancelado" },
+      failed: { v: "error", label: "Falhou" },
+    };
+    const m = map[status] || { v: "neutral" as const, label: status };
+    return <Badge variant={m.v} size="sm">{m.label}</Badge>;
+  };
 
   const isConnected = komunikaInfo?.instanceStatus?.status === "connected";
 
@@ -915,7 +967,16 @@ export default function DisparadorPage() {
       {/* ══ Anti-block: intervalo entre envios + agendamento ══ */}
       <Card padding="lg">
         <div className={styles.col}>
-          <span className={styles.cardTitle}>Intervalo e agendamento</span>
+          <span className={styles.cardTitle}>Campanha, intervalo e agendamento</span>
+
+          <Input
+            label="Nome da campanha (opcional)"
+            value={campaignName}
+            onChange={(e) => setCampaignName(e.target.value)}
+            placeholder="Ex: Promoção Dentistas — Maputo"
+            hint="Usado para agrupar e organizar este disparo no histórico. Se vazio, geramos um nome automático."
+          />
+
           <p style={{ fontSize: "var(--type-small)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
             Envios simultâneos aumentam o risco de bloqueio do WhatsApp. Espalhe os envios usando
             um intervalo aleatório entre o mínimo e o máximo. Você também pode programar todo o
@@ -1105,35 +1166,41 @@ export default function DisparadorPage() {
       {/* ══ History ══ */}
       <div>
         <div className={styles.historyHeader}>
-          <h2 className={styles.historyTitle}>Histórico de envios</h2>
+          <h2 className={styles.historyTitle}>Histórico de campanhas</h2>
           <button
             type="button"
             className={styles.historyToggle}
             onClick={() => {
               setShowHistory((v) => !v);
-              if (!showHistory) loadHistory();
+              if (!showHistory) { setOpenCampaign(null); loadDispatchCampaigns(); }
             }}
           >
             <HistoryIcon />
-            {showHistory ? "Ocultar" : "Mostrar"} ({history.length})
+            {showHistory ? "Ocultar" : "Mostrar"} ({dispatchCampaigns.length})
             <ChevronDown
               className={cx(styles.historyChevron, showHistory && styles.historyChevronOpen)}
             />
           </button>
         </div>
 
-        {showHistory &&
-          (history.length === 0 ? (
+        {showHistory && (
+          openCampaign ? (
+            /* ── Drill-down: the individual sends of one campaign ── */
             <div style={{ marginTop: "var(--space-3)" }}>
-              <EmptyState
-                compact
-                icon={<HistoryIcon size={20} />}
-                title="Nenhum envio registrado"
-                description="Os envios passarão a aparecer aqui após o primeiro disparo."
-              />
-            </div>
-          ) : (
-            <>
+              <button type="button" className={styles.campaignBack} onClick={() => setOpenCampaign(null)}>
+                ← Voltar para campanhas · <strong>{openCampaign.name}</strong>
+              </button>
+              <div className={styles.campaignStats}>
+                {campaignStatusBadge(openCampaign.status)}
+                <span>{openCampaign.sent}/{openCampaign.total} enviadas{openCampaign.failed > 0 ? ` · ${openCampaign.failed} falhas` : ""}</span>
+                <span>{fmtDateTime(openCampaign.createdAt)}</span>
+              </div>
+              {loadingLogs ? (
+                <div className={styles.leadsLoading}>Carregando envios…</div>
+              ) : history.length === 0 ? (
+                <EmptyState compact icon={<HistoryIcon size={20} />} title="Sem envios nesta campanha" description="Os envios desta campanha aparecerão aqui." />
+              ) : (
+                <>
               <div className={styles.historyTableWrap} style={{ marginTop: "var(--space-3)" }}>
                 <table className={styles.historyTable}>
                   <thead>
@@ -1195,8 +1262,38 @@ export default function DisparadorPage() {
                   </div>
                 ))}
               </div>
-            </>
-          ))}
+                </>
+              )}
+            </div>
+          ) : dispatchCampaigns.length === 0 ? (
+            <div style={{ marginTop: "var(--space-3)" }}>
+              <EmptyState
+                compact
+                icon={<HistoryIcon size={20} />}
+                title="Nenhuma campanha de envio"
+                description="Cada disparo vira uma campanha aqui — clique para ver os detalhes dos envios."
+              />
+            </div>
+          ) : (
+            <div className={styles.campaignGrid} style={{ marginTop: "var(--space-3)" }}>
+              {dispatchCampaigns.map((c) => (
+                <button key={c.id} type="button" className={styles.campaignCard} onClick={() => openCampaignLogs(c)}>
+                  <div className={styles.campaignCardHead}>
+                    <span className={styles.campaignCardName}>{c.name}</span>
+                    {campaignStatusBadge(c.status)}
+                  </div>
+                  <div className={styles.campaignCardMeta}>
+                    <span>{c.sent}/{c.total} enviadas{c.failed > 0 ? ` · ${c.failed} falhas` : ""}</span>
+                    <span className={styles.dotSep}>·</span>
+                    <span>{c.mode === "funnel" ? "Funil" : "Mensagem"}</span>
+                  </div>
+                  {c.preview && <span className={styles.campaignCardPreview}>{c.preview}</span>}
+                  <span className={styles.campaignCardDate}>{fmtDateTime(c.createdAt)}</span>
+                </button>
+              ))}
+            </div>
+          )
+        )}
       </div>
     </div>
   );

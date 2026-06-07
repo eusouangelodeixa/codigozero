@@ -228,10 +228,12 @@ export async function createScheduledDispatch(
   userId: string,
   scheduledAt: Date,
   payload: DispatchPayload,
+  name?: string | null,
 ) {
   return prisma.scheduledDispatch.create({
     data: {
       userId,
+      name: name?.trim()?.slice(0, 120) || null,
       scheduledAt,
       status: 'pending',
       payload: payload as unknown as Prisma.InputJsonValue,

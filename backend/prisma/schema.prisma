@@ -336,6 +336,9 @@ model ScheduledDispatch {
   id          String    @id @default(uuid())
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Human-friendly campaign label so the Disparador groups sends into named
+  // campaigns (like Radar). Defaults to an auto-name when not provided.
+  name        String?
   scheduledAt DateTime
   startedAt   DateTime?
   completedAt DateTime?

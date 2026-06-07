@@ -187,27 +187,43 @@ export const scraperWorker = new Worker<ScrapeJobData>(
               return { name, phone, website, address, rating, reviewsCount };
             });
 
+            // Normalize website vs instagram BEFORE filtering. Small
+            // businesses very often list their Instagram as their "website"
+            // on Google Maps — that's a social profile, not a real site. We
+            // surface it as `instagram` (and treat the website as empty) so
+            // BOTH the website filter ("não tem site") and the instagram
+            // filter ("tem instagram") behave correctly. Previously Instagram
+            // was ONLY ever discovered by crawling an external site, so for
+            // the no-website businesses the Radar targets it was almost always
+            // null and the instagram filter effectively never matched.
+            let website: string | null = details.website;
+            let instagram: string | null = null;
+            if (website && /instagram\.com/i.test(website)) {
+              instagram = website;
+              website = null;
+            }
+
             // ── Server-side tri-state filters (before any expensive work) ──
             if (!passesFilter(filters?.phone, details.phone)) {
               console.log(`[SCRAPER]   ✗ phone filter: ${details.name}`);
               continue;
             }
-            if (!passesFilter(filters?.website, details.website)) {
+            if (!passesFilter(filters?.website, website)) {
               console.log(`[SCRAPER]   ✗ website filter: ${details.name}`);
               continue;
             }
 
             // Default classification when there's no website
             let status: string = 'Sem Website';
-            let instagram: string | null = null;
 
-            // Website probe (kept from legacy behaviour: classify Sem / Lento / Bom + try to extract instagram)
-            if (details.website && !details.website.includes('google.com')) {
+            // Website probe: classify Sem / Lento / Bom and, as a fallback,
+            // extract an Instagram link from the site if we don't have one yet.
+            if (website && !website.includes('google.com')) {
               status = 'Website Bom';
               const start = Date.now();
               try {
                 const newPage = await browser.newPage();
-                const response = await newPage.goto(details.website, {
+                const response = await newPage.goto(website, {
                   timeout: 8000,
                   waitUntil: 'domcontentloaded',
                 });
@@ -217,18 +233,19 @@ export const scraperWorker = new Worker<ScrapeJobData>(
                 } else if (loadTime > 4000) {
                   status = 'Website Lento/Antigo';
                 }
-                instagram = await newPage.evaluate(() => {
+                const igFromSite = await newPage.evaluate(() => {
                   const igLink = document.querySelector('a[href*="instagram.com"]');
                   return igLink ? (igLink as HTMLAnchorElement).href : null;
                 });
+                if (!instagram && igFromSite) instagram = igFromSite;
                 await newPage.close();
               } catch {
                 status = 'Website Lento/Antigo';
               }
             }
 
-            // Apply instagram filter after the website probe (it can only
-            // be discovered there).
+            // Instagram filter — now sourced from the Maps "website" field too,
+            // not only from crawling an external site.
             if (!passesFilter(filters?.instagram, instagram)) {
               console.log(`[SCRAPER]   ✗ instagram filter: ${details.name}`);
               continue;
@@ -251,7 +268,7 @@ export const scraperWorker = new Worker<ScrapeJobData>(
                 name: details.name,
                 phone: details.phone || '',
                 address: details.address,
-                website: details.website,
+                website,
                 instagram,
                 status,
                 recommendedScriptId,

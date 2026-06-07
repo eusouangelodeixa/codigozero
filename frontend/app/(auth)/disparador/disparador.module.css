@@ -28,17 +28,26 @@
   box-shadow: 0 0 8px currentColor;
 }
 
-/* ── Layout (2 columns) ── */
+/* ── Layout ──
+   Message + Contacts are full-width stacked cards (like the Interval &
+   Scheduling card below), and only sit side-by-side on wide desktop where
+   there's room. min-width:0 lets the cards shrink so their content (editor,
+   phone numbers, preview) wraps instead of forcing horizontal overflow. */
 .layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--space-5);
+}
+
+@media (min-width: 1100px) {
+  .layout { grid-template-columns: 1fr 1fr; }
 }
 
 .col {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-width: 0;
 }
 
 .cardTitle {
@@ -529,10 +538,6 @@
 }
 
 /* ── Responsive ── */
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
-}
-
 @media (max-width: 640px) {
   .historyTableWrap { display: none; }
   .historyCards { display: flex; }

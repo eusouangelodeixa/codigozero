@@ -23,6 +23,11 @@ import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
 const app = express();
 
+// Behind nginx (one hop): trust the first proxy so req.ip / X-Forwarded-For
+// resolve correctly. Without this, express-rate-limit logs a validation error
+// and keys limits by the proxy IP.
+app.set('trust proxy', 1);
+
 // ── Security & Parsing ──
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },

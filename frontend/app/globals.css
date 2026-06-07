@@ -12,11 +12,12 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  /* Prevent horizontal overflow / iOS zoom-out WITHOUT breaking the sticky
-     sidebar. `overflow-x: hidden` makes <html> a scroll container, which
-     stops position:sticky from sticking to the viewport (the sidebar scrolled
-     with the page). `overflow-x: clip` clips the overflow but does NOT create
-     a scroll container, so sticky keeps working. */
+  /* Prevent horizontal overflow / iOS zoom-out WITHOUT breaking layout:
+     - `overflow-x: clip` clips the overflow but does NOT create a scroll
+       container, so position:sticky (sidebar) keeps working.
+     - It lives on <html> ONLY. Putting overflow-x on <body> breaks
+       position:fixed on iOS Safari (the fixed bottom nav scrolls with the
+       page), so body is left with default overflow. */
   overflow-x: clip;
   width: 100%;
 }
@@ -27,8 +28,6 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;
-  overflow-x: clip;
-  max-width: 100%;
 }
 
 img, video { max-width: 100%; display: block; }

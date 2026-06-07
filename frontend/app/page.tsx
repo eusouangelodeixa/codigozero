@@ -25,15 +25,15 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 // ── Default texts (fallback when admin hasn't customized) ──
 // Copy is direct, no PT-PT formality, no inflated "investor" tropes — every
 // claim maps to something the product actually does (Radar/Disparador/Cofre/
-// Forja/QG/Chat) or to verifiable network state (143 members on the Whop).
+// Forja/QG/Chat) or to verifiable network state (222 members on the Whop).
 const DEFAULTS = {
   // ── Hero ─────────────────────────────────────────────────────────────
   heroTitle: "O ecossistema completo pra criar micronegócios de IA em Moçambique.",
   heroSubtitle: "Sem código. Sem barreiras.",
   heroDesc: "Radar de leads, Disparador de WhatsApp, biblioteca de scripts e a network privada que se encontra <strong>todos os domingos</strong>. Tudo num lugar só.",
   ctaText: "Entrar no Código Zero",
-  trustText: "143 membros · Call toda semana · 6 ferramentas integradas",
-  stat1Value: "143", stat1Label: "Membros na network",
+  trustText: "222 membros · Call toda semana · 6 ferramentas integradas",
+  stat1Value: "222", stat1Label: "Membros na network",
   stat2Value: "Domingo", stat2Label: "Call ao vivo toda semana",
   stat3Value: "30 dias", stat3Label: "Garantia condicional",
 
@@ -96,14 +96,14 @@ const DEFAULTS = {
   networkLabel: "Código Zero — Network",
   networkTitle: "A comunidade privada",
   networkTitleHighlight: "onde tudo acontece.",
-  networkMembersCount: "143",
+  networkMembersCount: "222",
   networkMembersLabel: "membros ativos",
   networkDesc: "Quem está construindo de verdade troca ideia aqui. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
   networkPillars: [
     { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
     { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },
     { title: "Construção de SaaS em conjunto", desc: "Projetos coletivos: alguém começa, a network ajuda a finalizar. Quem participa, divide." },
-    { title: "Irmandade, não audiência", desc: "Não é um grupo de Discord com 5 mil pessoas mudas. É 143 que se conhecem pelo nome." },
+    { title: "Irmandade, não audiência", desc: "Não é um grupo de Discord com 5 mil pessoas mudas. É 222 que se conhecem pelo nome." },
   ],
 
   // ── Como funciona ────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ const DEFAULTS = {
   // ── Pricing ──────────────────────────────────────────────────────────
   scarcityLabel: "Acesso atual",
   scarcityTitle: "Network em construção.",
-  scarcityDesc: "143 membros e crescendo. Quem entra agora pega a network ainda pequena — onde dá pra conhecer todo mundo pelo nome e a tua voz na call ainda tem peso.",
+  scarcityDesc: "222 membros e crescendo. Quem entra agora pega a network ainda pequena — onde dá pra conhecer todo mundo pelo nome e a tua voz na call ainda tem peso.",
   priceFrom: "",
   priceAmount: "497",
   pricePeriod: "MT/mês",
@@ -727,10 +727,10 @@ export default function LandingPage({
             >
               <div className={styles.networkImageGlow} aria-hidden />
               <Image
-                src="/comunidade.jpg"
-                alt="Network privada do Código Zero: 143 membros ativos"
-                width={1180}
-                height={1100}
+                src="/comunidade-upgrade.png"
+                alt="Network privada do Código Zero: 222 membros ativos"
+                width={1179}
+                height={885}
                 className={styles.networkImage}
                 priority={false}
               />

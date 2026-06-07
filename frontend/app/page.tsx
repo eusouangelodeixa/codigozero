@@ -492,7 +492,7 @@ export default function LandingPage({
     <>
       {/* Gate */}
       {gateOpen === null && (
-        <div className={styles.gate}><div className={styles.gateInner}><Logo size={32} /><p style={{ color: "#888", marginTop: 12 }}>Carregando...</p></div></div>
+        <div className={styles.gate}><div className={styles.gateInner}><div style={{ display: "flex", justifyContent: "center" }}><Logo size={32} /></div><p style={{ color: "#888", marginTop: 12 }}>Carregando...</p></div></div>
       )}
       {gateOpen === true && (
         <div className={styles.gate}>
@@ -626,15 +626,6 @@ export default function LandingPage({
             <h1 className={styles.heroTitle}>{t("heroTitle")}</h1>
             <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
             <p className={styles.heroDesc} dangerouslySetInnerHTML={{ __html: t("heroDesc") }} />
-            <div className={styles.heroActions}>
-              <CtaLink className={styles.heroCta}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                  {t("ctaText")}
-                  <IconArrow size={16} strokeWidth={2.2} />
-                </span>
-              </CtaLink>
-              <a href="#ferramentas" className={styles.heroGhost}>Ver o ecossistema</a>
-            </div>
           </motion.div>
 
           {/* VSL */}

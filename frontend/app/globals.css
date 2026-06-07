@@ -12,6 +12,11 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* iOS Safari ignores body's overflow-x:hidden for the zoom-out gesture —
+     a wider-than-viewport child still lets the page zoom out and breaks the
+     sticky topbar. Constraining html too is the canonical fix. */
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -21,6 +26,8 @@ body {
   line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
+  max-width: 100%;
+  position: relative;
 }
 
 img, video { max-width: 100%; display: block; }

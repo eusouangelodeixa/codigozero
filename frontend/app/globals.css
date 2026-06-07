@@ -1,9 +1,9 @@
 /* ═══════════════════════════════════════════════════════════
-   CÓDIGO ZERO — Design System v1.1
-   "Premium Dark Terminal" + Teal Brand Accent
+   CÓDIGO ZERO — Design System v1.2
+   Brand: dark-mode-first, teal accent (#2DD4BF), Sora type.
+   Font "Sora" is loaded via next/font in app/layout.tsx and
+   exposed as the CSS variable --font-sora.
    ═══════════════════════════════════════════════════════════ */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 /* ── RESET ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,11 +35,13 @@ ul, ol { list-style: none; }
 
 :root {
   /* ── FONTS ── */
-  --font-sans:  "SF Pro Display", "SF Pro Text", "Inter", system-ui, sans-serif;
+  /* Sora is the brand typeface (loaded via next/font → --font-sora). */
+  --font-sans:  var(--font-sora), -apple-system, system-ui, sans-serif;
   --font-mono:  "SF Mono", "Fira Code", "JetBrains Mono", monospace;
 
   /* ── BACKGROUNDS ── */
-  --bg-base:          #0A0A0A;
+  /* Brand "darkest" is a near-black dark teal, not pure black. */
+  --bg-base:          #001412;
   --bg-surface:       #111111;
   --bg-elevated:      #1A1A1A;
   --bg-glass:         rgba(255, 255, 255, 0.04);
@@ -61,11 +63,11 @@ ul, ol { list-style: none; }
   --accent-dim:       rgba(45, 212, 191, 0.15);
   --accent-glow:      rgba(45, 212, 191, 0.08);
   --accent-border:    rgba(45, 212, 191, 0.25);
-  --accent-fg:        #0A0A0A;
+  --accent-fg:        #001412;
 
   /* ── CTA (White primary / Teal secondary) ── */
   --cta-bg:           #FFFFFF;
-  --cta-fg:           #0A0A0A;
+  --cta-fg:           #001412;
 
   /* ── SEMANTIC ── */
   --color-success:    #22C55E;

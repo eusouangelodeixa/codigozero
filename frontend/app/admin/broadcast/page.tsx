@@ -566,7 +566,7 @@ export default function BroadcastPage() {
             </div>
             <div style={{
               padding: "16px 20px", borderRadius: "8px",
-              background: "#0d1117", border: "1px solid rgba(255,255,255,0.06)",
+              background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.06)",
               fontSize: "13px", color: "#ddd", lineHeight: "1.7", whiteSpace: "pre-wrap",
               maxHeight: "240px", overflow: "auto",
             }}>
@@ -625,7 +625,7 @@ export default function BroadcastPage() {
           <div
             ref={logRef}
             style={{
-              maxHeight: "240px", overflow: "auto", background: "#0a0a0a",
+              maxHeight: "240px", overflow: "auto", background: "var(--bg-base)",
               borderRadius: "8px", padding: "12px", fontSize: "12px",
               fontFamily: "monospace", lineHeight: "1.8",
             }}

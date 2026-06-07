@@ -1,7 +1,17 @@
 import type { Metadata, Viewport } from "next";
+import { Sora } from "next/font/google";
 import { TrackingInjector } from "@/components/TrackingInjector";
 import { ToastProvider } from "@/components/ui";
 import "./globals.css";
+
+// Brand typeface. Self-hosted by next/font (no external request, no FOUT).
+// Exposed to the design system as the CSS variable --font-sora.
+const sora = Sora({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-sora",
+  display: "swap",
+});
 
 const APP_TITLE = "Código Zero — Plataforma";
 const APP_DESC =
@@ -65,8 +75,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: dark)",  color: "#0A0A0A" },
-    { media: "(prefers-color-scheme: light)", color: "#0A0A0A" },
+    { media: "(prefers-color-scheme: dark)",  color: "#001412" },
+    { media: "(prefers-color-scheme: light)", color: "#001412" },
   ],
   colorScheme: "dark",
 };
@@ -77,7 +87,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={sora.variable}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

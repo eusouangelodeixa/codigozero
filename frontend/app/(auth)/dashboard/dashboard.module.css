@@ -279,3 +279,32 @@
   .metricsGrid { grid-template-columns: 1fr; }
   .heroBody { padding: var(--space-5); }
 }
+
+/* ── Versículo do dia ──────────────────────────────────────── */
+.verse {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+}
+.verseEyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.verseText {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  font-style: italic;
+}
+.verseRef {
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+}

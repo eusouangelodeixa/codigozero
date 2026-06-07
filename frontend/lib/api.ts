@@ -64,6 +64,8 @@ export const apiClient = {
   // Dashboard
   getMetrics: () => api('/api/dashboard/metrics'),
 
+  getVerseOfDay: () => api('/api/dashboard/verse-of-the-day'),
+
   // Radar
   startSearch: (
     query: string,

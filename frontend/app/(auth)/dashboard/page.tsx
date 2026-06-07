@@ -17,6 +17,19 @@ interface Metrics {
   dailySearchLimit: number;
 }
 
+interface SubInfo {
+  subscriptionStatus?: string;
+  subscriptionEnd?: string | null;
+}
+
+interface Verse {
+  reference: string;
+  text: string;
+  theme: string;
+  isSabbath: boolean;
+  translation: string;
+}
+
 const greeting = () => {
   const h = new Date().getHours();
   if (h < 12) return "Bom dia";
@@ -33,6 +46,8 @@ const ChevronRight = (props: { size?: number }) => (
 export default function DashboardPage() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [sub, setSub] = useState<SubInfo | null>(null);
+  const [verse, setVerse] = useState<Verse | null>(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("Membro");
 
@@ -47,9 +62,17 @@ export default function DashboardPage() {
 
     apiClient
       .getMetrics()
-      .then((data) => setMetrics(data.metrics))
+      .then((data) => {
+        setMetrics(data.metrics);
+        setSub(data.user || null);
+      })
       .catch((e) => console.error("Failed to load metrics:", e))
       .finally(() => setLoading(false));
+
+    apiClient
+      .getVerseOfDay()
+      .then((data) => setVerse(data.verse))
+      .catch(() => {});
   }, []);
 
   const completed = metrics?.completedLessons ?? 0;
@@ -60,6 +83,67 @@ export default function DashboardPage() {
   const leads = metrics?.totalLeads ?? 0;
   const campaigns = metrics?.totalCampaigns ?? 0;
   const messagesSent = metrics?.messagesSent ?? 0;
+
+  // ── Dynamic "Ação do dia" — the next best step for THIS member, based on
+  // where they are (subscription, leads, dispatches, lessons). ──
+  const daysToExpiry = sub?.subscriptionEnd
+    ? Math.ceil((new Date(sub.subscriptionEnd).getTime() - Date.now()) / 86_400_000)
+    : null;
+
+  type DayAction = { eyebrow: string; title: string; desc: string; button: string; href: string; icon: React.ReactNode };
+  const action: DayAction = (() => {
+    if (sub && (sub.subscriptionStatus !== "active" || (daysToExpiry !== null && daysToExpiry <= 5))) {
+      return {
+        eyebrow: "Atenção",
+        title:
+          daysToExpiry !== null && daysToExpiry >= 0
+            ? `Sua assinatura expira em ${daysToExpiry} dia${daysToExpiry === 1 ? "" : "s"}.`
+            : "Reative seu acesso ao Código Zero.",
+        desc: "Renove para não perder o acesso às aulas, scripts e ao Radar.",
+        button: "Renovar assinatura",
+        href: "/assinatura",
+        icon: <DisparadorIcon size={18} />,
+      };
+    }
+    if (leads === 0) {
+      return {
+        eyebrow: "Ação do dia",
+        title: "Encontre seus próximos clientes em segundos.",
+        desc: "Informe um nicho e uma cidade — o Radar varre o Google Maps, qualifica e devolve a lista pronta para abordagem.",
+        button: "Iniciar prospecção",
+        href: "/radar",
+        icon: <RadarIcon size={18} />,
+      };
+    }
+    if (messagesSent === 0) {
+      return {
+        eyebrow: "Ação do dia",
+        title: `Você tem ${leads.toLocaleString("pt-BR")} lead${leads === 1 ? "" : "s"} prontos. Hora de abordar.`,
+        desc: "Use o Disparador para enviar sua primeira campanha por WhatsApp — com intervalo seguro entre os envios.",
+        button: "Abrir o Disparador",
+        href: "/disparador",
+        icon: <DisparadorIcon size={18} />,
+      };
+    }
+    if (total > 0 && progress < 100) {
+      return {
+        eyebrow: "Ação do dia",
+        title: "Continue de onde parou na Forja.",
+        desc: `Você já concluiu ${progress}% das aulas. Avance mais uma hoje para dominar o método.`,
+        button: "Continuar aulas",
+        href: "/forja",
+        icon: <ForjaIcon size={18} />,
+      };
+    }
+    return {
+      eyebrow: "Ação do dia",
+      title: "Mantenha o ritmo: encontre mais clientes.",
+      desc: "Faça uma nova prospecção no Radar e amplie sua carteira de leads qualificados.",
+      button: "Nova prospecção",
+      href: "/radar",
+      icon: <RadarIcon size={18} />,
+    };
+  })();
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
     { href: "/cofre", icon: <CofreIcon size={20} />, title: "Cofre", desc: "Scripts prontos para vender" },
@@ -75,30 +159,39 @@ export default function DashboardPage() {
         description="Aqui está o resumo de onde você está hoje. Comece pela ação do dia."
       />
 
-      {/* ── Hero ── */}
+      {/* ── Hero (dynamic action of the day) ── */}
       <div className={styles.hero}>
         <div className={styles.heroAccentLine} aria-hidden />
         <div className={styles.heroBody}>
           <div className={styles.heroText}>
-            <span className={styles.heroEyebrow}>Ação do dia</span>
-            <h2 className={styles.heroTitle}>Encontre seus próximos clientes em segundos.</h2>
-            <p className={styles.heroDesc}>
-              Informe um nicho e uma cidade — o Radar varre o Google Maps, qualifica e devolve a lista pronta para abordagem.
-            </p>
+            <span className={styles.heroEyebrow}>{action.eyebrow}</span>
+            <h2 className={styles.heroTitle}>{action.title}</h2>
+            <p className={styles.heroDesc}>{action.desc}</p>
           </div>
           <div className={styles.heroActions}>
             <Button
               variant="primary"
               size="hero"
-              onClick={() => router.push("/radar")}
-              iconStart={<RadarIcon size={18} />}
+              onClick={() => router.push(action.href)}
+              iconStart={action.icon}
               iconEnd={<ChevronRight size={16} />}
             >
-              Iniciar prospecção
+              {action.button}
             </Button>
           </div>
         </div>
       </div>
+
+      {/* ── Versículo do dia ── */}
+      {verse && (
+        <div className={styles.verse}>
+          <span className={styles.verseEyebrow}>
+            {verse.isSabbath ? "Versículo do dia · Dia de guardar o sábado" : "Versículo do dia"}
+          </span>
+          <p className={styles.verseText}>“{verse.text}”</p>
+          <span className={styles.verseRef}>{verse.reference} · {verse.translation}</span>
+        </div>
+      )}
 
       {/* ── Metrics ── */}
       <div className={styles.metricsGrid}>

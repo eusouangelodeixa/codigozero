@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 import { env } from '../config/env';
+import { getVerseOfTheDay } from '../services/verse.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -75,6 +76,18 @@ router.get('/metrics', authMiddleware, subscriptionMiddleware, async (req: AuthR
   } catch (error) {
     console.error('[DASHBOARD] Metrics error:', error);
     return res.status(500).json({ error: 'Erro ao carregar métricas' });
+  }
+});
+
+// GET /api/dashboard/verse-of-the-day — daily Bible verse (rotates daily,
+// Sabbath-aware). Auth only (no subscription gate) so it always renders.
+router.get('/verse-of-the-day', authMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    const verse = await getVerseOfTheDay();
+    return res.json({ verse });
+  } catch (error) {
+    console.error('[DASHBOARD] Verse error:', error);
+    return res.status(500).json({ error: 'Erro ao carregar versículo' });
   }
 });
 

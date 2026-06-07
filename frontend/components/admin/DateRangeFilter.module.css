@@ -39,3 +39,8 @@
   color-scheme: dark;
 }
 .dateInput:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+
+@media (max-width: 640px) {
+  .customRange { width: 100%; }
+  .dateInput { flex: 1 1 0; min-width: 0; width: 100%; box-sizing: border-box; }
+}

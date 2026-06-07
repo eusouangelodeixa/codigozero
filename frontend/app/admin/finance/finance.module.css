@@ -295,6 +295,15 @@
   .periodChips { width: 100%; justify-content: space-between; }
   .periodChip { flex: 1; text-align: center; }
   .searchWrap { width: 100%; }
+  /* "Personalizado": the two date inputs share the row and shrink instead of
+     overflowing the card on mobile. */
+  .customRange { width: 100%; flex-wrap: wrap; }
+  .customRangeLabel { flex: 1 1 130px; min-width: 0; }
+  .customRangeLabel input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
 }
 
 /* ── Transaction list filters ──────────────────────────────── */

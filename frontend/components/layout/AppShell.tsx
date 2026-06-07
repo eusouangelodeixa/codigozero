@@ -288,7 +288,8 @@ export function AppShell({
         {/* Mobile topbar */}
         <header className={styles.mobileTopbar}>
           <div className={styles.topbarBrand}>
-            <Logo variant="mark" size={24} />
+            <Logo size={22} />
+            <span className={styles.topbarDivider} aria-hidden />
             <span className={styles.topbarTitle}>{pageTitle}</span>
           </div>
           <a

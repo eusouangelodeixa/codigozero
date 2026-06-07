@@ -77,10 +77,9 @@ export default function CoproducerLayout({ children }: { children: ReactNode }) 
     <div className={styles.shell}>
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
-          <Logo size={26} />
+          <Logo size={22} />
           <div>
             <div className={styles.brandName}>Coprodução</div>
-            <div className={styles.brandSub}>Código Zero</div>
           </div>
         </div>
 

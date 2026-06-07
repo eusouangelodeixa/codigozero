@@ -207,8 +207,7 @@ export function AppShell({
       {/* ───────── Desktop sidebar ───────── */}
       <aside className={styles.sidebar} aria-label="Navegação principal">
         <a href="/dashboard" onClick={go("/dashboard")} className={styles.brand}>
-          <Logo size={26} />
-          <span className={styles.brandName}>Código Zero</span>
+          <Logo size={24} />
           <span className={styles.brandDot} aria-hidden />
         </a>
 
@@ -289,7 +288,7 @@ export function AppShell({
         {/* Mobile topbar */}
         <header className={styles.mobileTopbar}>
           <div className={styles.topbarBrand}>
-            <Logo size={22} />
+            <Logo variant="mark" size={24} />
             <span className={styles.topbarTitle}>{pageTitle}</span>
           </div>
           <a

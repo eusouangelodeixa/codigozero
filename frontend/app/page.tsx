@@ -615,8 +615,7 @@ export default function LandingPage({
         <nav className={styles.nav}>
           <div className={styles.navInner}>
             <div className={styles.navLogo}>
-              <Logo size={24} />
-              <span className={styles.navBrand}>Código Zero</span>
+              <Logo size={26} />
             </div>
           </div>
         </nav>
@@ -865,7 +864,7 @@ export default function LandingPage({
         <footer className={styles.footer}>
           <div className={styles.footerInner}>
             <div>
-              <div className={styles.footerLogo}><Logo size={20} /><span className={styles.footerBrand}>Código Zero</span></div>
+              <div className={styles.footerLogo}><Logo size={24} /></div>
               <p className={styles.footerDesc}>{t("footerDesc")}</p>
               <a href="https://www.instagram.com/ocodigozero_/" target="_blank" rel="noopener noreferrer" className={styles.footerLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
                 <IconInstagram size={16} strokeWidth={1.5} />

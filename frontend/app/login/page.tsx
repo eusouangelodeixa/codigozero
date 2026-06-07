@@ -107,10 +107,7 @@ export default function LoginPage() {
     <div className={styles.container}>
       <div className={styles.card}>
         <div className={styles.brand}>
-          <span className={styles.logoWrap}>
-            <Logo size={32} />
-          </span>
-          <h1 className={styles.title}>Código Zero</h1>
+          <Logo size={40} />
           <p className={styles.subtitle}>
             {mode === "login" ? "Acesse sua área de membros" : "Recuperar acesso"}
           </p>

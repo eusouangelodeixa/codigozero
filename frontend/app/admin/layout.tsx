@@ -222,9 +222,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className={styles.layout}>
       <aside className={cx(styles.sidebar, mobileMenuOpen && styles.sidebarOpen)}>
         <div className={styles.sidebarHead}>
-          <Logo size={26} />
+          <Logo size={22} />
           <div className={styles.sidebarHeadText}>
-            <span className={styles.sidebarBrand}>Código Zero</span>
             <span className={styles.sidebarRole}>Admin</span>
           </div>
         </div>

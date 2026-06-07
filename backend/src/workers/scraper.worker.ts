@@ -196,29 +196,33 @@ export const scraperWorker = new Worker<ScrapeJobData>(
             // was ONLY ever discovered by crawling an external site, so for
             // the no-website businesses the Radar targets it was almost always
             // null and the instagram filter effectively never matched.
+            // Normalize the "website" the Maps profile lists. An Instagram link
+            // is a social profile (surfaced as `instagram`), and a Google/Maps
+            // URL isn't a real site — both are treated as "no website".
             let website: string | null = details.website;
             let instagram: string | null = null;
             if (website && /instagram\.com/i.test(website)) {
               instagram = website;
               website = null;
             }
+            if (website && /(google\.[a-z.]+|maps\.app|goo\.gl|g\.co|business\.site)/i.test(website)) {
+              website = null;
+            }
 
-            // ── Server-side tri-state filters (before any expensive work) ──
+            // Phone filter (cheap, on the raw phone) before any probing.
             if (!passesFilter(filters?.phone, details.phone)) {
               console.log(`[SCRAPER]   ✗ phone filter: ${details.name}`);
               continue;
             }
-            if (!passesFilter(filters?.website, website)) {
-              console.log(`[SCRAPER]   ✗ website filter: ${details.name}`);
-              continue;
-            }
 
-            // Default classification when there's no website
+            // Classify the website by ACTUALLY probing it (also grabs an
+            // Instagram link from the site). The website filter is then based on
+            // this REAL classification, so "Tem/Não tem website" always matches
+            // the status the lead shows — a listed URL that doesn't load counts
+            // as "Sem Website" (and is a great lead for the product), not as
+            // "has website". This is what fixes the filter "being ignored".
             let status: string = 'Sem Website';
-
-            // Website probe: classify Sem / Lento / Bom and, as a fallback,
-            // extract an Instagram link from the site if we don't have one yet.
-            if (website && !website.includes('google.com')) {
+            if (website) {
               status = 'Website Bom';
               const start = Date.now();
               try {
@@ -243,9 +247,17 @@ export const scraperWorker = new Worker<ScrapeJobData>(
                 status = 'Website Lento/Antigo';
               }
             }
+            // Keep the lead's website field consistent with its status.
+            if (status === 'Sem Website') website = null;
 
-            // Instagram filter — now sourced from the Maps "website" field too,
-            // not only from crawling an external site.
+            // Website filter — on the REAL classification, so it matches the lead.
+            if (!passesFilter(filters?.website, status !== 'Sem Website')) {
+              console.log(`[SCRAPER]   ✗ website filter: ${details.name} (status=${status})`);
+              continue;
+            }
+
+            // Instagram filter — sourced from the Maps "website" field + the
+            // crawled site.
             if (!passesFilter(filters?.instagram, instagram)) {
               console.log(`[SCRAPER]   ✗ instagram filter: ${details.name}`);
               continue;

@@ -226,8 +226,14 @@ router.post('/lojou', async (req: Request, res: Response) => {
         const rawPassword = uuidv4().slice(0, 8);
         const passwordHash = await bcrypt.hash(rawPassword, 10);
 
-        // Create or reactivate user. Pre-existing user → this is a renewal
-        // (or reactivation); brand-new account → first paid order.
+        // Create or reactivate user. A renewal/reactivation is when this
+        // person ALREADY PAID before — NOT merely that a User row exists.
+        // We create 'lead' User rows the moment a visitor submits the landing
+        // form, so a first-time payer who was previously a captured lead must
+        // NOT be counted as a renewal (that was the bug that mislabelled new
+        // sales as renovações). The ground truth is a prior approved
+        // Transaction for this email/phone (the current order's transaction
+        // isn't created yet at this point, so it won't match itself).
         const preExisting = await prisma.user.findFirst({
           where: {
             OR: [
@@ -236,7 +242,20 @@ router.post('/lojou', async (req: Request, res: Response) => {
             ],
           },
         });
-        const isRenewal = !!preExisting;
+        let isRenewal = false;
+        if (preExisting) {
+          const priorPaid = await prisma.transaction.findFirst({
+            where: {
+              status: 'approved',
+              OR: [
+                ...(customerEmail ? [{ userEmail: customerEmail }] : []),
+                ...(customerPhone ? [{ userPhone: customerPhone }] : []),
+              ],
+            },
+            select: { id: true },
+          });
+          isRenewal = !!priorPaid;
+        }
         let user = preExisting;
 
         const subscriber = data.plan_subscriber || {};

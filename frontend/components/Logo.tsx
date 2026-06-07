@@ -19,7 +19,7 @@ export function Logo({
   if (variant === "mark") {
     return (
       <img
-        src="/logo-mark.png?v=4"
+        src="/logo-mark.png?v=5"
         alt="Código Zero"
         width={size}
         height={size}

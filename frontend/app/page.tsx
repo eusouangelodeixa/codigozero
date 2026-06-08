@@ -504,13 +504,11 @@ export default function LandingPage({
                   <Logo size={36} />
                   <div className={styles.hookBadge}>⚡ ACESSO RESTRITO</div>
                   <h1 className={styles.hookTitle}>
-                    Existe um novo modelo de negócio em Moçambique que está a gerar{' '}
-                    <span className={styles.hookHighlight}>50.000 MT/mês</span>{' '}
-                    sem programar uma linha de código.
+                    Aprenda a criar e vender soluções de IA para empresas —{' '}
+                    <span className={styles.hookHighlight}>sem digitar uma linha de código.</span>
                   </h1>
                   <p className={styles.hookDesc}>
-                    Nós preparamos uma aula gratuita que revela os bastidores deste ecossistema. 
-                    Mas antes de liberar o acesso, precisamos confirmar se este modelo é para você.
+                    O ecossistema que te entrega a ferramenta, os clientes e o conhecimento pra construir micronegócios de IA em Moçambique.
                   </p>
                   <div className={styles.hookSteps}>
                     <div className={styles.hookStep}>

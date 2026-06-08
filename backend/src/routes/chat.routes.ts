@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 import { sendPushToUser, sendPushToUsers } from './auth.routes';
@@ -14,6 +14,15 @@ router.use(subscriptionMiddleware);
 const SENDER_SELECT = {
   id: true, name: true, role: true, avatarUrl: true,
 };
+
+// Shared shape for every message we return: the sender, the quoted message it
+// replies to (id + content + sender name), and its reactions (emoji + who).
+// `satisfies` keeps the literal type so Prisma infers `reactions`/`replyTo`.
+const MESSAGE_INCLUDE = {
+  sender: { select: SENDER_SELECT },
+  replyTo: { select: { id: true, content: true, sender: { select: { id: true, name: true } } } },
+  reactions: { select: { emoji: true, userId: true } },
+} satisfies Prisma.ChatMessageInclude;
 
 // Both 'admin' and 'superadmin' act as the support agent. Checking only
 // 'admin' silently broke support for superadmin owners: GET/POST /support
@@ -43,7 +52,7 @@ router.get('/community', async (req: AuthRequest, res: Response) => {
       where,
       orderBy: { createdAt: 'desc' },
       take: limit,
-      include: { sender: { select: SENDER_SELECT } },
+      include: MESSAGE_INCLUDE,
     });
 
     res.json({ messages: messages.reverse() });
@@ -59,7 +68,7 @@ router.get('/community', async (req: AuthRequest, res: Response) => {
  */
 router.post('/community', async (req: AuthRequest, res: Response) => {
   try {
-    const { content } = req.body;
+    const { content, replyToId } = req.body;
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'Mensagem vazia' });
     }
@@ -67,13 +76,21 @@ router.post('/community', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Mensagem muito longa (máx 2000 caracteres)' });
     }
 
+    // Only accept a reply to a message in the same channel.
+    let validReplyId: string | null = null;
+    if (replyToId) {
+      const parent = await prisma.chatMessage.findUnique({ where: { id: String(replyToId) }, select: { channel: true } });
+      if (parent && parent.channel === 'community') validReplyId = String(replyToId);
+    }
+
     const message = await prisma.chatMessage.create({
       data: {
         senderId: req.user!.id,
         channel: 'community',
         content: content.trim(),
+        replyToId: validReplyId,
       },
-      include: { sender: { select: SENDER_SELECT } },
+      include: MESSAGE_INCLUDE,
     });
 
     res.json({ message });
@@ -140,6 +157,44 @@ router.delete('/messages/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // ═══════════════════════════════════════
+// REACTIONS
+// ═══════════════════════════════════════
+
+/**
+ * POST /api/chat/messages/:id/react  { emoji }
+ * Toggle one emoji reaction for the current user on a message.
+ */
+router.post('/messages/:id/react', async (req: AuthRequest, res: Response) => {
+  try {
+    const raw = req.body?.emoji;
+    if (!raw || typeof raw !== 'string' || !raw.trim()) {
+      return res.status(400).json({ error: 'Emoji obrigatório' });
+    }
+    const emoji = raw.trim().slice(0, 12);
+
+    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+
+    const existing = await prisma.messageReaction.findUnique({
+      where: { messageId_userId_emoji: { messageId: msg.id, userId: req.user!.id, emoji } },
+    });
+
+    if (existing) {
+      await prisma.messageReaction.delete({ where: { id: existing.id } });
+      return res.json({ toggled: 'off', emoji });
+    }
+
+    await prisma.messageReaction.create({
+      data: { messageId: msg.id, userId: req.user!.id, emoji },
+    });
+    return res.json({ toggled: 'on', emoji });
+  } catch (error) {
+    console.error('[CHAT] React error:', error);
+    res.status(500).json({ error: 'Erro ao reagir' });
+  }
+});
+
+// ═══════════════════════════════════════
 // SUPPORT CHAT (1:1 with Admin)
 // ═══════════════════════════════════════
 
@@ -170,7 +225,7 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
       where,
       orderBy: { createdAt: 'desc' },
       take: limit,
-      include: { sender: { select: SENDER_SELECT } },
+      include: MESSAGE_INCLUDE,
     });
 
     // Mark unread messages as read for the viewer
@@ -198,7 +253,7 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
  */
 router.post('/support', async (req: AuthRequest, res: Response) => {
   try {
-    const { content, userId } = req.body;
+    const { content, userId, replyToId } = req.body;
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'Mensagem vazia' });
     }
@@ -212,13 +267,21 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
 
     const channel = `support_${targetUserId}`;
 
+    // Only accept a reply to a message in this same support channel.
+    let validReplyId: string | null = null;
+    if (replyToId) {
+      const parent = await prisma.chatMessage.findUnique({ where: { id: String(replyToId) }, select: { channel: true } });
+      if (parent && parent.channel === channel) validReplyId = String(replyToId);
+    }
+
     const message = await prisma.chatMessage.create({
       data: {
         senderId: req.user!.id,
         channel,
         content: content.trim(),
+        replyToId: validReplyId,
       },
-      include: { sender: { select: SENDER_SELECT } },
+      include: MESSAGE_INCLUDE,
     });
 
     res.json({ message });

@@ -4,6 +4,9 @@ import styles from "../admin.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
+// avatarUrl is relative to the API host; resolve it there (the admin origin 404s → broken "?").
+const avatarSrc = (u?: string) => (u ? (u.startsWith("http") ? u : `${API}${u}`) : "");
+const hideOnError = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = "none"; };
 
 interface Conversation {
   channel: string;
@@ -228,7 +231,7 @@ export default function AdminChatPage() {
                       fontSize: "14px", fontWeight: 700, overflow: "hidden",
                     }}>
                       {convo.user?.avatarUrl
-                        ? <img src={convo.user.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                        ? <img src={avatarSrc(convo.user.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
                         : convo.user?.name?.[0]?.toUpperCase() || "?"
                       }
                     </div>
@@ -287,7 +290,7 @@ export default function AdminChatPage() {
                     fontSize: "13px", fontWeight: 700,
                   }}>
                     {selectedConvo.user?.avatarUrl
-                      ? <img src={selectedConvo.user.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ? <img src={avatarSrc(selectedConvo.user.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : selectedConvo.user?.name?.[0]?.toUpperCase() || "?"
                     }
                   </div>
@@ -334,7 +337,7 @@ export default function AdminChatPage() {
                           fontSize: "11px", fontWeight: 700,
                         }}>
                           {msg.sender.avatarUrl
-                            ? <img src={msg.sender.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ? <img src={avatarSrc(msg.sender.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                             : msg.sender.name?.[0]?.toUpperCase() || "?"
                           }
                         </div>

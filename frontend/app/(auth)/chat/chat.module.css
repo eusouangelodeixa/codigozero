@@ -2,11 +2,16 @@
    Chat — Código Zero
    ───────────────────────────────────────────────────────── */
 
+/* The document scrolls in AppShell (sidebar is sticky), so the chat panel needs
+   an explicit height to own its own scroll. `svh` (small viewport height) keeps
+   it correct on mobile when the address bar is visible — `100vh` overshot and
+   pushed the input below the fold / under the bottom nav (the "distortion"). */
 .page {
   display: flex;
   flex-direction: column;
   height: calc(100vh - var(--page-padding) * 2);
-  min-height: 480px;
+  height: calc(100svh - var(--page-padding) * 2);
+  min-height: 420px;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
@@ -15,7 +20,16 @@
 
 @media (max-width: 768px) {
   .page {
-    height: calc(100vh - var(--bottomnav-height) - 120px);
+    /* Fill the visible area between the mobile topbar and the fixed bottom nav
+       (which the content's bottom padding already reserves). */
+    min-height: 0;
+    height: calc(
+      100svh - 56px
+      - var(--space-5)
+      - var(--bottomnav-height) - var(--space-6)
+      - env(safe-area-inset-top, 0px)
+      - env(safe-area-inset-bottom, 0px)
+    );
   }
 }
 
@@ -137,6 +151,7 @@
 .messageOther { align-self: flex-start; }
 
 .avatar {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: var(--radius-full);
@@ -150,7 +165,10 @@
   flex-shrink: 0;
   overflow: hidden;
 }
-.avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* Initial sits underneath; the photo overlays it. If the photo 404s/errors it
+   hides (onError) and the initial shows through — never a broken "?" icon. */
+.avatarInitial { line-height: 1; }
+.avatarImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .avatarAdmin {
   background: var(--accent-dim);
   color: var(--accent);
@@ -256,14 +274,132 @@
   color: var(--color-error);
 }
 
+/* ── Bubble wrapper (bubble + reactions + action bar) ── */
+.bubbleWrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.messageMine .bubbleWrap { align-items: flex-end; }
+
+/* ── Reply quote inside a bubble ── */
+.replyQuote {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 9px;
+  margin-bottom: 6px;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.05);
+}
+.replyQuoteName { font-size: 11px; font-weight: 700; color: var(--accent); }
+.replyQuoteText {
+  font-size: 12px; color: var(--text-secondary); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ── Footer react/reply cue ── */
+.reactCue {
+  width: 20px; height: 20px;
+  border: none; background: transparent;
+  color: var(--text-tertiary);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; border-radius: var(--radius-sm);
+  opacity: 0.55; transition: opacity var(--motion-fast), color var(--motion-fast);
+}
+.reactCue:hover { opacity: 1; color: var(--accent); }
+
+/* ── Action bar (emoji picker + reply + delete), shown on tap/click ── */
+.actionBar {
+  position: absolute;
+  bottom: calc(100% - 6px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  box-shadow: var(--elevation-2);
+  animation: slideUp 140ms var(--ease-out);
+}
+.actionBarOther { left: 0; }
+.actionBarMine { right: 0; }
+.reactPick {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 18px; line-height: 1;
+  width: 30px; height: 30px;
+  border-radius: var(--radius-full);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform 80ms var(--ease-in-out), background var(--motion-fast);
+}
+.reactPick:hover { transform: scale(1.25); background: var(--bg-glass-hover); }
+.actionDivider { width: 1px; height: 20px; background: var(--border-default); margin: 0 2px; }
+.actionBtn {
+  width: 30px; height: 30px; border: none; background: transparent;
+  color: var(--text-secondary); cursor: pointer;
+  border-radius: var(--radius-full);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.actionBtn:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+.actionBtnDanger:hover { background: rgba(239,68,68,0.12); color: var(--color-error); }
+
+/* ── Reaction chips under a bubble ── */
+.reactions { display: flex; flex-wrap: wrap; gap: 4px; }
+.reactionsMine { justify-content: flex-end; }
+.reactionChip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  font-size: 12px; cursor: pointer; line-height: 1.4;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+.reactionChip:hover { border-color: var(--border-strong); }
+.reactionChipMine { background: var(--accent-dim); border-color: var(--accent-border); }
+.reactionCount { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+.reactionChipMine .reactionCount { color: var(--accent); }
+
+/* ── Composer (reply bar + input row) ── */
+.composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.replyBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--space-5) 0;
+}
+.replyBarAccent { width: 3px; align-self: stretch; min-height: 28px; border-radius: 3px; background: var(--accent); }
+.replyBarBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.replyBarName { font-size: 11px; font-weight: 700; color: var(--accent); }
+.replyBarText {
+  font-size: 12px; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.replyBarClose {
+  flex-shrink: 0; width: 26px; height: 26px;
+  border: none; background: var(--bg-glass); color: var(--text-secondary);
+  border-radius: var(--radius-full); cursor: pointer; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.replyBarClose:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+
 /* ── Input bar ── */
 .inputBar {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
   flex-shrink: 0;
 }
 

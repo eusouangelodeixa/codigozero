@@ -12,26 +12,59 @@ const hdr = () => ({
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "🙏", "🔥", "😮"];
+
+interface Reaction {
+  emoji: string;
+  userId: string;
+}
 interface Message {
   id: string;
   content: string;
   createdAt: string;
   sender: { id: string; name: string; role: string; avatarUrl?: string };
+  replyTo?: { id: string; content: string; sender?: { id: string; name: string } } | null;
+  reactions?: Reaction[];
 }
 
 type Tab = "community" | "support";
 
+// avatarUrl is stored relative to the API host (e.g. /uploads/avatars/x.png).
+// Render it against the API origin; the frontend origin would 404 → broken "?".
+const avatarSrc = (url?: string) => (url ? (url.startsWith("http") ? url : `${API}${url}`) : "");
+const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n).trimEnd() + "…" : s);
+
+const aggregateReactions = (reactions: Reaction[] | undefined, myId: string) => {
+  const map = new Map<string, { emoji: string; count: number; mine: boolean }>();
+  for (const r of reactions || []) {
+    const e = map.get(r.emoji) || { emoji: r.emoji, count: 0, mine: false };
+    e.count++;
+    if (r.userId === myId) e.mine = true;
+    map.set(r.emoji, e);
+  }
+  return [...map.values()];
+};
+
 const TrashIcon = (p: { size?: number }) => (
-  <svg width={p.size ?? 13} height={p.size ?? 13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+  <svg width={p.size ?? 15} height={p.size ?? 15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
   </svg>
 );
-
+const ReplyIcon = (p: { size?: number }) => (
+  <svg width={p.size ?? 15} height={p.size ?? 15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 17 4 12 9 7" />
+    <path d="M20 18v-2a4 4 0 00-4-4H4" />
+  </svg>
+);
+const SmileIcon = (p: { size?: number }) => (
+  <svg width={p.size ?? 15} height={p.size ?? 15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" />
+  </svg>
+);
 const SendIcon = (p: { size?: number }) => (
   <svg width={p.size ?? 18} height={p.size ?? 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="22" y1="2" x2="11" y2="13" />
-    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
   </svg>
 );
 
@@ -43,9 +76,16 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [userId, setUserId] = useState("");
   const [userRole, setUserRole] = useState("");
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Whether the user is parked near the bottom. Only then do we auto-scroll on
+  // new messages — otherwise polling would yank them down while reading history.
+  const nearBottomRef = useRef(true);
 
   useEffect(() => {
     try {
@@ -76,28 +116,43 @@ export default function ChatPage() {
   }, [fetchMessages]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (nearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  const onScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
 
   const switchTab = (t: Tab) => {
     setTab(t);
     setMessages([]);
+    setReplyingTo(null);
+    setActiveMsgId(null);
+    nearBottomRef.current = true;
   };
 
   const handleSend = async () => {
     if (!input.trim() || sending) return;
     setSending(true);
+    nearBottomRef.current = true; // sending my own message → jump to bottom
     const endpoint = tab === "community" ? "/api/chat/community" : "/api/chat/support";
+    const body: Record<string, unknown> = { content: input };
+    if (replyingTo) body.replyToId = replyingTo.id;
     try {
       const res = await fetch(`${API}${endpoint}`, {
         method: "POST",
         headers: hdr(),
-        body: JSON.stringify({ content: input }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         const data = await res.json();
         setMessages((prev) => [...prev, data.message]);
         setInput("");
+        setReplyingTo(null);
         inputRef.current?.focus();
       }
     } catch {}
@@ -105,12 +160,10 @@ export default function ChatPage() {
   };
 
   const handleDelete = async (msgId: string) => {
+    setActiveMsgId(null);
     if (!confirm("Deseja apagar esta mensagem?")) return;
     try {
-      const res = await fetch(`${API}/api/chat/messages/${msgId}`, {
-        method: "DELETE",
-        headers: hdr(),
-      });
+      const res = await fetch(`${API}/api/chat/messages/${msgId}`, { method: "DELETE", headers: hdr() });
       if (res.ok) {
         setMessages((prev) => prev.filter((m) => m.id !== msgId));
         toast.success("Mensagem apagada");
@@ -123,13 +176,38 @@ export default function ChatPage() {
     }
   };
 
+  const toggleReaction = async (msgId: string, emoji: string) => {
+    setActiveMsgId(null);
+    // Optimistic: flip the viewer's reaction locally, then persist.
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== msgId) return m;
+        const reactions = [...(m.reactions || [])];
+        const idx = reactions.findIndex((r) => r.emoji === emoji && r.userId === userId);
+        if (idx >= 0) reactions.splice(idx, 1);
+        else reactions.push({ emoji, userId });
+        return { ...m, reactions };
+      })
+    );
+    try {
+      await fetch(`${API}/api/chat/messages/${msgId}/react`, {
+        method: "POST",
+        headers: hdr(),
+        body: JSON.stringify({ emoji }),
+      });
+    } catch {}
+  };
+
+  const startReply = (msg: Message) => {
+    setReplyingTo(msg);
+    setActiveMsgId(null);
+    inputRef.current?.focus();
+  };
+
   const canDelete = (msg: Message) => {
-    // Admins/superadmins can delete any message regardless of age.
     if (viewerIsAdmin) return true;
-    // Owners only within a 15-minute window.
     if (msg.sender.id !== userId) return false;
-    const ageMs = Date.now() - new Date(msg.createdAt).getTime();
-    return ageMs < 15 * 60 * 1000;
+    return Date.now() - new Date(msg.createdAt).getTime() < 15 * 60 * 1000;
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -181,12 +259,12 @@ export default function ChatPage() {
           onChange={(v) => switchTab(v)}
           items={[
             { value: "community", label: "Comunidade" },
-            { value: "support",   label: "Suporte" },
+            { value: "support", label: "Suporte" },
           ]}
         />
       </header>
 
-      <div className={styles.messagesContainer}>
+      <div className={styles.messagesContainer} ref={containerRef} onScroll={onScroll} onClick={() => setActiveMsgId(null)}>
         {messages.length === 0 && (
           <div className={styles.empty}>
             <span className={styles.emptyIcon}><ChatIcon size={24} /></span>
@@ -207,50 +285,92 @@ export default function ChatPage() {
             {group.msgs.map((msg) => {
               const isMine = msg.sender.id === userId;
               const isAdmin = msg.sender.role === "admin" || msg.sender.role === "superadmin";
+              const reactions = aggregateReactions(msg.reactions, userId);
+              const active = activeMsgId === msg.id;
               return (
-                <div
-                  key={msg.id}
-                  className={cx(styles.message, isMine ? styles.messageMine : styles.messageOther)}
-                >
+                <div key={msg.id} className={cx(styles.message, isMine ? styles.messageMine : styles.messageOther)}>
                   {!isMine && (
                     <div className={cx(styles.avatar, isAdmin && styles.avatarAdmin)}>
-                      {msg.sender.avatarUrl ? (
-                        <img src={msg.sender.avatarUrl} alt="" />
-                      ) : (
-                        msg.sender.name?.[0]?.toUpperCase() || "?"
+                      <span className={styles.avatarInitial}>{msg.sender.name?.[0]?.toUpperCase() || "?"}</span>
+                      {msg.sender.avatarUrl && (
+                        <img
+                          src={avatarSrc(msg.sender.avatarUrl)}
+                          alt=""
+                          className={styles.avatarImg}
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        />
                       )}
                     </div>
                   )}
-                  <div
-                    className={cx(
-                      styles.bubble,
-                      isMine ? styles.bubbleMine : styles.bubbleOther,
-                      isAdmin && !isMine && styles.bubbleAdmin
-                    )}
-                  >
-                    {!isMine && (
-                      <div className={styles.senderRow}>
-                        <span className={cx(styles.senderName, isAdmin && styles.senderAdmin)}>
-                          {msg.sender.name}
-                        </span>
-                        {isAdmin && <span className={styles.modBadge}>Moderador</span>}
+
+                  <div className={styles.bubbleWrap}>
+                    {active && (
+                      <div className={cx(styles.actionBar, isMine ? styles.actionBarMine : styles.actionBarOther)} onClick={(e) => e.stopPropagation()}>
+                        {REACTION_EMOJIS.map((em) => (
+                          <button key={em} type="button" className={styles.reactPick} onClick={() => toggleReaction(msg.id, em)} aria-label={`Reagir ${em}`}>
+                            {em}
+                          </button>
+                        ))}
+                        <span className={styles.actionDivider} />
+                        <button type="button" className={styles.actionBtn} onClick={() => startReply(msg)} title="Responder" aria-label="Responder">
+                          <ReplyIcon />
+                        </button>
+                        {canDelete(msg) && (
+                          <button type="button" className={cx(styles.actionBtn, styles.actionBtnDanger)} onClick={() => handleDelete(msg.id)} title="Apagar" aria-label="Apagar">
+                            <TrashIcon />
+                          </button>
+                        )}
                       </div>
                     )}
-                    <p className={styles.bubbleText}>{msg.content}</p>
-                    <div className={styles.bubbleFooter}>
-                      <span className={styles.bubbleTime}>{formatTime(msg.createdAt)}</span>
-                      {canDelete(msg) && (
+
+                    <div
+                      className={cx(styles.bubble, isMine ? styles.bubbleMine : styles.bubbleOther, isAdmin && !isMine && styles.bubbleAdmin)}
+                      onClick={(e) => { e.stopPropagation(); setActiveMsgId(active ? null : msg.id); }}
+                    >
+                      {!isMine && (
+                        <div className={styles.senderRow}>
+                          <span className={cx(styles.senderName, isAdmin && styles.senderAdmin)}>{msg.sender.name}</span>
+                          {isAdmin && <span className={styles.modBadge}>Moderador</span>}
+                        </div>
+                      )}
+
+                      {msg.replyTo && (
+                        <div className={styles.replyQuote}>
+                          <span className={styles.replyQuoteName}>{msg.replyTo.sender?.name || "Mensagem"}</span>
+                          <span className={styles.replyQuoteText}>{truncate(msg.replyTo.content, 120)}</span>
+                        </div>
+                      )}
+
+                      <p className={styles.bubbleText}>{msg.content}</p>
+                      <div className={styles.bubbleFooter}>
+                        <span className={styles.bubbleTime}>{formatTime(msg.createdAt)}</span>
                         <button
                           type="button"
-                          className={styles.deleteBtn}
-                          onClick={() => handleDelete(msg.id)}
-                          aria-label={isMine ? "Apagar" : "Moderar e apagar"}
-                          title={isMine ? "Apagar" : "Moderar (apagar mensagem)"}
+                          className={styles.reactCue}
+                          onClick={(e) => { e.stopPropagation(); setActiveMsgId(active ? null : msg.id); }}
+                          aria-label="Reagir ou responder"
+                          title="Reagir / responder"
                         >
-                          <TrashIcon />
+                          <SmileIcon size={14} />
                         </button>
-                      )}
+                      </div>
                     </div>
+
+                    {reactions.length > 0 && (
+                      <div className={cx(styles.reactions, isMine && styles.reactionsMine)}>
+                        {reactions.map((r) => (
+                          <button
+                            key={r.emoji}
+                            type="button"
+                            className={cx(styles.reactionChip, r.mine && styles.reactionChipMine)}
+                            onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, r.emoji); }}
+                          >
+                            <span>{r.emoji}</span>
+                            <span className={styles.reactionCount}>{r.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -260,29 +380,35 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className={styles.inputBar}>
-        <input
-          ref={inputRef}
-          className={styles.inputField}
-          placeholder={
-            tab === "community"
-              ? "Envie uma mensagem para a comunidade…"
-              : "Envie uma mensagem para o mentor…"
-          }
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          maxLength={2000}
-        />
-        <button
-          type="button"
-          className={styles.sendBtn}
-          onClick={handleSend}
-          disabled={!input.trim() || sending}
-          aria-label="Enviar"
-        >
-          <SendIcon />
-        </button>
+      <div className={styles.composer}>
+        {replyingTo && (
+          <div className={styles.replyBar}>
+            <span className={styles.replyBarAccent} />
+            <div className={styles.replyBarBody}>
+              <span className={styles.replyBarName}>Respondendo a {replyingTo.sender.name}</span>
+              <span className={styles.replyBarText}>{truncate(replyingTo.content, 90)}</span>
+            </div>
+            <button type="button" className={styles.replyBarClose} onClick={() => setReplyingTo(null)} aria-label="Cancelar resposta">✕</button>
+          </div>
+        )}
+        <div className={styles.inputBar}>
+          <input
+            ref={inputRef}
+            className={styles.inputField}
+            placeholder={
+              tab === "community"
+                ? "Envie uma mensagem para a comunidade…"
+                : "Envie uma mensagem para o mentor…"
+            }
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            maxLength={2000}
+          />
+          <button type="button" className={styles.sendBtn} onClick={handleSend} disabled={!input.trim() || sending} aria-label="Enviar">
+            <SendIcon />
+          </button>
+        </div>
       </div>
     </div>
   );

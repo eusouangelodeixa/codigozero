@@ -88,6 +88,7 @@ model User {
   leads              Lead[]
   lessonProgress     LessonProgress[]
   chatMessages       ChatMessage[]
+  messageReactions   MessageReaction[]
   dispatchLogs       DispatchLog[]
   pushSubscriptions  PushSubscription[]
   scheduledDispatches ScheduledDispatch[]
@@ -312,8 +313,32 @@ model ChatMessage {
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
+  // WhatsApp-style reply: the message this one is quoting (same channel).
+  // SetNull so deleting the quoted message doesn't cascade-delete replies.
+  replyToId String?
+  replyTo   ChatMessage?  @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ChatMessage[] @relation("ChatReply")
+
+  reactions MessageReaction[]
+
   @@index([channel, createdAt])
   @@index([senderId])
+  @@index([replyToId])
+}
+
+// One emoji reaction by one user on one message. Unique per (message,user,emoji)
+// so re-reacting with the same emoji toggles it off in the route handler.
+model MessageReaction {
+  id        String      @id @default(uuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 model DispatchLog {

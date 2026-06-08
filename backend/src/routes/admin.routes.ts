@@ -14,6 +14,7 @@ import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { createScheduledDispatch, processDispatch, type DispatchPayload } from '../services/dispatch.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -220,6 +221,21 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
+    // Refunds + cancellations in the window (by original sale date), so the
+    // admin can gauge losses alongside revenue. 'failed' = cancelled orders.
+    const [refundedAgg, failedAgg] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { status: 'refunded', createdAt: { gte: startDate, lte: endDate }, ...searchClause, ...sourceClause },
+        _count: true,
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { status: 'failed', createdAt: { gte: startDate, lte: endDate }, ...searchClause, ...sourceClause },
+        _count: true,
+        _sum: { amount: true },
+      }),
+    ]);
+
     // ── Metrics ────────────────────────────────────────────────────────
     const sum = (xs: { amount: number }[]) => xs.reduce((s, t) => s + t.amount, 0);
     const growth = (curr: number, prev: number) =>
@@ -410,6 +426,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         churnRate,
         expectedRenewals,
         realizedRenewals: realizedRenewalsCount,
+        // Losses in the window
+        refundedCount: refundedAgg._count || 0,
+        refundedAmount: refundedAgg._sum.amount || 0,
+        failedCount: failedAgg._count || 0,
+        failedAmount: failedAgg._sum.amount || 0,
       },
       chartData,
       transactions: {
@@ -963,6 +984,119 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
     res.json({ config });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar config do sistema' });
+  }
+});
+
+// ═══════════════════════════════════════
+// FUNIL — listagem + re-injeção manual de vendas falhas/reembolsadas/canceladas
+// ═══════════════════════════════════════
+
+// GET /api/admin/funnels — lista os funis do Komunika para o seletor de disparo.
+// Degrada com elegância: se o Komunika estiver fora, retorna [] + um aviso.
+router.get('/funnels', async (_req: AuthRequest, res: Response) => {
+  try {
+    const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+    const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+    if (!apiKey) return res.json({ funnels: [], error: 'Chave da API do Komunika não configurada.' });
+    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+    try {
+      const r = await fetch(`${apiUrl}/api/v1/funnels`, { headers: { 'X-API-Key': apiKey } });
+      const data = await r.json().catch(() => null);
+      const funnels = data && data.success && Array.isArray(data.data) ? data.data : [];
+      return res.json({ funnels });
+    } catch (e) {
+      console.error('[ADMIN] Erro ao listar funis do Komunika:', e);
+      return res.json({ funnels: [], error: 'Não foi possível carregar os funis (Komunika indisponível).' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao carregar funis' });
+  }
+});
+
+// POST /api/admin/funnel-injection — re-injeta vendas (por transactionIds ou
+// emails) num funil do Komunika, em segundo plano e com intervalo entre cada
+// envio. Casa o email com o usuário para enviar os dados do quiz ao funil.
+router.post('/funnel-injection', async (req: AuthRequest, res: Response) => {
+  try {
+    const { transactionIds, emails, funnelId, intervalMinSec, intervalMaxSec, name } = req.body || {};
+    if (!funnelId || !String(funnelId).trim()) {
+      return res.status(400).json({ error: 'Selecione um funil.' });
+    }
+
+    // Gather raw targets from transaction ids and/or explicit emails.
+    const raw: { email?: string | null; phone?: string | null; name?: string | null }[] = [];
+    if (Array.isArray(transactionIds) && transactionIds.length) {
+      const txs = await prisma.transaction.findMany({
+        where: { id: { in: transactionIds.map(String) } },
+        select: { userEmail: true, userPhone: true, userName: true },
+      });
+      raw.push(...txs.map((t) => ({ email: t.userEmail, phone: t.userPhone, name: t.userName })));
+    }
+    if (Array.isArray(emails) && emails.length) {
+      raw.push(...emails.map((e: string) => ({ email: String(e) })));
+    }
+    if (!raw.length) return res.status(400).json({ error: 'Nenhuma venda selecionada.' });
+
+    // Resolve each unique target to a user (for quiz data + phone).
+    const seen = new Set<string>();
+    const contacts: DispatchPayload['contacts'] = [];
+    const skipped: { target: string; reason: string }[] = [];
+    for (const t of raw) {
+      const key = (t.email || t.phone || '').toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            ...(t.email ? [{ email: { equals: t.email, mode: 'insensitive' as const } }] : []),
+            ...(t.phone ? [{ phone: t.phone }] : []),
+          ],
+        },
+        select: { name: true, phone: true, surveyAnswers: true, renewalUrl: true, checkoutUrl: true },
+      });
+
+      const phone = (user?.phone || t.phone || '').replace(/\D/g, '');
+      if (!phone) { skipped.push({ target: t.email || '—', reason: 'sem telefone' }); continue; }
+
+      const sa = (user?.surveyAnswers as Record<string, string> | null) || {};
+      contacts.push({
+        phone,
+        name: user?.name || t.name || 'Cliente',
+        variables: {
+          nome: user?.name || t.name || '',
+          goal: sa.goal || '',
+          pain: sa.pain || '',
+          commitment: sa.commitment || '',
+          awareness: sa.awareness || '',
+          checkout_url: user?.renewalUrl || user?.checkoutUrl || '',
+          origem: 'Reinjeção manual (Admin)',
+        },
+      });
+    }
+
+    if (!contacts.length) {
+      return res.status(400).json({ error: 'Nenhum contato com telefone encontrado.', skipped });
+    }
+
+    const minSec = Math.max(0, Number(intervalMinSec) || 60);
+    const maxSec = Math.max(minSec, Number(intervalMaxSec) || 180);
+    const payload: DispatchPayload = {
+      contacts,
+      dispatchMode: 'funnel',
+      funnelId: String(funnelId).trim(),
+      useAdminCreds: true,
+      delayMinSec: minSec,
+      delayMaxSec: maxSec,
+    };
+    const label = (name && String(name).trim()) || `Reinjeção de funil — ${contacts.length} contato(s)`;
+    const row = await createScheduledDispatch(req.user!.id, new Date(), payload, label);
+    processDispatch(row.id).catch((e) => console.error('[FUNNEL-INJECT] background error:', e));
+
+    return res.json({ success: true, scheduleId: row.id, queued: contacts.length, skipped });
+  } catch (error) {
+    console.error('[FUNNEL-INJECT] error:', error);
+    res.status(500).json({ error: 'Erro ao re-injetar no funil' });
   }
 });
 

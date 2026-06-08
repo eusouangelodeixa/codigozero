@@ -17,6 +17,7 @@ import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder, notifyCoproducer } from '../services/coproducer.service';
 import { computeFees } from '../lib/fees';
 import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer } from '../services/stripe.service';
+import { sendCancellationMessage } from '../services/lifecycle.service';
 import {
   generateUserPassword,
   sendCredentialsViaWhatsApp,
@@ -817,6 +818,11 @@ router.post('/stripe', async (req: Request, res: Response) => {
         await handleSubscriptionDeleted(sub);
         break;
       }
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge;
+        await handleChargeRefunded(charge);
+        break;
+      }
       default:
         console.log(`[STRIPE-WEBHOOK] Unhandled event type: ${event.type}`);
     }
@@ -1062,15 +1068,91 @@ async function handleInvoiceFailed(invoice: Stripe.Invoice): Promise<void> {
 async function handleSubscriptionDeleted(sub: Stripe.Subscription): Promise<void> {
   const user = await prisma.user.findFirst({ where: { stripeSubscriptionId: sub.id } });
   if (!user) return;
+  // Mirror the Lojou / in-app cancellation flow: deactivate + drop Close Friends.
   await prisma.user.update({
     where: { id: user.id },
-    data: { subscriptionStatus: 'cancelled' },
+    data: {
+      subscriptionStatus: 'canceled',
+      isActive: false,
+      closeFriends: false,
+      closeFriendsUntil: null,
+    },
   });
-  console.log(`[STRIPE-WEBHOOK/SUB-DELETED] ${user.email} → cancelled`);
+  try {
+    await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { currentUsers: { decrement: 1 } } });
+  } catch {}
+  console.log(`[STRIPE-WEBHOOK/SUB-DELETED] ${user.email} → canceled`);
+
+  // Same WhatsApp confirmation a Lojou / in-app cancellation sends.
+  sendCancellationMessage(user).catch((e) => console.error('[STRIPE-WEBHOOK/SUB-DELETED] WhatsApp failed:', e?.message || e));
+
   sendPushToSuperAdmins({
     title: '🔻 Stripe: assinatura cancelada',
     body: `${user.email} cancelou a assinatura no Stripe.`,
     url: '/admin/users',
+  }).catch(() => {});
+}
+
+/**
+ * Handle a Stripe `charge.refunded` — mirrors the Lojou `order.refunded` flow:
+ * deactivate the user, mark the transaction refunded, reverse commissions and
+ * notify the superadmins. Matches the transaction by payment intent.
+ */
+async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+  const pi = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
+  if (!pi) {
+    console.warn('[STRIPE-WEBHOOK/REFUND] charge without payment_intent — skipping');
+    return;
+  }
+  const tx = await prisma.transaction.findFirst({
+    where: { OR: [{ stripePaymentIntentId: pi }, { orderId: pi }] },
+  });
+  if (!tx) {
+    console.warn(`[STRIPE-WEBHOOK/REFUND] no transaction for payment_intent ${pi}`);
+    return;
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        ...(tx.userEmail ? [{ email: tx.userEmail }] : []),
+        ...(tx.userPhone ? [{ phone: tx.userPhone }] : []),
+      ],
+    },
+  });
+
+  if (user) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        subscriptionStatus: 'canceled',
+        isActive: false,
+        closeFriends: false,
+        closeFriendsUntil: null,
+      },
+    });
+    try {
+      await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { currentUsers: { decrement: 1 } } });
+    } catch {}
+  }
+
+  await prisma.transaction.update({
+    where: { id: tx.id },
+    data: { status: 'refunded' },
+  });
+
+  try {
+    await refundCommissionForOrder(String(tx.orderId));
+    await reversePartnersForOrder(String(tx.orderId));
+  } catch (e: any) {
+    console.error('[STRIPE-WEBHOOK/REFUND] commission reversal error (non-blocking):', e?.message || e);
+  }
+
+  console.log(`[STRIPE-WEBHOOK/REFUND] 🔄 refunded ${tx.orderId}${user ? ` — ${user.email}` : ''}`);
+  sendPushToSuperAdmins({
+    title: '🔄 Stripe: reembolso',
+    body: `Reembolso no Stripe${user ? ` — ${user.name || user.email}` : ` — ${tx.orderId}`}`,
+    url: '/admin/finance',
   }).catch(() => {});
 }
 

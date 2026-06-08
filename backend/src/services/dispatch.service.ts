@@ -17,6 +17,13 @@ export interface DispatchPayload {
   funnelId?: string;
   delayMinSec?: number;
   delayMaxSec?: number;
+  /**
+   * When true, send using the SYSTEM Komunika admin credentials
+   * (SystemConfig.komunikaAdminApiKey / komunikaInstanceId) instead of the
+   * dispatching user's own keys. Used by admin-driven sends like the
+   * funnel re-injection of failed/refunded/cancelled sales.
+   */
+  useAdminCreds?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -64,7 +71,19 @@ export async function processDispatch(scheduleId: string): Promise<void> {
   const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
 
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
-  if (!user || !user.komunikaApiKey || !user.komunikaInstanceId) {
+
+  // Resolve which Komunika credentials to use. Admin-driven sends (funnel
+  // re-injection) use the SYSTEM key; member dispatches use the member's keys.
+  let apiKey = user?.komunikaApiKey || null;
+  let instanceId = user?.komunikaInstanceId || null;
+  if (payload.useAdminCreds) {
+    const cfg = await prisma.systemConfig.findUnique({ where: { id: 'singleton' } });
+    apiKey = cfg?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY || null;
+    instanceId = cfg?.komunikaInstanceId || process.env.KOMUNIKA_INSTANCE_ID || null;
+  }
+  // Funnel add-lead only needs the API key; messages/send also needs an instanceId.
+  const isFunnel = payload.dispatchMode === 'funnel';
+  if (!user || !apiKey || (!isFunnel && !instanceId)) {
     await prisma.scheduledDispatch.update({
       where: { id: scheduleId },
       data: {
@@ -108,7 +127,7 @@ export async function processDispatch(scheduleId: string): Promise<void> {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': user.komunikaApiKey,
+            'X-API-Key': apiKey,
           },
           body: JSON.stringify({
             phone: cleanPhone,
@@ -121,10 +140,10 @@ export async function processDispatch(scheduleId: string): Promise<void> {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-API-Key': user.komunikaApiKey,
+            'X-API-Key': apiKey,
           },
           body: JSON.stringify({
-            instanceId: user.komunikaInstanceId,
+            instanceId: instanceId,
             to: cleanPhone,
             type: payload.type ?? 'text',
             mediaUrl: payload.mediaUrl,

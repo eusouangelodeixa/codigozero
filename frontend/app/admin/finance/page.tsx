@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui";
 import { MetricCard, RevenueChart, type Period as ChartPeriod } from "@/components/admin";
@@ -34,6 +34,10 @@ interface Metrics {
   grossRevenue?: number;
   totalLojouFee?: number;
   totalCoproducerFee?: number;
+  refundedCount?: number;
+  refundedAmount?: number;
+  failedCount?: number;
+  failedAmount?: number;
 }
 
 interface Tx {
@@ -123,6 +127,35 @@ const IconChurn = () => (
   </svg>
 );
 
+const IconRefund = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 2v6h6" /><path d="M3 13a9 9 0 103-7.7L3 8" />
+  </svg>
+);
+const IconCancel = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+  </svg>
+);
+const IconFunnel = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 4h18l-7 8v6l-4 2v-8z" />
+  </svg>
+);
+
+const modalField: CSSProperties = {
+  padding: "9px 12px",
+  background: "var(--bg-elevated)",
+  border: "1px solid var(--border-default)",
+  borderRadius: 8,
+  color: "var(--text-primary)",
+  fontSize: 13,
+  fontFamily: "inherit",
+  width: "100%",
+};
+const modalLabel: CSSProperties = { display: "flex", flexDirection: "column", gap: 6, fontSize: 13 };
+const modalLabelTitle: CSSProperties = { color: "var(--text-secondary)" };
+
 const statusBadge = (s: string) => {
   if (s === "approved") return <Badge variant="success" size="sm">Aprovada</Badge>;
   if (s === "refunded") return <Badge variant="warning" size="sm">Reembolsada</Badge>;
@@ -164,6 +197,22 @@ export default function AdminFinance() {
 
   const [upcoming, setUpcoming] = useState<UpcomingUser[]>([]);
 
+  // ── Funnel re-injection (failed / refunded / cancelled sales) ──
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [funnels, setFunnels] = useState<{ id?: string; _id?: string; name?: string; title?: string }[]>([]);
+  const [funnelsError, setFunnelsError] = useState("");
+  const [injectOpen, setInjectOpen] = useState(false);
+  const [injectFunnel, setInjectFunnel] = useState("");
+  const [injectFunnelManual, setInjectFunnelManual] = useState("");
+  const [intMin, setIntMin] = useState(60);
+  const [intMax, setIntMax] = useState(180);
+  const [injecting, setInjecting] = useState(false);
+  const [injectMsg, setInjectMsg] = useState("");
+
+  const funnelKey = (f: { id?: string; _id?: string }) => f.id || f._id || "";
+  const funnelLabel = (f: { name?: string; title?: string; id?: string; _id?: string }) =>
+    f.name || f.title || f.id || f._id || "Funil";
+
   // Debounce search input → 300ms
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -183,6 +232,7 @@ export default function AdminFinance() {
       return;
     }
     setLoading(true);
+    setSelected(new Set());
     try {
       const params = new URLSearchParams({
         period,
@@ -229,6 +279,70 @@ export default function AdminFinance() {
     if (period === "custom" && (!from || !to)) return;
     fetchData();
   }, [fetchData, period, from, to]);
+
+  // Load the Komunika funnel list once (for the injection selector).
+  const loadFunnels = useCallback(async () => {
+    const token = localStorage.getItem("cz_token");
+    if (!token) return;
+    try {
+      const r = await fetch(`${API_URL}/api/admin/funnels`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        const j = await r.json();
+        setFunnels(j.funnels || []);
+        setFunnelsError(j.error || "");
+      }
+    } catch {
+      setFunnelsError("Não foi possível carregar os funis.");
+    }
+  }, []);
+  useEffect(() => { loadFunnels(); }, [loadFunnels]);
+
+  const toggleRow = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  const visibleIds = data?.transactions.items.map((t) => t.id) ?? [];
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+  const toggleAll = () =>
+    setSelected((prev) => (visibleIds.every((id) => prev.has(id)) ? new Set() : new Set(visibleIds)));
+
+  const openInject = () => {
+    setInjectMsg("");
+    setInjectOpen(true);
+    if (!funnels.length) loadFunnels();
+  };
+
+  const submitInject = async () => {
+    const funnelId = (injectFunnelManual.trim() || injectFunnel).trim();
+    if (!funnelId) { setInjectMsg("Selecione um funil ou informe um ID."); return; }
+    if (selected.size === 0) { setInjectMsg("Selecione ao menos uma venda."); return; }
+    if (intMax < intMin) { setInjectMsg("O intervalo máximo deve ser ≥ ao mínimo."); return; }
+    const token = localStorage.getItem("cz_token");
+    setInjecting(true);
+    setInjectMsg("");
+    try {
+      const r = await fetch(`${API_URL}/api/admin/funnel-injection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          transactionIds: [...selected],
+          funnelId,
+          intervalMinSec: intMin,
+          intervalMaxSec: intMax,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Erro ao disparar");
+      const skipped = Array.isArray(j.skipped) && j.skipped.length ? ` · ${j.skipped.length} sem telefone (ignorados)` : "";
+      setInjectMsg(`✅ ${j.queued} contato(s) enfileirados. O envio roda em segundo plano com intervalo de ${intMin}–${intMax}s${skipped}.`);
+      setSelected(new Set());
+    } catch (e) {
+      setInjectMsg(e instanceof Error ? e.message : "Erro ao disparar");
+    }
+    setInjecting(false);
+  };
 
   const chartWithCount = useMemo(
     () =>
@@ -397,6 +511,20 @@ export default function AdminFinance() {
           icon={<IconUsers />}
           sub="split sobre o principal"
         />
+        <MetricCard
+          label="Reembolsos"
+          value={data ? (data.metrics.refundedCount ?? 0).toLocaleString("pt-MZ") : undefined}
+          loading={loading && !data}
+          icon={<IconRefund />}
+          sub={data ? `${fmtMoney(data.metrics.refundedAmount ?? 0)} no período` : ""}
+        />
+        <MetricCard
+          label="Canceladas"
+          value={data ? (data.metrics.failedCount ?? 0).toLocaleString("pt-MZ") : undefined}
+          loading={loading && !data}
+          icon={<IconCancel />}
+          sub={data ? `${fmtMoney(data.metrics.failedAmount ?? 0)} no período` : ""}
+        />
       </div>
 
       {/* ── Chart ───────────────────────────────────────────── */}
@@ -484,6 +612,20 @@ export default function AdminFinance() {
         <div className={styles.txHead}>
           <span className={styles.txTitle}>Transações</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {selected.size > 0 && (
+              <button
+                type="button"
+                onClick={openInject}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "7px 14px", borderRadius: 8, border: "none",
+                  background: "var(--accent)", color: "var(--accent-fg, #001412)",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                <IconFunnel /> Infectar funil ({selected.size})
+              </button>
+            )}
             <select
               value={txType}
               onChange={(e) => { setTxType(e.target.value); setPage(1); }}
@@ -517,6 +659,15 @@ export default function AdminFinance() {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th style={{ width: 32 }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      aria-label="Selecionar todas"
+                      style={{ cursor: "pointer", accentColor: "var(--accent)" }}
+                    />
+                  </th>
                   <th>Cliente</th>
                   <th>Tipo</th>
                   <th>Origem</th>
@@ -531,7 +682,16 @@ export default function AdminFinance() {
               </thead>
               <tbody>
                 {data.transactions.items.map((tx) => (
-                  <tr key={tx.id}>
+                  <tr key={tx.id} style={selected.has(tx.id) ? { background: "var(--accent-glow, rgba(45,212,191,0.06))" } : undefined}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(tx.id)}
+                        onChange={() => toggleRow(tx.id)}
+                        aria-label="Selecionar venda"
+                        style={{ cursor: "pointer", accentColor: "var(--accent)" }}
+                      />
+                    </td>
                     <td>
                       <div className={styles.client}>
                         <span className={styles.clientName}>{tx.userName || "Cliente"}</span>
@@ -605,9 +765,18 @@ export default function AdminFinance() {
 
             <div className={styles.txMobile}>
               {data.transactions.items.map((tx) => (
-                <div key={tx.id} className={styles.txMobileCard}>
+                <div key={tx.id} className={styles.txMobileCard} style={selected.has(tx.id) ? { borderColor: "var(--accent-border, rgba(45,212,191,0.25))" } : undefined}>
                   <div className={styles.txmHead}>
-                    <span className={styles.txmName}>{tx.userName || "Cliente"}</span>
+                    <span className={styles.txmName} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(tx.id)}
+                        onChange={() => toggleRow(tx.id)}
+                        aria-label="Selecionar venda"
+                        style={{ cursor: "pointer", accentColor: "var(--accent)" }}
+                      />
+                      {tx.userName || "Cliente"}
+                    </span>
                     <span className={styles.txmAmount}>{fmtMoney(tx.amount)}</span>
                   </div>
                   <div className={styles.txmTags}>
@@ -658,6 +827,78 @@ export default function AdminFinance() {
           </div>
         )}
       </div>
+
+      {/* ── Funnel injection modal ──────────────────────────── */}
+      {injectOpen && (
+        <div
+          onClick={() => !injecting && setInjectOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 460, background: "var(--bg-surface, #111)", border: "1px solid var(--border-default)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 16, maxHeight: "90vh", overflowY: "auto" }}
+          >
+            <div>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: 8 }}><IconFunnel /> Infectar funil</h3>
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5 }}>
+                {selected.size} venda(s) selecionada(s). Cada contato entra no funil já com os dados do quiz (objetivo, dor, etc.), em segundo plano e com intervalo aleatório entre os envios.
+              </p>
+            </div>
+
+            <label style={modalLabel}>
+              <span style={modalLabelTitle}>Funil do Komunika</span>
+              <select value={injectFunnel} onChange={(e) => setInjectFunnel(e.target.value)} style={{ ...modalField, cursor: "pointer" }}>
+                <option value="">— selecione um funil —</option>
+                {funnels.map((f) => (
+                  <option key={funnelKey(f)} value={funnelKey(f)}>{funnelLabel(f)}</option>
+                ))}
+              </select>
+              {funnelsError && (
+                <span style={{ fontSize: 11, color: "var(--color-warning)" }}>{funnelsError} Cole um ID abaixo.</span>
+              )}
+            </label>
+
+            <label style={modalLabel}>
+              <span style={modalLabelTitle}>…ou cole o ID do funil</span>
+              <input value={injectFunnelManual} onChange={(e) => setInjectFunnelManual(e.target.value)} placeholder="ID do funil no Komunika" style={modalField} />
+            </label>
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <label style={{ ...modalLabel, flex: 1 }}>
+                <span style={modalLabelTitle}>Intervalo mín (s)</span>
+                <input type="number" min={0} value={intMin} onChange={(e) => setIntMin(Math.max(0, Number(e.target.value)))} style={modalField} />
+              </label>
+              <label style={{ ...modalLabel, flex: 1 }}>
+                <span style={modalLabelTitle}>Intervalo máx (s)</span>
+                <input type="number" min={0} value={intMax} onChange={(e) => setIntMax(Math.max(0, Number(e.target.value)))} style={modalField} />
+              </label>
+            </div>
+
+            {injectMsg && (
+              <div style={{ fontSize: 13, lineHeight: 1.5, color: injectMsg.startsWith("✅") ? "var(--accent)" : "var(--color-error)" }}>{injectMsg}</div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                disabled={injecting}
+                onClick={() => setInjectOpen(false)}
+                style={{ padding: "9px 16px", borderRadius: 8, border: "1px solid var(--border-default)", background: "transparent", color: "var(--text-secondary)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                disabled={injecting}
+                onClick={submitInject}
+                style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "var(--accent)", color: "var(--accent-fg, #001412)", fontSize: 13, fontWeight: 700, cursor: injecting ? "default" : "pointer", opacity: injecting ? 0.7 : 1 }}
+              >
+                {injecting ? "Disparando…" : "Disparar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

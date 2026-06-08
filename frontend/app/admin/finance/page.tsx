@@ -125,8 +125,9 @@ const IconChurn = () => (
 
 const statusBadge = (s: string) => {
   if (s === "approved") return <Badge variant="success" size="sm">Aprovada</Badge>;
-  if (s === "failed") return <Badge variant="error" size="sm">Falhou</Badge>;
-  return <Badge variant="warning" size="sm">Pendente</Badge>;
+  if (s === "refunded") return <Badge variant="warning" size="sm">Reembolsada</Badge>;
+  if (s === "failed" || s === "cancelled" || s === "canceled") return <Badge variant="error" size="sm">Cancelada</Badge>;
+  return <Badge variant="neutral" size="sm">Pendente</Badge>;
 };
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
@@ -151,7 +152,7 @@ export default function AdminFinance() {
   const [to, setTo] = useState<string>("");
   const [source, setSource] = useState<string>("all"); // all | principal | <coproducerId>
   const [txType, setTxType] = useState<string>("all"); // all | new | renewal | closeFriends
-  const [txStatus, setTxStatus] = useState<string>("all"); // all | approved | failed | pending
+  const [txStatus, setTxStatus] = useState<string>("all"); // all | approved | failed | refunded | pending
   const [coproducers, setCoproducers] = useState<CoproducerOpt[]>([]);
 
   const [searchInput, setSearchInput] = useState("");
@@ -500,7 +501,8 @@ export default function AdminFinance() {
             >
               <option value="all">Status: Todos</option>
               <option value="approved">Aprovadas</option>
-              <option value="failed">Falhadas</option>
+              <option value="refunded">Reembolsadas</option>
+              <option value="failed">Canceladas</option>
               <option value="pending">Pendentes</option>
             </select>
             <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>

@@ -16,14 +16,32 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [loginNotice, setLoginNotice] = useState("");
 
-  // Recovery state
-  const [recoverStep, setRecoverStep] = useState<1 | 2>(1);
+  // Recovery state — 3 steps: 1) e-mail, 2) WhatsApp, 3) code + new password.
+  const [recoverStep, setRecoverStep] = useState<1 | 2 | 3>(1);
+  const [recoverEmail, setRecoverEmail] = useState("");
   const [recoverPhone, setRecoverPhone] = useState("");
   const [recoverCode, setRecoverCode] = useState("");
   const [recoverNewPass, setRecoverNewPass] = useState("");
   const [recoverMsg, setRecoverMsg] = useState("");
   const [recoverError, setRecoverError] = useState("");
   const [recoverLoading, setRecoverLoading] = useState(false);
+  const [phoneHint, setPhoneHint] = useState<string | null>(null);
+  const [notSubscriber, setNotSubscriber] = useState(false);
+
+  // Where a non-subscriber is sent to buy a plan.
+  const SUBSCRIBE_URL = "https://czero.sbs";
+
+  const resetRecovery = () => {
+    setRecoverStep(1);
+    setRecoverEmail("");
+    setRecoverPhone("");
+    setRecoverCode("");
+    setRecoverNewPass("");
+    setRecoverMsg("");
+    setRecoverError("");
+    setPhoneHint(null);
+    setNotSubscriber(false);
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -54,6 +72,37 @@ export default function LoginPage() {
     }
   };
 
+  // STEP 1 — confirm the e-mail belongs to a paid account before anything else.
+  const checkEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    setRecoverError("");
+    setRecoverMsg("");
+    setNotSubscriber(false);
+    setRecoverLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/forgot-password/check-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: recoverEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao verificar e-mail");
+      if (!data.subscriber) {
+        // Not a paying customer → show the "become a subscriber" CTA. No code sent.
+        setNotSubscriber(true);
+      } else if (data.noPhone) {
+        setRecoverError("Esta conta não tem WhatsApp cadastrado. Fale com o suporte.");
+      } else {
+        setPhoneHint(data.phoneHint || null);
+        setRecoverStep(2);
+      }
+    } catch (err) {
+      setRecoverError(err instanceof Error ? err.message : "Erro ao verificar e-mail.");
+    }
+    setRecoverLoading(false);
+  };
+
+  // STEP 2 — the WhatsApp number must match the one on file; only then is a code sent.
   const requestCode = async (e: FormEvent) => {
     e.preventDefault();
     setRecoverError("");
@@ -63,18 +112,22 @@ export default function LoginPage() {
       const res = await fetch(`${API_URL}/api/auth/forgot-password/request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: recoverPhone }),
+        body: JSON.stringify({ email: recoverEmail, phone: recoverPhone }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao solicitar código");
-      setRecoverMsg(data.message || "Se o número estiver cadastrado, enviamos um código pelo WhatsApp.");
-      setRecoverStep(2);
+      if (!res.ok) {
+        if (data.notSubscriber) { setNotSubscriber(true); return; }
+        throw new Error(data.error || "Erro ao solicitar código");
+      }
+      setRecoverMsg(data.message || "Enviamos um código pelo WhatsApp.");
+      setRecoverStep(3);
     } catch (err) {
       setRecoverError(err instanceof Error ? err.message : "Erro ao solicitar código.");
     }
     setRecoverLoading(false);
   };
 
+  // STEP 3 — confirm the code and set the new password.
   const resetPassword = async (e: FormEvent) => {
     e.preventDefault();
     setRecoverError("");
@@ -84,18 +137,14 @@ export default function LoginPage() {
       const res = await fetch(`${API_URL}/api/auth/forgot-password/reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: recoverPhone, code: recoverCode, newPassword: recoverNewPass }),
+        body: JSON.stringify({ email: recoverEmail, code: recoverCode, newPassword: recoverNewPass }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao redefinir senha");
       // Back to login with a success banner.
       setMode("login");
       setError("");
-      setRecoverStep(1);
-      setRecoverCode("");
-      setRecoverNewPass("");
-      setRecoverPhone("");
-      setRecoverMsg("");
+      resetRecovery();
       setLoginNotice("Senha redefinida! Faça login com a nova senha.");
     } catch (err) {
       setRecoverError(err instanceof Error ? err.message : "Erro ao redefinir senha.");
@@ -156,7 +205,7 @@ export default function LoginPage() {
             <button
               type="button"
               className={styles.linkBtn}
-              onClick={() => { setMode("recover"); setError(""); setLoginNotice(""); }}
+              onClick={() => { setMode("recover"); setError(""); setLoginNotice(""); resetRecovery(); }}
             >
               Esqueci minha senha
             </button>
@@ -167,13 +216,57 @@ export default function LoginPage() {
           </>
         ) : (
           <>
-            {recoverStep === 1 ? (
-              <form onSubmit={requestCode} className={styles.form}>
+            {notSubscriber ? (
+              <div className={styles.subscriberBox}>
+                <div className={styles.subscriberTitle}>Este e-mail não é de um assinante</div>
+                <p className={styles.subscriberText}>
+                  Não encontramos um plano pago vinculado a este e-mail. A recuperação de senha
+                  é exclusiva para assinantes. Para acessar a plataforma, torne-se assinante.
+                </p>
+                <a className={styles.ctaLink} href={SUBSCRIBE_URL} target="_blank" rel="noopener noreferrer">
+                  Tornar-se assinante
+                </a>
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  onClick={() => { setNotSubscriber(false); setRecoverStep(1); setRecoverError(""); }}
+                >
+                  ← Tentar com outro e-mail
+                </button>
+              </div>
+            ) : recoverStep === 1 ? (
+              <form onSubmit={checkEmail} className={styles.form}>
                 <p className={styles.helpText}>
-                  Informe o número de telefone cadastrado no sistema. Enviaremos um código de verificação pelo WhatsApp.
+                  Informe o e-mail da sua conta. Se houver um plano pago vinculado a ele,
+                  liberamos a verificação pelo WhatsApp.
                 </p>
                 <Input
-                  label="Telefone (WhatsApp)"
+                  label="E-mail da conta"
+                  type="email"
+                  value={recoverEmail}
+                  onChange={(e) => setRecoverEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  required
+                  autoComplete="email"
+                />
+                {recoverError && <div className={styles.error} role="alert">{recoverError}</div>}
+                <Button type="submit" variant="primary" size="lg" loading={recoverLoading} fullWidth>
+                  Continuar
+                </Button>
+              </form>
+            ) : recoverStep === 2 ? (
+              <form onSubmit={requestCode} className={styles.form}>
+                <p className={styles.helpText}>
+                  Confirme o número de WhatsApp cadastrado nesta conta. Se conferir, enviamos um
+                  código de verificação por lá.
+                </p>
+                {phoneHint && (
+                  <p className={styles.phoneHint}>
+                    Número cadastrado: <strong>{phoneHint}</strong>
+                  </p>
+                )}
+                <Input
+                  label="WhatsApp cadastrado"
                   type="tel"
                   value={recoverPhone}
                   onChange={(e) => setRecoverPhone(e.target.value)}
@@ -185,6 +278,9 @@ export default function LoginPage() {
                 <Button type="submit" variant="primary" size="lg" loading={recoverLoading} fullWidth>
                   Enviar código
                 </Button>
+                <button type="button" className={styles.linkBtn} onClick={() => { setRecoverStep(1); setRecoverError(""); }}>
+                  ← Usar outro e-mail
+                </button>
               </form>
             ) : (
               <form onSubmit={resetPassword} className={styles.form}>
@@ -210,19 +306,21 @@ export default function LoginPage() {
                 <Button type="submit" variant="primary" size="lg" loading={recoverLoading} fullWidth>
                   Redefinir senha
                 </Button>
-                <button type="button" className={styles.linkBtn} onClick={() => setRecoverStep(1)}>
-                  Não recebi o código — reenviar
+                <button type="button" className={styles.linkBtn} onClick={() => { setRecoverStep(2); setRecoverError(""); }}>
+                  Não recebi o código — voltar
                 </button>
               </form>
             )}
 
-            <button
-              type="button"
-              className={styles.linkBtn}
-              onClick={() => { setMode("login"); setRecoverStep(1); setRecoverError(""); }}
-            >
-              ← Voltar para o login
-            </button>
+            {!notSubscriber && (
+              <button
+                type="button"
+                className={styles.linkBtn}
+                onClick={() => { setMode("login"); resetRecovery(); }}
+              >
+                ← Voltar para o login
+              </button>
+            )}
           </>
         )}
       </div>

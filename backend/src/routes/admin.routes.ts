@@ -146,7 +146,7 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     // Transaction-list filters (apply to the paginated list only, NOT the
     // window metrics — those always reflect every approved sale).
     const txType = ((req.query.txType as string) || 'all').trim(); // all | new | renewal | closeFriends
-    const txStatus = ((req.query.txStatus as string) || 'all').trim(); // all | approved | failed | pending
+    const txStatus = ((req.query.txStatus as string) || 'all').trim(); // all | approved | failed | refunded | pending
 
     const now = new Date();
     let startDate = new Date(now);

@@ -197,6 +197,15 @@ const otpLimiter = rateLimit({
   message: { error: 'Muitas solicitações de código. Tente novamente em alguns minutos.' },
 });
 
+// Subscription statuses that count as "has/had a paid plan". Anything else —
+// notably 'lead' (a never-paid signup or a refunded account) or an empty/unknown
+// status — is NOT eligible for password recovery. We must NEVER send a recovery
+// code to someone without a plan.
+const PAID_STATUSES = ['active', 'grace_period', 'overdue', 'canceled'];
+const isPaidSubscriber = (status?: string | null) => !!status && PAID_STATUSES.includes(status);
+// Mask all but the last 2 digits, e.g. "258841234567" -> "••••••••••67".
+const maskPhone = (phone: string) => phone.replace(/\d(?=\d{2})/g, '•');
+
 // POST /api/auth/password/request-otp — send a WhatsApp code to confirm a
 // password change in /perfil. Code is delivered to the user's saved phone.
 router.post('/password/request-otp', authMiddleware, otpLimiter, async (req: AuthRequest, res: Response) => {
@@ -245,43 +254,85 @@ router.patch('/password', authMiddleware, async (req: AuthRequest, res: Response
   }
 });
 
-// POST /api/auth/forgot-password/request — start password recovery.
-// The user enters the phone they registered; if it matches an account, we
-// send a WhatsApp code. Always returns a generic success so the endpoint
-// never reveals whether a phone is registered.
-router.post('/forgot-password/request', otpLimiter, async (req: Request, res: Response) => {
+// POST /api/auth/forgot-password/check-email — STEP 1 of recovery.
+// Confirms the e-mail belongs to a PAID account before anything is unlocked.
+// Returns { subscriber:true, phoneHint } so the front-end can reveal the
+// WhatsApp field, or { subscriber:false } so it shows the "tornar-se assinante"
+// CTA. NEVER sends a code (that only happens in /request, after the phone match).
+router.post('/forgot-password/check-email', otpLimiter, async (req: Request, res: Response) => {
   try {
-    const phoneRaw = String(req.body?.phone || '').trim();
-    if (!phoneRaw) return res.status(400).json({ error: 'Informe o número de telefone.' });
+    const email = String(req.body?.email || '').trim();
+    if (!email) return res.status(400).json({ error: 'Informe o e-mail.' });
 
-    const phone = normalizeMzPhone(phoneRaw);
     const user = await prisma.user.findFirst({
-      where: { OR: [{ phone: phoneRaw }, { phone }] },
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { subscriptionStatus: true, phone: true },
     });
 
-    // Only send if the phone matches a real account, but respond the same way
-    // regardless (no account enumeration).
-    if (user) {
-      await createAndSendOtp({ phone: user.phone, purpose: 'password_reset', userId: user.id });
+    // No account, or an account without a paid plan → not a subscriber.
+    if (!user || !isPaidSubscriber(user.subscriptionStatus)) {
+      return res.json({ subscriber: false });
     }
-    return res.json({ success: true, message: 'Se o número estiver cadastrado, enviamos um código pelo WhatsApp.' });
+    // Paid, but no phone on file → can't deliver a WhatsApp code.
+    if (!user.phone) {
+      return res.json({ subscriber: true, phoneHint: null, noPhone: true });
+    }
+    return res.json({ subscriber: true, phoneHint: maskPhone(user.phone) });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao verificar e-mail' });
+  }
+});
+
+// POST /api/auth/forgot-password/request — STEP 2: send the WhatsApp code.
+// Requires { email, phone }. The account must be a paid subscriber AND the
+// number must match the one registered on it. Any other case → no code is sent.
+router.post('/forgot-password/request', otpLimiter, async (req: Request, res: Response) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    const phoneRaw = String(req.body?.phone || '').trim();
+    if (!email) return res.status(400).json({ error: 'Informe o e-mail.' });
+    if (!phoneRaw) return res.status(400).json({ error: 'Informe o número de WhatsApp.' });
+
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true, phone: true, subscriptionStatus: true },
+    });
+
+    // Not a paying customer → block and signal the front-end to show the CTA.
+    if (!user || !isPaidSubscriber(user.subscriptionStatus)) {
+      return res.status(403).json({ error: 'Este e-mail não está vinculado a um plano pago.', notSubscriber: true });
+    }
+    if (!user.phone) {
+      return res.status(400).json({ error: 'Nenhum WhatsApp cadastrado nesta conta. Fale com o suporte.' });
+    }
+    // The number must match the one on file (compare normalized digits).
+    if (normalizeMzPhone(phoneRaw) !== normalizeMzPhone(user.phone)) {
+      return res.status(400).json({ error: 'Este número não corresponde ao WhatsApp cadastrado nesta conta.' });
+    }
+
+    const { sent } = await createAndSendOtp({ phone: user.phone, purpose: 'password_reset', userId: user.id });
+    if (!sent) return res.status(502).json({ error: 'Não foi possível enviar o código pelo WhatsApp. Tente novamente.' });
+    return res.json({ success: true, message: 'Enviamos um código pelo WhatsApp.', phoneHint: maskPhone(user.phone) });
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao solicitar recuperação' });
   }
 });
 
-// POST /api/auth/forgot-password/reset — finish recovery with phone+code.
+// POST /api/auth/forgot-password/reset — STEP 3: confirm code + set new password.
+// Re-checks the subscriber gate so a code can never be redeemed on a non-paid account.
 router.post('/forgot-password/reset', async (req: Request, res: Response) => {
   try {
-    const { phone, code, newPassword } = req.body || {};
-    if (!phone || !code || !newPassword) return res.status(400).json({ error: 'Preencha telefone, código e nova senha.' });
+    const { email, code, newPassword } = req.body || {};
+    if (!email || !code || !newPassword) return res.status(400).json({ error: 'Preencha e-mail, código e nova senha.' });
     if (String(newPassword).length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
 
-    const normalized = normalizeMzPhone(String(phone));
     const user = await prisma.user.findFirst({
-      where: { OR: [{ phone: String(phone).trim() }, { phone: normalized }] },
+      where: { email: { equals: String(email).trim(), mode: 'insensitive' } },
+      select: { id: true, phone: true, subscriptionStatus: true },
     });
-    if (!user) return res.status(400).json({ error: 'Código inválido ou expirado.' });
+    if (!user || !isPaidSubscriber(user.subscriptionStatus) || !user.phone) {
+      return res.status(400).json({ error: 'Código inválido ou expirado.' });
+    }
 
     const otp = await verifyOtp({ phone: user.phone, purpose: 'password_reset', code: String(code) });
     if (!otp.valid) return res.status(400).json({ error: 'Código inválido ou expirado.' });

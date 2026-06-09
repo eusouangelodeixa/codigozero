@@ -10,6 +10,7 @@ import {
   LogOut,
   Star,
   Percent,
+  MessageCircle,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import {
@@ -34,6 +35,8 @@ interface NavItem {
   label: string;
   icon: IconCmp;
   badge?: string;
+  // Non-route items (e.g. open an external SSO link instead of router.push).
+  action?: "komunika";
 }
 
 interface NavGroup {
@@ -133,6 +136,8 @@ export interface AppShellUser {
   closeFriends?: boolean;
   closeFriendsUntil?: string | null;
   isPartner?: boolean;
+  // True when the embedded Komunika tenant is provisioned + active for the user.
+  komunikaActive?: boolean;
 }
 
 const SociosNavItem: NavItem = {
@@ -140,6 +145,16 @@ const SociosNavItem: NavItem = {
   label: "Sócios",
   icon: ({ size = 18, className }: { size?: number; className?: string }) => (
     <Percent size={size} strokeWidth={1.6} className={className} />
+  ),
+};
+
+// "Ferramentas" section — external tools opened via SSO. Add future tools here.
+const KomunikaNavItem: NavItem = {
+  href: "#komunika",
+  label: "Abrir Komunika",
+  action: "komunika",
+  icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+    <MessageCircle size={size} strokeWidth={1.6} className={className} />
   ),
 };
 
@@ -176,14 +191,25 @@ export function AppShell({
 
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
-  // Inject the "Sócios" link into the Negócio group only for revenue-share
-  // partners (so it stays hidden for regular members).
+  // Inject conditional nav: "Sócios" for revenue-share partners, and the
+  // "Ferramentas" section (Komunika) for members with an active tenant.
   const navGroups = useMemo(() => {
-    if (!user?.isPartner) return NAV_GROUPS;
-    return NAV_GROUPS.map((g) =>
-      g.label === "Negócio" ? { ...g, items: [...g.items, SociosNavItem] } : g,
-    );
-  }, [user?.isPartner]);
+    let groups: NavGroup[] = NAV_GROUPS;
+    if (user?.isPartner) {
+      groups = groups.map((g) =>
+        g.label === "Negócio" ? { ...g, items: [...g.items, SociosNavItem] } : g,
+      );
+    }
+    if (user?.komunikaActive) {
+      const ferramentas: NavGroup = { label: "Ferramentas", items: [KomunikaNavItem] };
+      const contaIdx = groups.findIndex((g) => g.label === "Conta");
+      groups =
+        contaIdx === -1
+          ? [...groups, ferramentas]
+          : [...groups.slice(0, contaIdx), ferramentas, ...groups.slice(contaIdx)];
+    }
+    return groups;
+  }, [user?.isPartner, user?.komunikaActive]);
 
   const firstName = user?.name?.split(" ")[0] || "Membro";
   const initial = (user?.name?.charAt(0) || "?").toUpperCase();
@@ -200,6 +226,42 @@ export function AppShell({
   const go = (href: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     router.push(href);
+  };
+
+  // Open the embedded Komunika via SSO. The backend mints a short-lived
+  // magic-link; the JWT secret never reaches the browser. Open the tab
+  // synchronously on click so popup blockers don't swallow it, then navigate.
+  const openKomunika = async () => {
+    const token = localStorage.getItem("cz_token");
+    const win = window.open("about:blank", "_blank");
+    try {
+      const res = await fetch(`${apiUrl}/api/komunika/sso-link`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) {
+        if (win) win.location.href = data.url;
+        else window.location.href = data.url; // popup blocked → same tab
+      } else {
+        if (win) win.close();
+        alert(data.error || "Não foi possível abrir o Komunika.");
+      }
+    } catch {
+      if (win) win.close();
+      alert("Erro de conexão ao abrir o Komunika.");
+    }
+  };
+
+  // Nav click: action items (e.g. Komunika SSO) run their handler; the rest
+  // navigate normally.
+  const handleNav = (item: NavItem) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (item.action === "komunika") {
+      setMenuOpen(false);
+      openKomunika();
+      return;
+    }
+    router.push(item.href);
   };
 
   return (
@@ -222,7 +284,7 @@ export function AppShell({
                   <a
                     key={item.href}
                     href={item.href}
-                    onClick={go(item.href)}
+                    onClick={handleNav(item)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}
                   >
@@ -395,7 +457,7 @@ export function AppShell({
                   <a
                     key={item.href}
                     href={item.href}
-                    onClick={go(item.href)}
+                    onClick={handleNav(item)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}
                   >

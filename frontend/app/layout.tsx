@@ -74,6 +74,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  // When the on-screen keyboard opens, resize the LAYOUT (so viewport units
+  // shrink and fixed elements reflow) instead of overlaying it and scrolling
+  // the document up — that scroll was distorting the chat on mobile.
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: dark)",  color: "#001412" },
     { media: "(prefers-color-scheme: light)", color: "#001412" },

@@ -135,6 +135,19 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  // When the on-screen keyboard opens/closes the visual viewport resizes. Keep
+  // the latest message in view (if the user was at the bottom) so the layout
+  // doesn't appear to jump/cut when typing a reply on mobile.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (nearBottomRef.current) messagesEndRef.current?.scrollIntoView({ block: "end" });
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
+
   const onScroll = () => {
     const el = containerRef.current;
     if (!el) return;

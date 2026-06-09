@@ -18,6 +18,7 @@ import coproducerAdminRoutes from './routes/coproducer.admin.routes';
 import coproducerRoutes from './routes/coproducer.routes';
 import partnerRoutes from './routes/partner.routes';
 import partnerAdminRoutes from './routes/partner.admin.routes';
+import komunikaRoutes from './routes/komunika.routes';
 import { startCronJobs } from './jobs/cron';
 import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
@@ -74,6 +75,7 @@ app.use('/api/partner', partnerRoutes);
 app.use('/api/admin', partnerAdminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/affiliate', affiliateRoutes);
+app.use('/api/komunika', komunikaRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // ── Health Check ──
@@ -91,6 +93,16 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(env.PORT, () => {
   console.log(`\n⚡ Código Zero API running on port ${env.PORT}`);
   console.log(`   Environment: ${env.NODE_ENV}\n`);
+
+  // Komunika module needs BOTH secrets. Provisioning gates on the HMAC secret,
+  // SSO on the JWT secret — warn loudly if only one is set, since the
+  // integration would look live but SSO (or provisioning) would silently fail.
+  if (env.KOMUNIKA_HMAC_SECRET && !env.KOMUNIKA_SSO_JWT_SECRET) {
+    console.warn('[KOMUNIKA] ⚠️ KOMUNIKA_HMAC_SECRET set but KOMUNIKA_SSO_JWT_SECRET MISSING — users get provisioned but every "Abrir Komunika" SSO click will fail. Set both.');
+  } else if (env.KOMUNIKA_SSO_JWT_SECRET && !env.KOMUNIKA_HMAC_SECRET) {
+    console.warn('[KOMUNIKA] ⚠️ KOMUNIKA_SSO_JWT_SECRET set but KOMUNIKA_HMAC_SECRET MISSING — provisioning is disabled, so no tenant ever exists to open. Set both.');
+  }
+
   startCronJobs();
 });
 

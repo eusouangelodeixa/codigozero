@@ -8,6 +8,7 @@ import { transitionDuePending } from '../services/affiliate.service';
 import { transitionDuePartnerPending } from '../services/partner.service';
 import { getActivePrice } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { deprovisionKomunika } from '../services/komunika.service';
 
 const prisma = new PrismaClient();
 
@@ -47,6 +48,10 @@ export function startCronJobs() {
             where: { id: user.id },
             data: { subscriptionStatus: 'overdue', isActive: false },
           });
+          // Expired without renewal → revoke Komunika (no-op if none).
+          deprovisionKomunika(user.id, 'expired').catch((e) =>
+            console.error('[CRON] Komunika deprovision failed (non-blocking):', e?.message || e),
+          );
           console.log(`[CRON] 🔒 User ${user.email} blocked (overdue)`);
         }
       }
@@ -66,6 +71,10 @@ export function startCronJobs() {
           where: { id: user.id },
           data: { subscriptionStatus: 'overdue', isActive: false },
         });
+        // Grace period exhausted → revoke Komunika (no-op if none).
+        deprovisionKomunika(user.id, 'expired').catch((e) =>
+          console.error('[CRON] Komunika deprovision failed (non-blocking):', e?.message || e),
+        );
         console.log(`[CRON] 🔒 User ${user.email} grace period expired → overdue`);
       }
 

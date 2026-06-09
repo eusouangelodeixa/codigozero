@@ -14,6 +14,7 @@ import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { deprovisionKomunika } from '../services/komunika.service';
 import { createScheduledDispatch, processDispatch, type DispatchPayload } from '../services/dispatch.service';
 import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 
@@ -572,7 +573,7 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
 router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, role, isActive, subscriptionStatus, subscriptionStart, subscriptionEnd, password, phone, grantedManually, lojouOrderId, grantAccess } = req.body;
-    const existing = await prisma.user.findUnique({ where: { id: req.params.id }, select: { lojouOrderId: true, grantedManually: true } });
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id }, select: { lojouOrderId: true, grantedManually: true, komunikaCompanyId: true, komunikaDeprovisionedAt: true } });
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado' });
 
     const data: any = {};
@@ -619,6 +620,18 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
     }
 
     const user = await prisma.user.update({ where: { id: req.params.id }, data });
+
+    // If the admin manually deactivated / cancelled this user, revoke Komunika
+    // too (no-op if they never had a tenant). Fire-and-forget.
+    const deactivated =
+      data.isActive === false ||
+      (typeof data.subscriptionStatus === 'string' && ['canceled', 'overdue'].includes(data.subscriptionStatus));
+    if (deactivated && existing.komunikaCompanyId && !existing.komunikaDeprovisionedAt) {
+      deprovisionKomunika(req.params.id, 'cancelled').catch((e) =>
+        console.error('[ADMIN] Komunika deprovision failed (non-blocking):', e?.message || e),
+      );
+    }
+
     res.json({ user });
   } catch (error) {
     console.error('[ADMIN] Update user error:', error);
@@ -628,6 +641,19 @@ router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
 
 router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   try {
+    // Best-effort revoke the Komunika tenant just before the hard delete.
+    // Fire-and-forget — must NOT block the delete on a Komunika outage. It
+    // re-fetches the user, so it must be dispatched before the row is gone;
+    // the small race (delete wins → no-op) is acceptable for a hard delete.
+    const u = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { komunikaCompanyId: true, komunikaDeprovisionedAt: true },
+    });
+    if (u?.komunikaCompanyId && !u.komunikaDeprovisionedAt) {
+      deprovisionKomunika(req.params.id, 'other').catch((e) =>
+        console.error('[ADMIN] Komunika deprovision on delete failed (non-blocking):', e?.message || e),
+      );
+    }
     await prisma.user.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (error) {

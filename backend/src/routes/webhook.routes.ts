@@ -24,6 +24,11 @@ import {
   notifyAdminOfSale,
   reconcileManualStripe,
 } from '../services/payment.service';
+import {
+  syncKomunikaOnApprovedOrder,
+  updateKomunikaSubscription,
+  deprovisionKomunika,
+} from '../services/komunika.service';
 import type Stripe from 'stripe';
 
 const router = Router();
@@ -432,6 +437,18 @@ router.post('/lojou', async (req: Request, res: Response) => {
         console.log(`[WEBHOOK] ✅ User created/reactivated: ${user.email}`);
         console.log(`[WEBHOOK] 🔑 Credentials — Email: ${user.email} | Password: ${rawPassword}`);
 
+        // ── Komunika embedded module (provision + SSO) ───────────────────
+        // Komunika is bundled free with the CZ subscription: provision (or, on
+        // renewal, extend) the tenant for every approved order. Fire-and-forget
+        // with internal retry so we don't block the webhook response. Skipped on
+        // webhook re-delivery (txExistedBefore) — the sync is idempotent anyway,
+        // but this avoids a redundant in-flight provision racing the first.
+        if (!txExistedBefore) {
+          syncKomunikaOnApprovedOrder(user.id).catch((e) =>
+            console.error('[WEBHOOK] Komunika sync failed (non-blocking):', e?.message || e),
+          );
+        }
+
         // Send credentials via WhatsApp (Komunika)
         if (customerPhone) {
           try {
@@ -620,6 +637,11 @@ router.post('/lojou', async (req: Request, res: Response) => {
                 closeFriendsUntil: null,
               },
             });
+
+            // Refund revokes Komunika too (no-op if not provisioned).
+            deprovisionKomunika(user.id, 'refunded').catch((e) =>
+              console.error('[WEBHOOK] Komunika deprovision failed (non-blocking):', e?.message || e),
+            );
 
             await prisma.systemConfig.update({
               where: { id: 'singleton' },
@@ -888,6 +910,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   const subEnd = new Date(now.getTime() + BASE_SUBSCRIPTION_DAYS * DAY_MS);
 
   let rawPassword: string | null = null;
+  // Captured in every branch so we can provision Komunika once below.
+  let provisionedUserId: string | null = null;
 
   if (reconciledId) {
     // Existing manual user — just extend the subscription, don't re-send credentials
@@ -900,6 +924,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
       },
     });
     console.log(`[STRIPE-WEBHOOK/CHECKOUT] Reconciled existing user ${email} → no credentials resend`);
+    provisionedUserId = reconciledId;
   } else {
     const existingByEmail = await prisma.user.findUnique({ where: { email } });
     if (existingByEmail) {
@@ -918,11 +943,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
           role: existingByEmail.role === 'admin' ? 'admin' : 'member',
         },
       });
+      provisionedUserId = existingByEmail.id;
     } else {
       // Brand new user
       const pw = await generateUserPassword();
       rawPassword = pw.raw;
-      await prisma.user.create({
+      const created = await prisma.user.create({
         data: {
           name,
           email,
@@ -936,6 +962,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
           stripeSubscriptionId: subscriptionId ?? null,
         },
       });
+      provisionedUserId = created.id;
     }
   }
 
@@ -961,6 +988,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
       isRenewal: false,
     },
   });
+
+  // ── Komunika embedded module (bundled with the CZ subscription) ──────
+  // The Lojou path provisions at L444; the Stripe (card/international) path
+  // must do the same or these members never get a tenant. Idempotent +
+  // fire-and-forget with internal retry.
+  if (provisionedUserId) {
+    syncKomunikaOnApprovedOrder(provisionedUserId).catch((e) =>
+      console.error('[STRIPE-WEBHOOK/CHECKOUT] Komunika sync failed (non-blocking):', e?.message || e),
+    );
+  }
 
   // Send credentials only when we generated a new password (skip for reconciliations)
   if (rawPassword && phone) {
@@ -1024,6 +1061,11 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     },
   });
 
+  // Renewal → extend the Komunika add-on window (no-op if not provisioned).
+  updateKomunikaSubscription(user.id, 'active').catch((e) =>
+    console.error('[STRIPE-WEBHOOK/INVOICE] Komunika update failed (non-blocking):', e?.message || e),
+  );
+
   await prisma.transaction.create({
     data: {
       orderId: orderRef,
@@ -1058,6 +1100,15 @@ async function handleInvoiceFailed(invoice: Stripe.Invoice): Promise<void> {
   const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
   const user = subId ? await prisma.user.findFirst({ where: { stripeSubscriptionId: subId } }) : null;
   console.warn(`[STRIPE-WEBHOOK/INVOICE-FAILED] sub=${subId} user=${user?.email || 'unknown'}`);
+
+  // Soft-suspend Komunika during Stripe dunning; full revoke happens later on
+  // customer.subscription.deleted. Guarded — user may be null.
+  if (user) {
+    updateKomunikaSubscription(user.id, 'past_due').catch((e) =>
+      console.error('[STRIPE-WEBHOOK/INVOICE-FAILED] Komunika past_due sync failed (non-blocking):', e?.message || e),
+    );
+  }
+
   sendPushToSuperAdmins({
     title: '⚠️ Stripe: pagamento falhou',
     body: `${user?.email || 'Cliente desconhecido'} — invoice ${invoice.id} (${(invoice.amount_due ?? 0) / 100} ${invoice.currency?.toUpperCase()})`,
@@ -1081,6 +1132,12 @@ async function handleSubscriptionDeleted(sub: Stripe.Subscription): Promise<void
   try {
     await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { currentUsers: { decrement: 1 } } });
   } catch {}
+
+  // Cancelled subscription revokes Komunika (no-op if not provisioned).
+  deprovisionKomunika(user.id, 'cancelled').catch((e) =>
+    console.error('[STRIPE-WEBHOOK/SUB-DELETED] Komunika deprovision failed (non-blocking):', e?.message || e),
+  );
+
   console.log(`[STRIPE-WEBHOOK/SUB-DELETED] ${user.email} → canceled`);
 
   // Same WhatsApp confirmation a Lojou / in-app cancellation sends.
@@ -1134,6 +1191,11 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     try {
       await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { currentUsers: { decrement: 1 } } });
     } catch {}
+
+    // Refund revokes Komunika too (no-op if not provisioned).
+    deprovisionKomunika(user.id, 'refunded').catch((e) =>
+      console.error('[STRIPE-WEBHOOK/REFUND] Komunika deprovision failed (non-blocking):', e?.message || e),
+    );
   }
 
   await prisma.transaction.update({

@@ -108,6 +108,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         createdAt: true,
         komunikaApiKey: true,
         komunikaInstanceId: true,
+        komunikaCompanyId: true,
+        komunikaDeprovisionedAt: true,
         avatarUrl: true,
         hasCompletedOnboarding: true,
         closeFriends: true,
@@ -119,7 +121,11 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    return res.json({ user });
+    // Whether the embedded Komunika module is provisioned and active for this
+    // user — gates the "Abrir Komunika" SSO button on the frontend.
+    const komunikaActive = !!user.komunikaCompanyId && !user.komunikaDeprovisionedAt;
+
+    return res.json({ user: { ...user, komunikaActive } });
   } catch (error) {
     console.error('[AUTH] Get me error:', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });

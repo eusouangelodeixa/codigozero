@@ -33,6 +33,17 @@ model User {
   lastSearchDate     DateTime?
   komunikaApiKey     String?
   komunikaInstanceId String?
+  // ── Komunika embedded MODULE (provision + SSO) ──────────────────────
+  // Set when the user buys the Komunika add-on (order bump KOMUNIKA_PID) and
+  // we provision a tenant on api.komunika.site. NULL for the vast majority
+  // of users. komunikaDeprovisionedAt is stamped on refund/cancel/expiry and
+  // cleared on re-provision. The "Abrir Komunika" SSO button only renders
+  // when komunikaCompanyId != null && komunikaDeprovisionedAt == null.
+  // Independent of the funnel keys above (komunikaApiKey/komunikaInstanceId).
+  komunikaCompanyId       String?
+  komunikaUserId          String?
+  komunikaProvisionedAt   DateTime?
+  komunikaDeprovisionedAt DateTime?
   remarketingStage   String           @default("none") // none → visitor_sent | none → checkout_pending → checkout_failed_sent
   surveyAnswers      Json?
   avatarUrl          String?
@@ -94,6 +105,8 @@ model User {
   scheduledDispatches ScheduledDispatch[]
   notificationLogs   NotificationLog[]
   costsCreated       Cost[]            @relation("CostCreatedBy")
+
+  @@index([komunikaCompanyId])
 }
 
 model Lead {

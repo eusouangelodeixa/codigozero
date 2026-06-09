@@ -32,6 +32,15 @@ export const env = {
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',
   KOMUNIKA_FUNNEL_VISITOR_ID: process.env.KOMUNIKA_FUNNEL_VISITOR_ID || '', // Funil de Visitantes Puros
   KOMUNIKA_FUNNEL_CHECKOUT_ID: process.env.KOMUNIKA_FUNNEL_CHECKOUT_ID || '', // Funil de Carrinho Abandonado
+  // ── Komunika EMBEDDED MODULE (provision + SSO) ────────────────────
+  // Distinct from the funnel/remarketing keys above. Komunika is bundled
+  // FREE with the CZ subscription: every paying member is provisioned a
+  // tenant on order.approved (no separate add-on/pid) and can open it via
+  // an SSO magic-link. Both secrets are 64-byte hex (openssl rand -hex 64)
+  // and MUST match CODIGO_ZERO_HMAC_SECRET / CODIGO_ZERO_JWT_SECRET on the
+  // Komunika side. Never sent to the browser.
+  KOMUNIKA_HMAC_SECRET: process.env.KOMUNIKA_HMAC_SECRET || '',
+  KOMUNIKA_SSO_JWT_SECRET: process.env.KOMUNIKA_SSO_JWT_SECRET || '',
   // ── Stripe (international card payments — non-MZ leads) ────────────
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',

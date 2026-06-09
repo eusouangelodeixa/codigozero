@@ -15,6 +15,7 @@ import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { createScheduledDispatch, processDispatch, type DispatchPayload } from '../services/dispatch.service';
+import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -236,6 +237,10 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
+    // Costs in the window → profit = net revenue − costs. Only meaningful on
+    // the consolidated view (source=all); costs aren't attributed per source.
+    const costs = source === 'all' ? await costTotals({ from: startDate, to: endDate }) : { company: 0, shared: 0, total: 0, count: 0 };
+
     // ── Metrics ────────────────────────────────────────────────────────
     const sum = (xs: { amount: number }[]) => xs.reduce((s, t) => s + t.amount, 0);
     const growth = (curr: number, prev: number) =>
@@ -431,6 +436,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         refundedAmount: refundedAgg._sum.amount || 0,
         failedCount: failedAgg._count || 0,
         failedAmount: failedAgg._sum.amount || 0,
+        // Costs + profit (net revenue − costs) in the window
+        costsTotal: costs.total,
+        costsCompany: costs.company,
+        costsShared: costs.shared,
+        profit: Math.round((currentRevenue - costs.total) * 100) / 100,
       },
       chartData,
       transactions: {
@@ -1097,6 +1107,84 @@ router.post('/funnel-injection', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[FUNNEL-INJECT] error:', error);
     res.status(500).json({ error: 'Erro ao re-injetar no funil' });
+  }
+});
+
+// ═══════════════════════════════════════
+// CUSTOS / DESPESAS (somente superadmin)
+// ═══════════════════════════════════════
+const requireSuperadmin = (req: AuthRequest, res: Response): boolean => {
+  if (req.user?.role !== 'superadmin') {
+    res.status(403).json({ error: 'Apenas o superadmin pode acessar os custos.' });
+    return false;
+  }
+  return true;
+};
+
+function parseCostPeriod(q: any): { from?: Date; to?: Date } {
+  const period = (q.period as string) || '30d';
+  const now = new Date();
+  if (period === 'all') return {};
+  if (period === 'custom') {
+    const from = q.from ? new Date(q.from) : undefined;
+    const to = q.to ? new Date(q.to) : undefined;
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(String(q.to))) to.setHours(23, 59, 59, 999);
+    return { from, to };
+  }
+  const from = new Date(now);
+  if (period === 'today') from.setHours(0, 0, 0, 0);
+  else if (period === '7d') from.setDate(now.getDate() - 7);
+  else if (period === '12m') from.setMonth(now.getMonth() - 12);
+  else from.setDate(now.getDate() - 30);
+  return { from, to: now };
+}
+
+router.get('/costs', async (req: AuthRequest, res: Response) => {
+  if (!requireSuperadmin(req, res)) return;
+  try {
+    const { from, to } = parseCostPeriod(req.query);
+    const [costsList, totals] = await Promise.all([
+      listCosts({ from, to, category: req.query.category as string, allocation: req.query.allocation as string }),
+      costTotals({ from, to }),
+    ]);
+    res.json({ costs: costsList, totals, categories: COST_CATEGORIES });
+  } catch (e) {
+    console.error('[COSTS] list error:', e);
+    res.status(500).json({ error: 'Erro ao carregar custos' });
+  }
+});
+
+router.post('/costs', async (req: AuthRequest, res: Response) => {
+  if (!requireSuperadmin(req, res)) return;
+  try {
+    const { description, amount, category, allocation, incurredAt, note } = req.body || {};
+    if (!description || !String(description).trim()) return res.status(400).json({ error: 'Descrição obrigatória' });
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Valor inválido' });
+    const cost = await createCost({
+      description: String(description),
+      amount: amt,
+      category,
+      allocation: allocation === 'shared' ? 'shared' : 'company',
+      incurredAt: incurredAt ? new Date(incurredAt) : undefined,
+      note,
+      createdById: req.user!.id,
+    });
+    res.json({ cost });
+  } catch (e) {
+    console.error('[COSTS] create error:', e);
+    res.status(500).json({ error: 'Erro ao lançar custo' });
+  }
+});
+
+router.delete('/costs/:id', async (req: AuthRequest, res: Response) => {
+  if (!requireSuperadmin(req, res)) return;
+  try {
+    await deleteCost(req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[COSTS] delete error:', e);
+    res.status(500).json({ error: 'Erro ao excluir custo' });
   }
 });
 

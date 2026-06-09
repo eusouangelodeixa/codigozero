@@ -93,6 +93,7 @@ model User {
   pushSubscriptions  PushSubscription[]
   scheduledDispatches ScheduledDispatch[]
   notificationLogs   NotificationLog[]
+  costsCreated       Cost[]            @relation("CostCreatedBy")
 }
 
 model Lead {
@@ -639,6 +640,7 @@ model PartnerAccount {
 
   commissions   PartnerCommission[]
   withdrawals   PartnerWithdrawal[]
+  costShares    PartnerCostShare[]
 
   @@index([enabled])
 }
@@ -681,4 +683,49 @@ model PartnerWithdrawal {
 
   @@index([partnerId, status])
   @@index([status, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COSTS / EXPENSES (superadmin)
+// A separate ledger so profit and partner net are DERIVED — never mutating
+// transactions or commissions. See cost.service.ts.
+// ═══════════════════════════════════════════════════════════════════════════
+model Cost {
+  id          String   @id @default(uuid())
+  description String
+  amount      Float
+  category    String   @default("outro") // ferramentas | ads | salario | infra | impostos | outro
+  // company → reduces company profit only. shared → split among enabled
+  // partners pro-rata by sharePct (creates PartnerCostShare debits).
+  allocation  String   @default("company") // company | shared
+  incurredAt  DateTime @default(now())
+  note        String?
+  createdById String?
+  createdBy   User?    @relation("CostCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  costShares  PartnerCostShare[]
+
+  @@index([incurredAt])
+  @@index([allocation])
+}
+
+// One partner's pro-rata share of a "shared" cost. A debit against the
+// partner's available pool: balance = available commissions − open cost shares.
+// Settled (and linked to the withdrawal) when the partner withdraws.
+model PartnerCostShare {
+  id           String         @id @default(uuid())
+  costId       String?
+  cost         Cost?          @relation(fields: [costId], references: [id], onDelete: SetNull)
+  partnerId    String
+  partner      PartnerAccount @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  amount       Float          // positive — what this partner owes toward the cost
+  sharePct     Float
+  status       String         @default("open") // open | settled
+  withdrawalId String?
+  settledAt    DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@index([partnerId, status])
+  @@index([costId])
 }

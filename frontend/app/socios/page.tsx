@@ -16,6 +16,8 @@ interface Account {
 
 interface Balance {
   available: number;
+  grossAvailable?: number;
+  costShare?: number;
   pending: number;
   withdrawn: number;
   salesCount: number;
@@ -172,9 +174,15 @@ export default function SociosPage() {
           <div className={styles.statBlock}>
             <span className={styles.statLabel}>Disponível para saque</span>
             <span className={styles.statValueAccent}>{fmtMzn(balance?.available ?? 0)} MT</span>
-            <span className={styles.statHint}>
-              {canWithdraw ? "Você pode solicitar agora" : `Mínimo: ${fmtMzn(minW)} MT`}
-            </span>
+            {balance?.costShare ? (
+              <span className={styles.statHint}>
+                Já descontado {fmtMzn(balance.costShare)} MT de custos rateados
+              </span>
+            ) : (
+              <span className={styles.statHint}>
+                {canWithdraw ? "Você pode solicitar agora" : `Mínimo: ${fmtMzn(minW)} MT`}
+              </span>
+            )}
           </div>
         </Card>
         <Card padding="md">

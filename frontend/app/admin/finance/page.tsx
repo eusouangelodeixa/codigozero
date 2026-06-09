@@ -38,6 +38,10 @@ interface Metrics {
   refundedAmount?: number;
   failedCount?: number;
   failedAmount?: number;
+  costsTotal?: number;
+  costsCompany?: number;
+  costsShared?: number;
+  profit?: number;
 }
 
 interface Tx {
@@ -140,6 +144,11 @@ const IconCancel = () => (
 const IconFunnel = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 4h18l-7 8v6l-4 2v-8z" />
+  </svg>
+);
+const IconCost = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
   </svg>
 );
 
@@ -524,6 +533,22 @@ export default function AdminFinance() {
           loading={loading && !data}
           icon={<IconCancel />}
           sub={data ? `${fmtMoney(data.metrics.failedAmount ?? 0)} no período` : ""}
+        />
+        <MetricCard
+          label="Custos"
+          value={data ? fmtMoney(data.metrics.costsTotal ?? 0) : undefined}
+          loading={loading && !data}
+          icon={<IconCost />}
+          sub={data ? `${fmtMoney(data.metrics.costsShared ?? 0)} rateados · ${fmtMoney(data.metrics.costsCompany ?? 0)} empresa` : ""}
+        />
+        <MetricCard
+          accent
+          label="Lucro líquido"
+          value={data ? fmtMoney(data.metrics.profit ?? 0) : undefined}
+          loading={loading && !data}
+          icon={<IconRevenue />}
+          iconAccent
+          sub="receita líquida − custos"
         />
       </div>
 

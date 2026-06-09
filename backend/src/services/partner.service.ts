@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { getPartnerOpenCostShareTotal } from './cost.service';
 
 const prisma = new PrismaClient();
 
@@ -158,16 +159,22 @@ export async function getPartnerBalance(partnerId: string) {
     }),
   ]);
 
-  const available = round2(availableAgg._sum.amount ?? 0);
+  const grossAvailable = round2(availableAgg._sum.amount ?? 0);
   const pending = round2(pendingAgg._sum.amount ?? 0);
   const withdrawn = round2(withdrawnAgg._sum.amount ?? 0);
 
+  // Open shared-cost debits reduce what the partner can actually withdraw.
+  const costShare = await getPartnerOpenCostShareTotal(partnerId);
+  const available = round2(Math.max(0, grossAvailable - costShare));
+
   return {
-    available,
+    available,            // net withdrawable (after open cost shares)
+    grossAvailable,       // commissions available before cost deductions
+    costShare,            // open shared-cost debits
     pending,
     withdrawn,
     salesCount: availableAgg._count + pendingAgg._count + withdrawnAgg._count,
-    lifetimeEarnings: round2(available + pending + withdrawn),
+    lifetimeEarnings: round2(grossAvailable + pending + withdrawn),
   };
 }
 
@@ -203,18 +210,27 @@ export async function requestWithdrawal(opts: {
       where: { partnerId: opts.partnerId, status: 'available' },
       orderBy: { availableAt: 'asc' },
     });
-    const balance = available.reduce((s, c) => s + c.amount, 0);
-    if (balance < amount) {
-      return { ok: false as const, error: `Saldo insuficiente (disponível: ${round2(balance)} MZN)` };
+    const grossBalance = available.reduce((s, c) => s + c.amount, 0);
+
+    // Open shared-cost debits are paid from the pool too: net withdrawable =
+    // gross commissions − what the partner owes toward shared costs.
+    const openShares = await tx.partnerCostShare.findMany({
+      where: { partnerId: opts.partnerId, status: 'open' },
+    });
+    const owed = openShares.reduce((s, cs) => s + cs.amount, 0);
+    const net = grossBalance - owed;
+    if (net < amount) {
+      return { ok: false as const, error: `Saldo insuficiente (disponível após custos: ${round2(Math.max(0, net))} MZN)` };
     }
 
-    // Consume commissions greedily until we reach the requested amount. The
-    // last row may overshoot — we still consume it whole; the surplus stays
-    // as withdrawn balance (splitting a row complicates refund handling).
+    // Remove (amount + owed) of commissions from the pool: `amount` is paid out
+    // and `owed` is absorbed to settle the shared-cost debits. Consume greedily;
+    // the last row may overshoot (kept whole — splitting complicates refunds).
+    const target = amount + owed;
     const consumedIds: string[] = [];
     let consumed = 0;
     for (const c of available) {
-      if (consumed >= amount) break;
+      if (consumed >= target) break;
       consumedIds.push(c.id);
       consumed += c.amount;
     }
@@ -237,6 +253,15 @@ export async function requestWithdrawal(opts: {
       where: { id: { in: consumedIds } },
       data: { status: 'withdrawn', withdrawalId: withdrawal.id },
     });
+
+    // Settle the partner's open cost debits — they were just covered by the
+    // consumed commissions, so they stop reducing future balances.
+    if (openShares.length > 0) {
+      await tx.partnerCostShare.updateMany({
+        where: { id: { in: openShares.map((s) => s.id) } },
+        data: { status: 'settled', settledAt: new Date(), withdrawalId: withdrawal.id },
+      });
+    }
 
     return {
       ok: true as const,

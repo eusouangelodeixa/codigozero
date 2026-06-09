@@ -12,6 +12,7 @@ interface NavItem {
   href: string;
   label: string;
   icon: ReactNode;
+  superadmin?: boolean; // only shown to superadmin
 }
 
 const I = {
@@ -122,6 +123,7 @@ const NAV: NavGroup[] = [
     items: [
       { href: "/admin",         label: "Dashboard",   icon: I.Dashboard },
       { href: "/admin/finance", label: "Financeiro",  icon: I.Finance },
+      { href: "/admin/custos",  label: "Custos",      icon: I.Finance, superadmin: true },
       { href: "/admin/status",  label: "Status",      icon: I.Status },
     ],
   },
@@ -243,7 +245,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               >
                 {group.label}
               </span>
-              {group.items.map((item) => (
+              {group.items.filter((item) => !item.superadmin || user?.role === "superadmin").map((item) => (
                 <button
                   key={item.href}
                   type="button"

@@ -1,16 +1,46 @@
 "use client";
 import { useEffect, useState } from "react";
-import { PageHeader, Card, Button, Badge, useToast } from "@/components/ui";
-import { MessageCircle, GitBranch, Megaphone, MessagesSquare, Users, Plus } from "lucide-react";
+import { PageHeader, useToast } from "@/components/ui";
+import { Check, ExternalLink, Loader2, Plus } from "lucide-react";
+import styles from "./ferramentas.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 const KOMUNIKA_FEATURES = [
-  { icon: GitBranch, label: "Funis de conversa" },
-  { icon: Megaphone, label: "Campanhas em massa" },
-  { icon: MessagesSquare, label: "Conversas e atendimento" },
-  { icon: Users, label: "Contactos organizados" },
+  "Funis de conversa",
+  "Campanhas em massa",
+  "Conversas e atendimento",
+  "Contactos organizados",
 ];
+
+// Provisional Komunika logo (indigo → violet gradient "K"), kept inline until a
+// definitive asset is hosted at komunika.site/logo.svg. Palette matches the
+// Komunika app's AI-node colors for visual continuity after the user clicks in.
+function KomunikaLogo() {
+  return (
+    <svg viewBox="0 0 64 64" className={styles.logo} aria-label="Komunika">
+      <defs>
+        <linearGradient id="komunika-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#8b5cf6" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill="url(#komunika-grad)" />
+      <text
+        x="32"
+        y="45"
+        fontFamily="-apple-system, system-ui, sans-serif"
+        fontSize="40"
+        fontWeight="900"
+        fill="white"
+        textAnchor="middle"
+        letterSpacing="-2"
+      >
+        K
+      </text>
+    </svg>
+  );
+}
 
 export default function FerramentasPage() {
   const toast = useToast();
@@ -32,7 +62,7 @@ export default function FerramentasPage() {
   // magic-link; the JWT secret never reaches the browser. Open the tab
   // synchronously on click so popup blockers don't swallow it, then navigate.
   const openKomunika = async () => {
-    const win = window.open("about:blank", "_blank");
+    const win = window.open("about:blank", "_blank", "noopener");
     setOpening(true);
     try {
       const res = await fetch(`${API}/api/komunika/sso-link`, { headers: hdr() });
@@ -52,101 +82,76 @@ export default function FerramentasPage() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className={styles.page}>
       <PageHeader
         label="Conta · Ferramentas"
         title="Ferramentas"
         description="Seu hub de ferramentas e integrações. Abra direto, sem login extra."
       />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: 16,
-          alignItems: "stretch",
-        }}
-      >
+      <div className={styles.grid}>
         {/* ── Komunika ── */}
-        <Card padding="lg">
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span
-                style={{
-                  display: "grid",
-                  placeItems: "center",
-                  width: 44,
-                  height: 44,
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--accent-dim)",
-                  color: "var(--accent)",
-                  flexShrink: 0,
-                }}
-              >
-                <MessageCircle size={22} strokeWidth={1.7} />
-              </span>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 16, color: "var(--text-primary)" }}>Komunika</div>
-                <div style={{ fontSize: 12.5, color: "var(--text-tertiary)" }}>Automação de WhatsApp</div>
-              </div>
-              <Badge variant={komunikaActive ? "success" : "neutral"} size="sm">
-                {loading ? "…" : komunikaActive ? "Incluído no plano" : "Preparando"}
-              </Badge>
+        <article className={styles.card}>
+          <header className={styles.header}>
+            <KomunikaLogo />
+            <div className={styles.titleWrap}>
+              <div className={styles.title}>Komunika</div>
+              <div className={styles.subtitle}>Automação de WhatsApp</div>
             </div>
+            <span className={komunikaActive ? styles.badge : `${styles.badge} ${styles.badgePending}`}>
+              {loading ? "…" : komunikaActive ? "Incluído" : "Preparando"}
+            </span>
+          </header>
 
-            <p style={{ fontSize: 13.5, lineHeight: 1.55, color: "var(--text-secondary)", margin: 0 }}>
-              Plataforma de WhatsApp do Código Zero: centralize o atendimento, dispare campanhas e
-              organize contactos e funis — tudo num só lugar, já incluído na sua assinatura.
-            </p>
+          <p className={styles.desc}>
+            Plataforma de WhatsApp do Código Zero: centralize o atendimento, dispare campanhas e
+            organize contactos e funis — tudo num só lugar, já incluído na sua assinatura.
+          </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {KOMUNIKA_FEATURES.map(({ icon: Icon, label }) => (
-                <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Icon size={15} strokeWidth={1.7} style={{ color: "var(--accent)", flexShrink: 0 }} />
-                  <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>{label}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-              <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>
-                1 número WhatsApp · 2 atendentes
-              </span>
-              <Button
-                variant="accent"
-                onClick={openKomunika}
-                loading={opening}
-                disabled={loading || !komunikaActive}
-              >
-                Abrir Komunika ↗
-              </Button>
-              {!loading && !komunikaActive && (
-                <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>
-                  Seu acesso está sendo preparado — tente novamente em alguns minutos.
+          <ul className={styles.features}>
+            {KOMUNIKA_FEATURES.map((feat) => (
+              <li key={feat} className={styles.feature}>
+                <span className={styles.check}>
+                  <Check size={11} strokeWidth={3} />
                 </span>
-              )}
-            </div>
-          </div>
-        </Card>
+                {feat}
+              </li>
+            ))}
+          </ul>
 
-        {/* ── Placeholder: future tools ── */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-            minHeight: 180,
-            padding: 24,
-            border: "1px dashed var(--border-strong)",
-            borderRadius: "var(--radius-md)",
-            color: "var(--text-tertiary)",
-            textAlign: "center",
-          }}
-        >
+          <footer className={styles.footer}>
+            <span className={styles.limits}>1 número WhatsApp · 2 atendentes</span>
+            <button
+              type="button"
+              className={styles.cta}
+              onClick={openKomunika}
+              disabled={loading || opening || !komunikaActive}
+            >
+              {opening ? (
+                <>
+                  <Loader2 size={16} className={styles.spin} />
+                  Abrindo…
+                </>
+              ) : (
+                <>
+                  Abrir Komunika
+                  <ExternalLink size={14} />
+                </>
+              )}
+            </button>
+          </footer>
+
+          {!loading && !komunikaActive && (
+            <span className={styles.note}>
+              Seu acesso está sendo preparado — tente novamente em alguns minutos.
+            </span>
+          )}
+        </article>
+
+        {/* ── Future tools ── */}
+        <div className={styles.placeholder}>
           <Plus size={20} strokeWidth={1.6} />
-          <span style={{ fontSize: 13 }}>Mais ferramentas em breve</span>
+          <span>Mais ferramentas em breve</span>
         </div>
       </div>
     </div>

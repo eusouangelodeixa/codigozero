@@ -38,6 +38,16 @@ export default function AdminChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<any>(null);
+  // On mobile we show the inbox OR the conversation (master-detail), never both
+  // side-by-side — otherwise the 320px inbox squeezes the messages to a sliver.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
@@ -188,15 +198,16 @@ export default function AdminChatPage() {
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: view === "support" ? "320px 1fr" : "1fr",
+        gridTemplateColumns: isMobile ? "1fr" : (view === "support" ? "320px 1fr" : "1fr"),
         gap: "0", border: "1px solid rgba(255,255,255,0.06)",
         borderRadius: "12px", overflow: "hidden",
-        height: "calc(100vh - 180px)", minHeight: "500px",
+        height: isMobile ? "calc(100svh - 140px)" : "calc(100vh - 180px)",
+        minHeight: isMobile ? 0 : "500px",
       }}>
 
-        {/* ── Inbox Sidebar (support only) ── */}
-        {view === "support" && (
-          <div style={{ background: "#0d0d12", borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column" }}>
+        {/* ── Inbox Sidebar (support only; on mobile, only when no convo is open) ── */}
+        {view === "support" && (!isMobile || !selectedUserId) && (
+          <div style={{ background: "#0d0d12", borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", minWidth: 0 }}>
             <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: "13px", color: "#888", fontWeight: 600 }}>
               {conversations.length} Conversa{conversations.length !== 1 ? "s" : ""}
             </div>
@@ -268,8 +279,9 @@ export default function AdminChatPage() {
           </div>
         )}
 
-        {/* ── Chat Panel ── */}
-        <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0f" }}>
+        {/* ── Chat Panel (on mobile, only when a conversation/community is open) ── */}
+        {(!isMobile || showChatPanel) && (
+        <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0f", minWidth: 0 }}>
           {!showChatPanel ? (
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px" }}>
               <span style={{ fontSize: "40px", opacity: 0.4 }}>💬</span>
@@ -283,8 +295,17 @@ export default function AdminChatPage() {
                   padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)",
                   display: "flex", alignItems: "center", gap: "10px", flexShrink: 0,
                 }}>
+                  {isMobile && (
+                    <button
+                      onClick={() => { setSelectedUserId(null); setMessages([]); }}
+                      style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", padding: "4px", marginLeft: "-4px", display: "flex", flexShrink: 0 }}
+                      aria-label="Voltar para a lista"
+                    >
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                    </button>
+                  )}
                   <div style={{
-                    width: "32px", height: "32px", borderRadius: "50%", overflow: "hidden",
+                    width: "32px", height: "32px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
                     background: "rgba(45,212,191,0.12)", color: "#2DD4BF",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: "13px", fontWeight: 700,
@@ -424,6 +445,7 @@ export default function AdminChatPage() {
             </>
           )}
         </div>
+        )}
       </div>
 
       {toast && (

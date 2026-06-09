@@ -182,7 +182,14 @@
   max-width: 100%;
   word-wrap: break-word;
   position: relative;
+  z-index: 1;
   transition: background var(--motion-fast);
+  /* Let vertical scroll pass to the list, but capture horizontal for swipe-to-
+     reply. Disable native long-press selection so it doesn't fight the menu. */
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .bubbleMine {
@@ -284,6 +291,26 @@
   max-width: 100%;
 }
 .messageMine .bubbleWrap { align-items: flex-end; }
+
+/* Reply arrow revealed behind a bubble while swiping it to the right. */
+.swipeIndicator {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: var(--accent-dim);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 60ms linear;
+}
 
 /* ── Reply quote inside a bubble ── */
 .replyQuote {

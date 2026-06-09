@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type TouchEvent as ReactTouchEvent } from "react";
 import { Tabs, useToast } from "@/components/ui";
 import { ChatIcon } from "@/components/Icons";
 import styles from "./chat.module.css";
@@ -62,6 +62,11 @@ const SmileIcon = (p: { size?: number }) => (
     <circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" />
   </svg>
 );
+const CopyIcon = (p: { size?: number }) => (
+  <svg width={p.size ?? 15} height={p.size ?? 15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+  </svg>
+);
 const SendIcon = (p: { size?: number }) => (
   <svg width={p.size ?? 18} height={p.size ?? 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -86,6 +91,15 @@ export default function ChatPage() {
   // Whether the user is parked near the bottom. Only then do we auto-scroll on
   // new messages — otherwise polling would yank them down while reading history.
   const nearBottomRef = useRef(true);
+
+  // Touch-gesture state (WhatsApp-style): swipe-right to reply, long-press to
+  // open the action menu. suppressClickRef stops the synthetic click after a
+  // gesture from also toggling the menu.
+  const suppressClickRef = useRef(false);
+  const gestureRef = useRef<{
+    id: string; x: number; y: number; el: HTMLElement | null;
+    mode: "none" | "swipe" | "scroll"; timer: ReturnType<typeof setTimeout> | null; longPressed: boolean;
+  }>({ id: "", x: 0, y: 0, el: null, mode: "none", timer: null, longPressed: false });
 
   useEffect(() => {
     try {
@@ -204,6 +218,70 @@ export default function ChatPage() {
     inputRef.current?.focus();
   };
 
+  const copyMessage = async (msg: Message) => {
+    setActiveMsgId(null);
+    try {
+      await navigator.clipboard.writeText(msg.content);
+      toast.success("Mensagem copiada");
+    } catch {
+      toast.error("Não foi possível copiar");
+    }
+  };
+
+  // ── WhatsApp-style touch gestures ──
+  const SWIPE_TRIGGER = 56; // px to drag before a reply fires
+  const onMsgTouchStart = (e: ReactTouchEvent<HTMLDivElement>, msg: Message) => {
+    const t = e.touches[0];
+    suppressClickRef.current = false;
+    const g = gestureRef.current;
+    g.id = msg.id; g.x = t.clientX; g.y = t.clientY; g.el = e.currentTarget;
+    g.mode = "none"; g.longPressed = false;
+    if (g.timer) clearTimeout(g.timer);
+    g.timer = setTimeout(() => {
+      g.longPressed = true;
+      suppressClickRef.current = true;
+      setActiveMsgId(msg.id);
+      try { navigator.vibrate?.(15); } catch {}
+    }, 430);
+  };
+  const onMsgTouchMove = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const g = gestureRef.current;
+    if (!g.el) return;
+    const t = e.touches[0];
+    const dx = t.clientX - g.x;
+    const dy = t.clientY - g.y;
+    if (g.mode === "none") {
+      if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) { g.mode = "scroll"; if (g.timer) clearTimeout(g.timer); return; }
+      if (Math.abs(dx) > 8) { g.mode = "swipe"; if (g.timer) clearTimeout(g.timer); }
+    }
+    if (g.mode === "swipe") {
+      const off = Math.max(0, Math.min(dx, 84)); // only swipe-right replies
+      g.el.style.transition = "none";
+      g.el.style.transform = `translateX(${off}px)`;
+      const ind = g.el.parentElement?.querySelector("[data-reply-ind]") as HTMLElement | null;
+      if (ind) ind.style.opacity = String(Math.min(off / SWIPE_TRIGGER, 1));
+    }
+  };
+  const onMsgTouchEnd = (e: ReactTouchEvent<HTMLDivElement>, msg: Message) => {
+    const g = gestureRef.current;
+    if (g.timer) clearTimeout(g.timer);
+    if (g.mode === "swipe" && g.el) {
+      const dx = (e.changedTouches[0]?.clientX ?? g.x) - g.x;
+      const el = g.el;
+      el.style.transition = "transform 180ms cubic-bezier(0.16,1,0.3,1)";
+      el.style.transform = "translateX(0)";
+      const ind = el.parentElement?.querySelector("[data-reply-ind]") as HTMLElement | null;
+      if (ind) ind.style.opacity = "0";
+      if (dx > SWIPE_TRIGGER) { startReply(msg); try { navigator.vibrate?.(10); } catch {} }
+      suppressClickRef.current = true;
+    } else {
+      // long-press (menu already open) or plain tap — either way, don't let the
+      // synthetic click toggle the menu on touch. Opening is long-press only.
+      suppressClickRef.current = true;
+    }
+    g.el = null; g.mode = "none";
+  };
+
   const canDelete = (msg: Message) => {
     if (viewerIsAdmin) return true;
     if (msg.sender.id !== userId) return false;
@@ -304,6 +382,7 @@ export default function ChatPage() {
                   )}
 
                   <div className={styles.bubbleWrap}>
+                    <span className={styles.swipeIndicator} data-reply-ind aria-hidden><ReplyIcon size={16} /></span>
                     {active && (
                       <div className={cx(styles.actionBar, isMine ? styles.actionBarMine : styles.actionBarOther)} onClick={(e) => e.stopPropagation()}>
                         {REACTION_EMOJIS.map((em) => (
@@ -315,6 +394,9 @@ export default function ChatPage() {
                         <button type="button" className={styles.actionBtn} onClick={() => startReply(msg)} title="Responder" aria-label="Responder">
                           <ReplyIcon />
                         </button>
+                        <button type="button" className={styles.actionBtn} onClick={() => copyMessage(msg)} title="Copiar" aria-label="Copiar">
+                          <CopyIcon />
+                        </button>
                         {canDelete(msg) && (
                           <button type="button" className={cx(styles.actionBtn, styles.actionBtnDanger)} onClick={() => handleDelete(msg.id)} title="Apagar" aria-label="Apagar">
                             <TrashIcon />
@@ -325,7 +407,14 @@ export default function ChatPage() {
 
                     <div
                       className={cx(styles.bubble, isMine ? styles.bubbleMine : styles.bubbleOther, isAdmin && !isMine && styles.bubbleAdmin)}
-                      onClick={(e) => { e.stopPropagation(); setActiveMsgId(active ? null : msg.id); }}
+                      onTouchStart={(e) => onMsgTouchStart(e, msg)}
+                      onTouchMove={onMsgTouchMove}
+                      onTouchEnd={(e) => onMsgTouchEnd(e, msg)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+                        setActiveMsgId(active ? null : msg.id);
+                      }}
                     >
                       {!isMine && (
                         <div className={styles.senderRow}>

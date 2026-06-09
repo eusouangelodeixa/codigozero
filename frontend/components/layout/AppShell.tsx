@@ -10,7 +10,7 @@ import {
   LogOut,
   Star,
   Percent,
-  MessageCircle,
+  Wrench,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import {
@@ -35,8 +35,6 @@ interface NavItem {
   label: string;
   icon: IconCmp;
   badge?: string;
-  // Non-route items (e.g. open an external SSO link instead of router.push).
-  action?: "komunika";
 }
 
 interface NavGroup {
@@ -120,6 +118,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/qg": "QG",
   "/chat": "Chat",
   "/afiliacao": "Afiliação",
+  "/ferramentas": "Ferramentas",
   "/assinatura": "Assinatura",
   "/integracoes": "Integrações",
   "/instalar": "Instalar app",
@@ -148,13 +147,13 @@ const SociosNavItem: NavItem = {
   ),
 };
 
-// "Ferramentas" section — external tools opened via SSO. Add future tools here.
-const KomunikaNavItem: NavItem = {
-  href: "#komunika",
-  label: "Abrir Komunika",
-  action: "komunika",
+// "Ferramentas" hub — a catalog page (/ferramentas) holding Komunika and future
+// tools, each with a description and its own open/launch action.
+const FerramentasNavItem: NavItem = {
+  href: "/ferramentas",
+  label: "Hub de Ferramentas",
   icon: ({ size = 18, className }: { size?: number; className?: string }) => (
-    <MessageCircle size={size} strokeWidth={1.6} className={className} />
+    <Wrench size={size} strokeWidth={1.6} className={className} />
   ),
 };
 
@@ -191,8 +190,8 @@ export function AppShell({
 
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
-  // Inject conditional nav: "Sócios" for revenue-share partners, and the
-  // "Ferramentas" section (Komunika) for members with an active tenant.
+  // Inject conditional nav: "Sócios" for revenue-share partners, plus the
+  // "Ferramentas" hub (Komunika + future tools), shown to every member.
   const navGroups = useMemo(() => {
     let groups: NavGroup[] = NAV_GROUPS;
     if (user?.isPartner) {
@@ -200,16 +199,14 @@ export function AppShell({
         g.label === "Negócio" ? { ...g, items: [...g.items, SociosNavItem] } : g,
       );
     }
-    if (user?.komunikaActive) {
-      const ferramentas: NavGroup = { label: "Ferramentas", items: [KomunikaNavItem] };
-      const contaIdx = groups.findIndex((g) => g.label === "Conta");
-      groups =
-        contaIdx === -1
-          ? [...groups, ferramentas]
-          : [...groups.slice(0, contaIdx), ferramentas, ...groups.slice(contaIdx)];
-    }
+    const ferramentas: NavGroup = { label: "Ferramentas", items: [FerramentasNavItem] };
+    const contaIdx = groups.findIndex((g) => g.label === "Conta");
+    groups =
+      contaIdx === -1
+        ? [...groups, ferramentas]
+        : [...groups.slice(0, contaIdx), ferramentas, ...groups.slice(contaIdx)];
     return groups;
-  }, [user?.isPartner, user?.komunikaActive]);
+  }, [user?.isPartner]);
 
   const firstName = user?.name?.split(" ")[0] || "Membro";
   const initial = (user?.name?.charAt(0) || "?").toUpperCase();
@@ -226,42 +223,6 @@ export function AppShell({
   const go = (href: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     router.push(href);
-  };
-
-  // Open the embedded Komunika via SSO. The backend mints a short-lived
-  // magic-link; the JWT secret never reaches the browser. Open the tab
-  // synchronously on click so popup blockers don't swallow it, then navigate.
-  const openKomunika = async () => {
-    const token = localStorage.getItem("cz_token");
-    const win = window.open("about:blank", "_blank");
-    try {
-      const res = await fetch(`${apiUrl}/api/komunika/sso-link`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.url) {
-        if (win) win.location.href = data.url;
-        else window.location.href = data.url; // popup blocked → same tab
-      } else {
-        if (win) win.close();
-        alert(data.error || "Não foi possível abrir o Komunika.");
-      }
-    } catch {
-      if (win) win.close();
-      alert("Erro de conexão ao abrir o Komunika.");
-    }
-  };
-
-  // Nav click: action items (e.g. Komunika SSO) run their handler; the rest
-  // navigate normally.
-  const handleNav = (item: NavItem) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (item.action === "komunika") {
-      setMenuOpen(false);
-      openKomunika();
-      return;
-    }
-    router.push(item.href);
   };
 
   return (
@@ -284,7 +245,7 @@ export function AppShell({
                   <a
                     key={item.href}
                     href={item.href}
-                    onClick={handleNav(item)}
+                    onClick={go(item.href)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}
                   >
@@ -457,7 +418,7 @@ export function AppShell({
                   <a
                     key={item.href}
                     href={item.href}
-                    onClick={handleNav(item)}
+                    onClick={go(item.href)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}
                   >

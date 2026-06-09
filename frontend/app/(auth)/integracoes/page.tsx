@@ -41,9 +41,6 @@ export default function IntegracoesPage() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [instanceError, setInstanceError] = useState("");
-  // Embedded Komunika module (paid add-on): provisioned tenant opened via SSO.
-  const [komunikaActive, setKomunikaActive] = useState(false);
-  const [openingKomunika, setOpeningKomunika] = useState(false);
 
   const hdr = () => ({
     Authorization: `Bearer ${localStorage.getItem("cz_token")}`,
@@ -59,7 +56,6 @@ export default function IntegracoesPage() {
             komunikaApiKey: data.user.komunikaApiKey || "",
             komunikaInstanceId: data.user.komunikaInstanceId || "",
           });
-          setKomunikaActive(!!data.user.komunikaActive);
           if (data.user.komunikaApiKey) setTimeout(() => fetchInstances(), 100);
         }
       });
@@ -129,30 +125,6 @@ export default function IntegracoesPage() {
     setTesting(false);
   };
 
-  // Open the embedded Komunika via SSO. The backend mints a short-lived
-  // magic-link; we never see the JWT secret. Open the tab synchronously on
-  // click so popup blockers don't swallow it, then navigate it once we have
-  // the URL.
-  const openKomunika = async () => {
-    const win = window.open("about:blank", "_blank");
-    setOpeningKomunika(true);
-    try {
-      const res = await fetch(`${API}/api/komunika/sso-link`, { headers: hdr() });
-      const data = await res.json();
-      if (res.ok && data.url) {
-        if (win) win.location.href = data.url;
-        else window.location.href = data.url; // popup blocked → same tab
-      } else {
-        if (win) win.close();
-        toast.error("Não foi possível abrir o Komunika", data.error);
-      }
-    } catch {
-      if (win) win.close();
-      toast.error("Erro de conexão");
-    }
-    setOpeningKomunika(false);
-  };
-
   const configured = !!form.komunikaApiKey;
 
   return (
@@ -162,28 +134,6 @@ export default function IntegracoesPage() {
         title="Integrações"
         description="Conecte ferramentas externas. Hoje suportamos Komunika para automação de WhatsApp."
       />
-
-      {komunikaActive && (
-        <Card padding="lg">
-          <div className={styles.intCard}>
-            <div className={styles.intHead}>
-              <span className={styles.intLogo}><RobotIcon /></span>
-              <div className={styles.intMeta}>
-                <span className={styles.intName}>Komunika</span>
-                <span className={styles.intDesc}>
-                  Seu painel Komunika está ativo. Abra sem precisar fazer login.
-                </span>
-              </div>
-              <Badge variant="success" size="sm">Ativo</Badge>
-            </div>
-            <div className={styles.actions}>
-              <Button variant="accent" onClick={openKomunika} loading={openingKomunika}>
-                Abrir Komunika ↗
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {setupMode && (
         <div className={styles.setupBanner}>

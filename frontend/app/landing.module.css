@@ -1358,11 +1358,17 @@
   letter-spacing: -0.01em;
 }
 
-/* Founder photo gallery — responsive 2-col grid; IG tile spans 2 rows. */
+/* Founder photo gallery — 2-col grid using named areas: the portrait sits tall
+   on the left while Instagram + Pix stack on the right. Each tile carries its
+   own aspect-ratio so its image fills cleanly (object-fit: cover) with no black
+   letterboxing. The portrait spans both rows and stretches to match the right
+   column — cover crops it gracefully. */
 .founderGallery {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-auto-rows: 180px;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "portrait ig"
+    "portrait pix";
   gap: var(--space-3);
 }
 .founderTile {
@@ -1373,12 +1379,13 @@
   background: var(--bg-elevated);
   box-shadow: 0 20px 40px -24px rgba(0,0,0,0.6);
 }
-.founderTileTall { grid-row: span 2; }
+.gPortrait { grid-area: portrait; aspect-ratio: 4 / 5; }
+.gIg { grid-area: ig; aspect-ratio: 16 / 10; }
+.gPix { grid-area: pix; aspect-ratio: 5 / 2; }
+/* With `fill`, next/image positions the <img> absolutely and sizes it to the
+   tile; object-fit: cover crops-to-fill so it never letterboxes. */
 .founderImg {
-  width: 100%;
-  height: 100%;
   object-fit: cover;
-  display: block;
 }
 .founderTileTag {
   position: absolute;
@@ -1500,7 +1507,18 @@
 /* ── Responsive (v2 copy sections) ── */
 @media (max-width: 900px) {
   .founderInner { grid-template-columns: 1fr; gap: var(--space-8); }
-  .founderGallery { grid-auto-rows: 160px; }
+}
+
+/* Mobile gallery: single column, each tile keeps its own aspect-ratio so all
+   three images display fully and read cleanly stacked. */
+@media (max-width: 560px) {
+  .founderGallery {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "portrait"
+      "ig"
+      "pix";
+  }
 }
 
 @media (max-width: 768px) {
@@ -1511,13 +1529,47 @@
   .heroCtaWrap .heroCta { width: 100%; justify-content: center; }
   .heroCtaWrap { align-items: stretch; }
   .radarClosing { font-size: var(--type-body); }
+
+  /* Tame oversized display headings so they don't dominate the small screen. */
+  .sectionTitle { font-size: clamp(1.35rem, 5.5vw, 1.75rem); }
+  .clinicTitle { font-size: clamp(1.5rem, 6vw, 1.9rem); }
+  .numbersTitle { font-size: clamp(1.4rem, 5.5vw, 1.8rem); }
+  .founderIntro { font-size: 1.0625rem; }
+  .founderClosing { font-size: 1.0625rem; }
+
+  /* Comfortable, readable measure: ~15px body, line-height ~1.7, constrained
+     line length, and roomier gaps so long copy doesn't read as a wall. */
+  .notLine, .clinicPara { font-size: var(--type-body); line-height: 1.7; }
+  .notLine:first-child { font-size: 1.0625rem; line-height: 1.55; }
+  .notLines, .clinicParas { gap: var(--space-5); }
+  .notLine, .clinicPara, .numbersLine { max-width: 60ch; }
+
+  /* Callouts: keep padding/radius intentional, text not cramped. */
+  .numbersLineHi { line-height: 1.65; padding: var(--space-4); border-radius: 12px; }
+  .radarClosing { padding: var(--space-5); line-height: 1.6; }
 }
 
 @media (max-width: 480px) {
   .founderSection { padding: var(--space-8) var(--space-3); }
-  .founderGallery { grid-template-columns: 1fr 1fr; grid-auto-rows: 130px; }
-  .founderCred { padding: var(--space-3) var(--space-4); }
-  .clinicBlock { padding: var(--space-4); }
-  .numbersCard { padding: var(--space-4); }
+  .founderCred { padding: var(--space-3) var(--space-4); line-height: 1.6; }
+  .founderCreds { gap: var(--space-3); }
+  .clinicBlock { padding: var(--space-5); }
+  .numbersCard { padding: var(--space-5); }
+
+  /* Slightly smaller display headings on the narrowest phones. */
+  .clinicTitle { font-size: clamp(1.4rem, 7vw, 1.7rem); }
+  .numbersTitle { font-size: clamp(1.3rem, 6.5vw, 1.6rem); }
+
+  /* Calmer vertical rhythm: clearer separation between stacked paragraphs. */
+  .notLines, .clinicParas { gap: var(--space-4); }
+  .clinicTitle { margin: var(--space-1) 0 var(--space-4); }
+  .numbersTitle { margin: var(--space-1) 0 var(--space-4); }
+
+  /* Number-chip step rows: keep chip + text aligned and uncramped. */
+  .radarStep { padding: var(--space-4); gap: var(--space-3); align-items: flex-start; }
+  .radarStepNum { width: 30px; height: 30px; }
+
+  /* Eco feature cards: trim excessive inner padding on small phones. */
+  .ecoCard { padding: var(--space-5); }
 }
 

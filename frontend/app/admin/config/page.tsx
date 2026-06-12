@@ -27,6 +27,7 @@ interface SystemConfig {
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
+interface KomunikaAssistant { id?: string; assistantId?: string; _id?: string; name?: string; title?: string; mode?: string; }
 
 const IconCommunity = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -89,6 +90,8 @@ export default function AdminConfig() {
   const [original, setOriginal] = useState<SystemConfig>({});
   const [instances, setInstances] = useState<KomunikaInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(false);
+  const [assistants, setAssistants] = useState<KomunikaAssistant[]>([]);
+  const [loadingAssistants, setLoadingAssistants] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [testType, setTestType] = useState<"visitor" | "checkout">("visitor");
@@ -106,7 +109,10 @@ export default function AdminConfig() {
         const cfg = d.config || {};
         setConfig(cfg);
         setOriginal(cfg);
-        if (cfg.komunikaAdminApiKey) fetchInstances();
+        if (cfg.komunikaAdminApiKey) {
+          fetchInstances();
+          fetchAssistants();
+        }
       });
   }, []);
 
@@ -122,6 +128,20 @@ export default function AdminConfig() {
       toast.error("Erro de conexão ao carregar instâncias");
     }
     setLoadingInstances(false);
+  };
+
+  const fetchAssistants = async () => {
+    setLoadingAssistants(true);
+    try {
+      const res = await fetch(`${API}/api/admin/sdr-assistants`, { headers: hdr() });
+      const data = await res.json();
+      setAssistants(data.assistants || []);
+      if (data.error) toast.error("Falha ao carregar agentes SDR", data.error);
+    } catch {
+      setAssistants([]);
+      toast.error("Erro de conexão ao carregar agentes SDR");
+    }
+    setLoadingAssistants(false);
   };
 
   const dirty =
@@ -372,25 +392,69 @@ export default function AdminConfig() {
           <div className={styles.formGrid}>
             <Field
               label="Agente SDR — Visitantes (abandono da LP)"
-              hint="ID do agente outbound (asst_…) disparado pelo cron para leads que preencheram o quiz e não compraram."
+              hint="Agente outbound disparado pelo cron para leads que preencheram o quiz e não compraram. Os agentes vêm do seu Komunika."
             >
-              <input
-                className={styles.input}
-                placeholder="asst_xxxxxxxx"
-                value={config.komunikaVisitorAssistantId || ""}
-                onChange={(e) => setField("komunikaVisitorAssistantId", e.target.value)}
-              />
+              <div className={styles.inlineRow}>
+                <select
+                  className={styles.select}
+                  value={config.komunikaVisitorAssistantId || ""}
+                  onChange={(e) => setField("komunikaVisitorAssistantId", e.target.value)}
+                >
+                  <option value="">— Selecione um agente —</option>
+                  {assistants.map((a) => {
+                    const id = a.id || a.assistantId || a._id || "";
+                    const name = a.name || a.title || id;
+                    return (
+                      <option key={id} value={id}>
+                        {name}{a.mode ? ` · ${a.mode}` : ""}
+                      </option>
+                    );
+                  })}
+                  {config.komunikaVisitorAssistantId &&
+                    !assistants.find((a) => (a.id || a.assistantId || a._id) === config.komunikaVisitorAssistantId) && (
+                      <option value={config.komunikaVisitorAssistantId}>
+                        {config.komunikaVisitorAssistantId} (salvo)
+                      </option>
+                    )}
+                </select>
+                <button
+                  type="button"
+                  className={styles.smallBtn}
+                  onClick={fetchAssistants}
+                  disabled={loadingAssistants || !config.komunikaAdminApiKey}
+                  title={!config.komunikaAdminApiKey ? "Salve a API Key primeiro" : "Recarregar agentes"}
+                >
+                  <IconRefresh />
+                  {loadingAssistants ? "Carregando…" : "Buscar"}
+                </button>
+              </div>
             </Field>
             <Field
               label="Agente SDR — Recuperação (abandono de checkout)"
-              hint="ID do agente outbound disparado quando o checkout falha ou é cancelado."
+              hint="Agente outbound disparado quando o checkout falha ou é cancelado."
             >
-              <input
-                className={styles.input}
-                placeholder="asst_xxxxxxxx"
+              <select
+                className={styles.select}
                 value={config.komunikaCheckoutAssistantId || ""}
                 onChange={(e) => setField("komunikaCheckoutAssistantId", e.target.value)}
-              />
+              >
+                <option value="">— Selecione um agente —</option>
+                {assistants.map((a) => {
+                  const id = a.id || a.assistantId || a._id || "";
+                  const name = a.name || a.title || id;
+                  return (
+                    <option key={id} value={id}>
+                      {name}{a.mode ? ` · ${a.mode}` : ""}
+                    </option>
+                  );
+                })}
+                {config.komunikaCheckoutAssistantId &&
+                  !assistants.find((a) => (a.id || a.assistantId || a._id) === config.komunikaCheckoutAssistantId) && (
+                    <option value={config.komunikaCheckoutAssistantId}>
+                      {config.komunikaCheckoutAssistantId} (salvo)
+                    </option>
+                  )}
+              </select>
             </Field>
           </div>
         </div>

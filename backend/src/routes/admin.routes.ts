@@ -15,7 +15,6 @@ import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
-import { createScheduledDispatch, processDispatch, type DispatchPayload } from '../services/dispatch.service';
 import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
@@ -1008,106 +1007,6 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ═══════════════════════════════════════
-// SDR OUTBOUND — re-engajamento manual de vendas falhas/reembolsadas/canceladas
-// ═══════════════════════════════════════
-
-// POST /api/admin/sdr-reengage — re-engaja vendas (por transactionIds ou
-// emails) via SDR outbound do Komunika, em segundo plano e com intervalo entre
-// cada envio. Casa o email/telefone com o usuário para montar o `context` do
-// SDR (dados do quiz + link de recuperação).
-router.post('/sdr-reengage', async (req: AuthRequest, res: Response) => {
-  try {
-    const { transactionIds, emails, assistantId, scenario, intervalMinSec, intervalMaxSec, name } = req.body || {};
-
-    // Default scenario 'checkout' — these are failed/refunded/cancelled sales,
-    // i.e. people who already reached the checkout.
-    const resolvedScenario: 'visitor' | 'checkout' = scenario === 'visitor' ? 'visitor' : 'checkout';
-
-    const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-    const resolvedAssistantId =
-      (assistantId && String(assistantId).trim()) ||
-      (resolvedScenario === 'visitor'
-        ? config?.komunikaVisitorAssistantId || process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID
-        : config?.komunikaCheckoutAssistantId || process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID);
-
-    if (!resolvedAssistantId) {
-      return res.status(400).json({ error: 'Nenhum assistente SDR configurado para este cenário.' });
-    }
-
-    // Gather raw targets from transaction ids and/or explicit emails.
-    const raw: { email?: string | null; phone?: string | null; name?: string | null }[] = [];
-    if (Array.isArray(transactionIds) && transactionIds.length) {
-      const txs = await prisma.transaction.findMany({
-        where: { id: { in: transactionIds.map(String) } },
-        select: { userEmail: true, userPhone: true, userName: true },
-      });
-      raw.push(...txs.map((t) => ({ email: t.userEmail, phone: t.userPhone, name: t.userName })));
-    }
-    if (Array.isArray(emails) && emails.length) {
-      raw.push(...emails.map((e: string) => ({ email: String(e) })));
-    }
-    if (!raw.length) return res.status(400).json({ error: 'Nenhuma venda selecionada.' });
-
-    // Resolve each unique target to a user (for quiz data + phone).
-    const seen = new Set<string>();
-    const contacts: DispatchPayload['contacts'] = [];
-    const skipped: { target: string; reason: string }[] = [];
-    for (const t of raw) {
-      const key = (t.email || t.phone || '').toLowerCase().trim();
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-
-      const user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            ...(t.email ? [{ email: { equals: t.email, mode: 'insensitive' as const } }] : []),
-            ...(t.phone ? [{ phone: t.phone }] : []),
-          ],
-        },
-        select: { name: true, phone: true, surveyAnswers: true, renewalUrl: true, checkoutUrl: true, lojouOrderId: true },
-      });
-
-      const phone = (user?.phone || t.phone || '').replace(/\D/g, '');
-      if (!phone) { skipped.push({ target: t.email || '—', reason: 'sem telefone' }); continue; }
-
-      const context = buildSurveyContext(user, {
-        scenario: resolvedScenario,
-        checkoutUrl: user?.checkoutUrl || user?.renewalUrl || undefined,
-        orderId: user?.lojouOrderId || undefined,
-      });
-      contacts.push({
-        phone,
-        name: user?.name || t.name || 'Cliente',
-        context,
-      });
-    }
-
-    if (!contacts.length) {
-      return res.status(400).json({ error: 'Nenhum contato com telefone encontrado.', skipped });
-    }
-
-    const minSec = Math.max(0, Number(intervalMinSec) || 60);
-    const maxSec = Math.max(minSec, Number(intervalMaxSec) || 180);
-    const payload: DispatchPayload = {
-      contacts,
-      dispatchMode: 'sdr',
-      assistantId: String(resolvedAssistantId),
-      source: 'admin-reengage',
-      useAdminCreds: true,
-      delayMinSec: minSec,
-      delayMaxSec: maxSec,
-    };
-    const label = (name && String(name).trim()) || `Re-engajamento SDR — ${contacts.length} contato(s)`;
-    const row = await createScheduledDispatch(req.user!.id, new Date(), payload, label);
-    processDispatch(row.id).catch((e) => console.error('[SDR-REENGAGE] background error:', e));
-
-    return res.json({ success: true, scheduleId: row.id, queued: contacts.length, skipped });
-  } catch (error) {
-    console.error('[SDR-REENGAGE] error:', error);
-    res.status(500).json({ error: 'Erro ao re-engajar via SDR' });
-  }
-});
 
 // ═══════════════════════════════════════
 // CUSTOS / DESPESAS (somente superadmin)
@@ -1351,6 +1250,52 @@ router.get('/broadcast/instances', async (_req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('[BROADCAST] Instances error:', error);
     res.json({ instances: [], error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/sdr-assistants
+ * Lists the Komunika SDR outbound agents so the admin can pick them from a
+ * dropdown (instead of pasting an asst_ id). Prefers outbound-mode agents;
+ * if the Komunika API doesn't expose a mode, returns all. Returns
+ * { assistants: [{ id, name, mode }] } (empty + error on any failure).
+ */
+router.get('/sdr-assistants', async (_req: AuthRequest, res: Response) => {
+  try {
+    const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+    const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+
+    if (!apiKey) {
+      return res.json({ assistants: [], error: 'Chave da API do Komunika não configurada' });
+    }
+
+    const response = await fetch(`${apiUrl}/api/v1/sdr-bot/assistants`, {
+      headers: { 'X-API-Key': apiKey },
+    });
+
+    if (!response.ok) {
+      return res.json({ assistants: [], error: `Komunika retornou ${response.status}` });
+    }
+
+    const data = await response.json().catch(() => null);
+    const rawList =
+      data?.data || data?.assistants || data?.agents || (Array.isArray(data) ? data : []);
+    const assistants = (Array.isArray(rawList) ? rawList : [])
+      .map((a: any) => ({
+        id: a.id || a.assistantId || a._id || a.uuid || '',
+        name: a.name || a.title || a.label || a.id || '',
+        mode: a.mode || a.type || '',
+      }))
+      .filter((a: { id: string }) => !!a.id)
+      // Keep only outbound agents (the only mode `initiate` works with). When
+      // the API doesn't expose a mode, keep the agent rather than hide it.
+      .filter((a: { mode: string }) => !a.mode || String(a.mode).toLowerCase().includes('outbound'));
+
+    res.json({ assistants });
+  } catch (error: any) {
+    console.error('[SDR] Assistants list error:', error);
+    res.json({ assistants: [], error: error.message });
   }
 });
 

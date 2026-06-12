@@ -176,12 +176,15 @@ const DEFAULTS = {
 
 // Founder photo gallery — the three real images (replace the placeholder files
 // under /public/founders with the actual photos using these exact names; see
-// public/founders/README.md). Order: retrato → Instagram → Pix. `tall` makes the
-// portrait span both rows; `tag` renders a caption chip over the tile.
+// public/founders/README.md). Order: retrato → Instagram → Pix. `area` maps each
+// tile to a CSS grid-area (portrait sits tall on the left; ig + pix stack on the
+// right; single column on mobile). Each tile carries its own aspect-ratio in CSS
+// so the image fills cleanly (object-fit: cover) with no letterboxing. `tag`
+// renders a caption chip over the tile.
 const FOUNDER_GALLERY = [
-  { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero", w: 600, h: 760, tall: true },
-  { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram com 2.625 seguidores", w: 600, h: 380, tag: "2.625 seguidores no Instagram" },
-  { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix recebido — primeira parcela de R$ 3.330 do contrato da Mira", w: 600, h: 300, tag: "Primeira parcela — R$ 3.330" },
+  { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero", area: "portrait" as const },
+  { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram com 2.625 seguidores", area: "ig" as const, tag: "2.625 seguidores no Instagram" },
+  { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix recebido — primeira parcela de R$ 3.330 do contrato da Mira", area: "pix" as const, tag: "Primeira parcela — R$ 3.330" },
 ];
 
 /**
@@ -824,15 +827,20 @@ export default function LandingPage({
               {FOUNDER_GALLERY.map((img, i) => (
                 <div
                   key={i}
-                  className={`${styles.founderTile} ${img.tall ? styles.founderTileTall : ""}`}
+                  className={`${styles.founderTile} ${
+                    img.area === "portrait"
+                      ? styles.gPortrait
+                      : img.area === "ig"
+                        ? styles.gIg
+                        : styles.gPix
+                  }`}
                 >
                   <Image
                     src={img.src}
                     alt={img.alt}
-                    width={img.w}
-                    height={img.h}
+                    fill
+                    sizes="(max-width:560px) 100vw, 360px"
                     className={styles.founderImg}
-                    priority={false}
                   />
                   {img.tag && (
                     <span className={styles.founderTileTag}>{img.tag}</span>

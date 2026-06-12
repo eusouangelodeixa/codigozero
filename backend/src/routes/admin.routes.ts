@@ -1032,31 +1032,76 @@ router.post('/resend-test', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/admin/email-events — recent Resend delivery events + summary counts,
-// powering the real-time e-mail status panel in /admin/emails.
+// GET /api/admin/email-events — Resend delivery events GROUPED into one row per
+// e-mail (by resendId): each e-mail shows its furthest status (sent → delivered →
+// opened → clicked; bounce/complaint take priority) instead of one row per event.
+// Returns a funnel summary too. Powers the /admin/emails panel.
 router.get('/email-events', async (req: AuthRequest, res: Response) => {
   try {
     const sinceDays = Math.min(30, Math.max(1, parseInt(req.query.days as string) || 7));
     const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
-    const [events, grouped] = await Promise.all([
-      prisma.emailEvent.findMany({
-        where: { createdAt: { gte: since } },
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        select: { id: true, type: true, recipient: true, subject: true, resendId: true, createdAt: true },
-      }),
-      prisma.emailEvent.groupBy({
-        by: ['type'],
-        where: { createdAt: { gte: since } },
-        _count: { _all: true },
-      }),
-    ]);
+    // Only real Resend e-mails carry a resendId; ignore stray/manual test posts.
+    const rows = await prisma.emailEvent.findMany({
+      where: { createdAt: { gte: since }, resendId: { not: null } },
+      orderBy: { createdAt: 'asc' },
+      take: 4000,
+      select: { type: true, recipient: true, subject: true, resendId: true, createdAt: true },
+    });
 
-    const counts: Record<string, number> = {};
-    for (const g of grouped) counts[g.type] = g._count._all;
+    const PRIORITY: Record<string, number> = {
+      'email.complained': 100,
+      'email.bounced': 90,
+      'email.clicked': 70,
+      'email.opened': 60,
+      'email.delivered': 50,
+      'email.delivery_delayed': 40,
+      'email.sent': 10,
+    };
 
-    res.json({ events, counts, sinceDays });
+    type Grouped = {
+      resendId: string;
+      recipient: string | null;
+      subject: string | null;
+      status: string;
+      prio: number;
+      lastAt: Date;
+      types: Set<string>;
+    };
+    const map = new Map<string, Grouped>();
+    for (const e of rows) {
+      const key = e.resendId as string;
+      let g = map.get(key);
+      if (!g) {
+        g = { resendId: key, recipient: e.recipient, subject: e.subject, status: e.type, prio: PRIORITY[e.type] ?? 0, lastAt: e.createdAt, types: new Set() };
+        map.set(key, g);
+      }
+      g.types.add(e.type);
+      if (e.recipient) g.recipient = e.recipient;
+      if (e.subject) g.subject = e.subject;
+      if (e.createdAt > g.lastAt) g.lastAt = e.createdAt;
+      const p = PRIORITY[e.type] ?? 0;
+      if (p >= g.prio) {
+        g.prio = p;
+        g.status = e.type;
+      }
+    }
+
+    const emails = [...map.values()]
+      .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime())
+      .slice(0, 200)
+      .map((g) => ({ resendId: g.resendId, recipient: g.recipient, subject: g.subject, status: g.status, lastAt: g.lastAt }));
+
+    const counts = { sent: map.size, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0 };
+    for (const g of map.values()) {
+      if (g.types.has('email.delivered')) counts.delivered++;
+      if (g.types.has('email.opened')) counts.opened++;
+      if (g.types.has('email.clicked')) counts.clicked++;
+      if (g.types.has('email.bounced')) counts.bounced++;
+      if (g.types.has('email.complained')) counts.complained++;
+    }
+
+    res.json({ emails, counts, sinceDays });
   } catch (error) {
     console.error('[ADMIN] email-events error:', error);
     res.status(500).json({ error: 'Erro ao carregar eventos de e-mail' });

@@ -5,7 +5,7 @@ import styles from "../admin.module.css";
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
 
-type EmailEvent = { id: string; type: string; recipient?: string; subject?: string; resendId?: string; createdAt: string };
+type EmailRow = { resendId: string; recipient?: string | null; subject?: string | null; status: string; lastAt: string };
 
 const TYPE_LABEL: Record<string, string> = {
   "email.sent": "Enviado",
@@ -26,7 +26,7 @@ function badgeClass(type: string) {
 }
 
 export default function AdminEmails() {
-  const [events, setEvents] = useState<EmailEvent[]>([]);
+  const [emails, setEmails] = useState<EmailRow[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -36,7 +36,7 @@ export default function AdminEmails() {
     try {
       const res = await fetch(`${API}/api/admin/email-events?days=7`, { headers: hdr() });
       const data = await res.json();
-      setEvents(data.events || []);
+      setEmails(data.emails || []);
       setCounts(data.counts || {});
       setUpdatedAt(new Date().toLocaleTimeString("pt-BR"));
     } catch {
@@ -54,12 +54,12 @@ export default function AdminEmails() {
   }, [load]);
 
   const tiles = [
-    { key: "email.sent", label: "Enviados", color: "var(--text-primary)" },
-    { key: "email.delivered", label: "Entregues", color: "#22c55e" },
-    { key: "email.opened", label: "Abertos", color: "var(--accent)" },
-    { key: "email.clicked", label: "Clicados", color: "var(--accent)" },
-    { key: "email.bounced", label: "Bounces", color: "#f87171" },
-    { key: "email.complained", label: "Spam", color: "#f87171" },
+    { key: "sent", label: "Enviados", color: "var(--text-primary)" },
+    { key: "delivered", label: "Entregues", color: "#22c55e" },
+    { key: "opened", label: "Abertos", color: "var(--accent)" },
+    { key: "clicked", label: "Clicados", color: "var(--accent)" },
+    { key: "bounced", label: "Bounces", color: "#f87171" },
+    { key: "complained", label: "Spam", color: "#f87171" },
   ];
 
   return (
@@ -67,7 +67,7 @@ export default function AdminEmails() {
       <div>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "var(--text-primary)" }}>E-mails (Resend)</h1>
         <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--text-tertiary)" }}>
-          Status de entrega em tempo real — últimos 7 dias{updatedAt ? ` · atualizado ${updatedAt}` : ""}. Atualiza sozinho a cada 8s.
+          Status de entrega em tempo real — últimos 7 dias{updatedAt ? ` · atualizado ${updatedAt}` : ""}. Uma linha por e-mail; o status avança sozinho (Enviado → Entregue → Aberto → Clicado). Atualiza a cada 8s.
         </p>
       </div>
 
@@ -83,19 +83,19 @@ export default function AdminEmails() {
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
-            <tr><th>Evento</th><th>Destinatário</th><th>Assunto</th><th>Quando</th></tr>
+            <tr><th>Status</th><th>Destinatário</th><th>Assunto</th><th>Atualizado</th></tr>
           </thead>
           <tbody>
             {loading ? (
               <tr><td colSpan={4} className={styles.empty}>Carregando…</td></tr>
-            ) : events.length === 0 ? (
-              <tr><td colSpan={4} className={styles.empty}>Nenhum evento ainda. Configure o webhook do Resend em Configurações → E-mail (Resend).</td></tr>
-            ) : events.map((e) => (
-              <tr key={e.id}>
-                <td><span className={`${styles.badge} ${badgeClass(e.type)}`}>{TYPE_LABEL[e.type] || e.type}</span></td>
+            ) : emails.length === 0 ? (
+              <tr><td colSpan={4} className={styles.empty}>Nenhum e-mail ainda. Configure o webhook do Resend em Configurações → E-mail (Resend).</td></tr>
+            ) : emails.map((e) => (
+              <tr key={e.resendId}>
+                <td><span className={`${styles.badge} ${badgeClass(e.status)}`}>{TYPE_LABEL[e.status] || e.status}</span></td>
                 <td>{e.recipient || "—"}</td>
                 <td style={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.subject || "—"}</td>
-                <td>{new Date(e.createdAt).toLocaleString("pt-BR")}</td>
+                <td>{new Date(e.lastAt).toLocaleString("pt-BR")}</td>
               </tr>
             ))}
           </tbody>

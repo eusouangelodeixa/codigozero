@@ -10,19 +10,11 @@ export interface SecretFieldProps {
   onChange: (next: string) => void;
   placeholder?: string;
   hint?: ReactNode;
-  /** When true, value is shown plain after first reveal; default true */
+  /** When true, the value is masked (type=password) until the eye is clicked; default true */
   maskable?: boolean;
-  /** Custom mask renderer; default: show first 3 + last 4 chars (kmnk_•••••f456) */
-  maskFormatter?: (raw: string) => string;
   disabled?: boolean;
   showStatus?: boolean;
 }
-
-const defaultMask = (s: string) => {
-  if (!s) return "";
-  if (s.length <= 7) return "•".repeat(s.length);
-  return `${s.slice(0, 3)}${"•".repeat(Math.max(8, s.length - 7))}${s.slice(-4)}`;
-};
 
 const EyeIcon = ({ open }: { open: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -56,7 +48,6 @@ export function SecretField({
   placeholder,
   hint,
   maskable = true,
-  maskFormatter,
   disabled = false,
   showStatus = true,
 }: SecretFieldProps) {
@@ -65,9 +56,6 @@ export function SecretField({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isSet = !!value && value.length > 0;
-  const displayValue = revealed || !maskable
-    ? value
-    : (maskFormatter ?? defaultMask)(value);
 
   const handleCopy = async () => {
     if (!value) return;
@@ -99,19 +87,11 @@ export function SecretField({
         <input
           ref={inputRef}
           className={styles.input}
-          type="text"
-          value={displayValue}
-          onChange={(e) => {
-            // If field is masked and user starts typing, reveal so they see what they edit
-            if (!revealed && maskable && isSet) {
-              setRevealed(true);
-            }
-            onChange(e.target.value);
-          }}
-          onFocus={() => {
-            // When user focuses to edit, reveal so they can edit the real value
-            if (maskable && !revealed && isSet) setRevealed(true);
-          }}
+          // Mask VISUALLY with type=password — the bound value is ALWAYS the real
+          // secret, so the masked dots can never leak into what gets saved.
+          type={maskable && !revealed ? "password" : "text"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           spellCheck={false}
           autoComplete="off"

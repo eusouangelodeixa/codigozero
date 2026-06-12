@@ -13,7 +13,7 @@ import { getActivePrice } from '../lib/pricing';
 import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
 import { sendFirstAccessWelcome } from '../services/onboarding.service';
-import { generateUserPassword } from '../services/payment.service';
+import { generateUserPassword, sendCredentialsEmail } from '../services/payment.service';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -204,6 +204,12 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
     });
 
     console.log(`[AUTH] 🔓 Access revealed on /resgate for user=${user.id}`);
+
+    // Also e-mail the recovered credentials (Resend) so the buyer keeps a copy.
+    sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw }).catch((e) =>
+      console.error('[AUTH] recover-access e-mail failed (non-blocking):', e?.message || e),
+    );
+
     return res.json({
       name: user.name,
       email: user.email,

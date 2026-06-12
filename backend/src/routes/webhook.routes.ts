@@ -21,6 +21,7 @@ import { sendCancellationMessage } from '../services/lifecycle.service';
 import {
   generateUserPassword,
   sendCredentialsViaWhatsApp,
+  sendCredentialsEmail,
   notifyAdminOfSale,
   reconcileManualStripe,
 } from '../services/payment.service';
@@ -456,6 +457,12 @@ router.post('/lojou', async (req: Request, res: Response) => {
             if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
               cleanPhone = `258${cleanPhone}`;
             }
+
+            // Also deliver the credentials by e-mail (Resend) — independent of
+            // WhatsApp, so the buyer has a durable copy even if Komunika fails.
+            sendCredentialsEmail({ name: user.name, email: user.email, rawPassword }).catch((e) =>
+              console.error('[WEBHOOK] credentials e-mail failed (non-blocking):', e?.message || e),
+            );
 
             const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
             const komunikaKey = sysConfig?.komunikaAdminApiKey || env.KOMUNIKA_ADMIN_API_KEY;
@@ -997,6 +1004,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   if (provisionedUserId) {
     syncKomunikaOnApprovedOrder(provisionedUserId).catch((e) =>
       console.error('[STRIPE-WEBHOOK/CHECKOUT] Komunika sync failed (non-blocking):', e?.message || e),
+    );
+  }
+
+  // Deliver credentials by e-mail too (Resend) — works even without a phone.
+  if (rawPassword) {
+    sendCredentialsEmail({ name, email, rawPassword }).catch((e) =>
+      console.error('[STRIPE-WEBHOOK/CHECKOUT] credentials e-mail failed (non-blocking):', e?.message || e),
     );
   }
 

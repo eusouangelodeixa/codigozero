@@ -27,6 +27,11 @@ export const env = {
   LOJOU_BUMP_197_PRICE: parseFloat(process.env.LOJOU_BUMP_197_PRICE || '197'),
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   NODE_ENV: process.env.NODE_ENV || 'development',
+  // ── Resend (e-mail delivery of access credentials) ────────────────────
+  // RESEND_FROM must use a domain verified in the Resend dashboard, e.g.
+  // 'Código Zero <acesso@czero.sbs>'. Empty → e-mail sending is a silent no-op.
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  RESEND_FROM: process.env.RESEND_FROM || 'Código Zero <acesso@czero.sbs>',
   MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '10', 10),
   KOMUNIKA_API_URL: process.env.KOMUNIKA_API_URL || 'https://api.komunika.site',
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',

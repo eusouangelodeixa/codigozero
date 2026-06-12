@@ -22,6 +22,7 @@ import crypto from 'crypto';
 import { env } from '../config/env';
 import { sendPushToSuperAdmins } from './push.service';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { sendEmail, type EmailSendResult } from '../lib/email';
 
 const prisma = new PrismaClient();
 
@@ -89,6 +90,68 @@ export async function sendCredentialsViaWhatsApp(opts: {
     url: '/admin/users',
   }).catch(() => {});
   return { delivered: false, status: r.status };
+}
+
+/** Branded HTML for the access-credentials e-mail. */
+function credentialsEmailHtml(opts: { name: string; email: string; password: string; loginUrl: string }): string {
+  const first = (opts.name || '').split(' ')[0] || 'membro';
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#0b1413;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1413;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">
+        <tr><td style="background:#001412;padding:22px 28px;text-align:center;">
+          <span style="color:#2DD4BF;font-size:20px;font-weight:800;letter-spacing:-0.02em;">Código Zero</span>
+        </td></tr>
+        <tr><td style="padding:30px 28px 6px;">
+          <h1 style="margin:0 0 6px;font-size:22px;color:#0b1413;">Bem-vindo, ${first}! 🎉</h1>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#475569;">Sua conta no <strong>Código Zero</strong> está pronta. Aqui estão os seus dados de acesso:</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;border-radius:12px;">
+            <tr><td style="padding:14px 16px 6px;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">E-mail</div>
+              <div style="font-size:16px;color:#0b1413;font-weight:600;word-break:break-all;">${opts.email}</div>
+            </td></tr>
+            <tr><td style="padding:6px 16px 14px;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;">Senha</div>
+              <div style="font-size:18px;color:#0b1413;font-weight:700;font-family:ui-monospace,Menlo,monospace;">${opts.password}</div>
+            </td></tr>
+          </table>
+          <a href="${opts.loginUrl}" style="display:block;margin:22px 0 4px;background:#2DD4BF;color:#001412;text-decoration:none;text-align:center;font-weight:700;font-size:16px;padding:14px;border-radius:10px;">Acessar o Código Zero &rarr;</a>
+          <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#64748b;">Guarde esses dados em local seguro. Recomendamos fazer login e, no seu perfil, trocar a senha por uma de sua preferência.</p>
+        </td></tr>
+        <tr><td style="padding:18px 28px 26px;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;line-height:1.5;">Código Zero — o ecossistema pra criar micronegócios de IA. Sem código, sem barreiras.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+/**
+ * Deliver the access credentials (email + password + login link) by e-mail via
+ * Resend. Mirrors sendCredentialsViaWhatsApp so the buyer gets their access on
+ * BOTH channels. Best-effort: no-ops when Resend isn't configured.
+ */
+export async function sendCredentialsEmail(opts: {
+  name: string;
+  email: string;
+  rawPassword: string;
+  loginUrl?: string;
+}): Promise<EmailSendResult> {
+  const loginUrl = opts.loginUrl || `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`;
+  const html = credentialsEmailHtml({ name: opts.name, email: opts.email, password: opts.rawPassword, loginUrl });
+  const text = [
+    `Bem-vindo ao Código Zero!`,
+    ``,
+    `Email: ${opts.email}`,
+    `Senha: ${opts.rawPassword}`,
+    ``,
+    `Acesse: ${loginUrl}`,
+    ``,
+    `Guarde esses dados em local seguro.`,
+  ].join('\n');
+  return sendEmail({ to: opts.email, subject: '🎉 Seu acesso ao Código Zero', html, text });
 }
 
 /**

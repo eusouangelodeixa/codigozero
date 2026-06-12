@@ -45,6 +45,9 @@ services:
       # Komunika embedded module (provision + SSO)
       - KOMUNIKA_HMAC_SECRET=${KOMUNIKA_HMAC_SECRET:-}
       - KOMUNIKA_SSO_JWT_SECRET=${KOMUNIKA_SSO_JWT_SECRET:-}
+      # Resend (e-mail delivery of access credentials)
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM=${RESEND_FROM:-Código Zero <acesso@czero.sbs>}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@czero.sbs}

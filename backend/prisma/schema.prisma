@@ -61,6 +61,11 @@ model User {
   onboardingNudgeCount   Int       @default(0)
   lastOnboardingNudgeAt  DateTime?
 
+  // Access-recovery fallback (/resgate): stamped the one time a buyer reveals
+  // their access on screen (when WhatsApp delivery failed). The reveal resets
+  // the password and shows it once; subsequent attempts are blocked.
+  accessRevealedAt       DateTime?
+
   // ── PWA install tracking ────────────────────────────────────────────
   // pwaInstalledAt is stamped the first time the authed app loads in
   // standalone/display-mode (added to home screen). pwaReminderSentAt is

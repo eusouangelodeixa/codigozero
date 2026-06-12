@@ -13,6 +13,7 @@ import { getActivePrice } from '../lib/pricing';
 import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
 import { sendFirstAccessWelcome } from '../services/onboarding.service';
+import { generateUserPassword } from '../services/payment.service';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -144,6 +145,74 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[AUTH] Get me error:', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ── Access-recovery fallback (/resgate) ─────────────────────────────────────
+// When WhatsApp delivery fails, a buyer can recover their access on screen by
+// entering the phone/e-mail used in the purchase. The password is stored only
+// hashed, so we RESET it to a fresh one and show it ONCE — guarded by
+// accessRevealedAt so it can never be revealed again (the page warns the user).
+const recoverLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
+});
+
+router.post('/recover-access', recoverLimiter, async (req: Request, res: Response) => {
+  try {
+    const identifier = String(req.body?.identifier || '').trim();
+    if (!identifier) {
+      return res.status(400).json({ error: 'Informe o telefone ou e-mail usado na compra.' });
+    }
+
+    let user = null;
+    if (identifier.includes('@')) {
+      user = await prisma.user.findFirst({
+        where: { email: { equals: identifier, mode: 'insensitive' } },
+      });
+    } else {
+      const norm = normalizeMzPhone(identifier);
+      const digits = identifier.replace(/\D/g, '');
+      user = await prisma.user.findFirst({ where: { OR: [{ phone: norm }, { phone: digits }] } });
+    }
+
+    if (!user || user.role !== 'member') {
+      return res.status(404).json({
+        error: 'Não encontramos uma compra com esses dados. Confira o telefone ou e-mail que usou na compra.',
+      });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({
+        error: 'Sua assinatura não está ativa no momento. Fale com o suporte para recuperar o acesso.',
+      });
+    }
+    if (user.accessRevealedAt) {
+      return res.status(409).json({
+        error:
+          'Seus dados de acesso já foram exibidos uma vez por aqui. Por segurança não mostramos novamente — fale com o suporte se precisar.',
+        alreadyRevealed: true,
+      });
+    }
+
+    const { raw, hash } = await generateUserPassword();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hash, accessRevealedAt: new Date() },
+    });
+
+    console.log(`[AUTH] 🔓 Access revealed on /resgate for user=${user.id}`);
+    return res.json({
+      name: user.name,
+      email: user.email,
+      password: raw,
+      loginUrl: `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`,
+    });
+  } catch (error) {
+    console.error('[AUTH] recover-access error:', error);
+    return res.status(500).json({ error: 'Erro ao recuperar acesso. Tente novamente.' });
   }
 });
 

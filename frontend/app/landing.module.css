@@ -1366,7 +1366,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-3);
-  align-items: stretch;
+  align-items: start;
 }
 .founderCol {
   display: flex;
@@ -1374,22 +1374,20 @@
   gap: var(--space-3);
 }
 .founderTile {
-  position: relative;
   overflow: hidden;
   border-radius: 14px;
   border: 1px solid var(--border-default);
   background: var(--bg-elevated);
   box-shadow: 0 20px 40px -24px rgba(0,0,0,0.6);
+  line-height: 0; /* remove the inline-image baseline gap */
 }
-/* aspect-ratios = the real pixel dimensions of each screenshot, so the full
-   image is visible (cover never has to crop into the content). */
-.gPortrait { aspect-ratio: 1 / 1; }       /* angelo.jpg 886×886 */
-.gIg { aspect-ratio: 1179 / 747; }        /* instagram.jpg */
-.gPix { aspect-ratio: 996 / 388; }        /* pix-3330.jpg */
-/* With `fill`, next/image sizes the <img> to the tile; cover + a matching tile
-   aspect-ratio shows the whole image with no crop and no bars. */
+/* Each screenshot carries its own height (width:100% + height:auto), so it shows
+   in FULL at its real proportions on every screen — no crop, no black bars, and
+   no reliance on the parent having a height (which broke on mobile with `fill`). */
 .founderImg {
-  object-fit: cover;
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 /* ── O ECOSSISTEMA POR DENTRO (5 features grid) ── */

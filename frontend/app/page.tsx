@@ -822,31 +822,31 @@ export default function LandingPage({
                 Pix), cada um exibido por inteiro. Substituir mantendo os nomes
                 exatos (ver public/founders/README.md). */}
             <div className={styles.founderGallery}>
-              <div className={`${styles.founderTile} ${styles.gPortrait}`}>
+              <div className={styles.founderTile}>
                 <Image
                   src={FOUNDER_GALLERY.portrait.src}
                   alt={FOUNDER_GALLERY.portrait.alt}
-                  fill
-                  sizes="(max-width:560px) 100vw, 50vw"
+                  width={886}
+                  height={886}
                   className={styles.founderImg}
                 />
               </div>
               <div className={styles.founderCol}>
-                <div className={`${styles.founderTile} ${styles.gIg}`}>
+                <div className={styles.founderTile}>
                   <Image
                     src={FOUNDER_GALLERY.ig.src}
                     alt={FOUNDER_GALLERY.ig.alt}
-                    fill
-                    sizes="(max-width:560px) 100vw, 50vw"
+                    width={1179}
+                    height={747}
                     className={styles.founderImg}
                   />
                 </div>
-                <div className={`${styles.founderTile} ${styles.gPix}`}>
+                <div className={styles.founderTile}>
                   <Image
                     src={FOUNDER_GALLERY.pix.src}
                     alt={FOUNDER_GALLERY.pix.alt}
-                    fill
-                    sizes="(max-width:560px) 100vw, 50vw"
+                    width={996}
+                    height={388}
                     className={styles.founderImg}
                   />
                 </div>

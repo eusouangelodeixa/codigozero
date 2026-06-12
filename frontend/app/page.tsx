@@ -804,54 +804,61 @@ export default function LandingPage({
         {/* QUEM ESTÁ FALANDO COM VOCÊ — founder + galeria */}
         <section className={styles.founderSection}>
           <motion.div {...reveal} className={styles.founderInner}>
-            <div className={styles.founderText}>
-              <span className={styles.sectionLabel}>{t("founderLabel")}</span>
-              <p className={styles.founderIntro}>{renderBold(t("founderIntro"))}</p>
-              <ul className={styles.founderCreds}>
-                {founderCreds.map((c, i) => (
-                  <li key={i} className={styles.founderCred}>
-                    <span className={styles.founderCredDot} aria-hidden />
-                    <span>{renderBold(c)}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className={styles.founderClosing}>{t("founderClosing")}</p>
-            </div>
+            <span className={styles.sectionLabel}>{t("founderLabel")}</span>
 
-            {/* GALERIA — 3 screenshots em /public/founders/ (retrato + Instagram +
-                Pix), cada um exibido por inteiro. Substituir mantendo os nomes
-                exatos (ver public/founders/README.md). */}
-            <div className={styles.founderGallery}>
-              <div className={styles.founderTile}>
+            {/* Identidade — retrato + apresentação (logo abaixo do título) */}
+            <div className={styles.founderHeader}>
+              <figure className={styles.founderPhoto}>
                 <Image
                   src={FOUNDER_GALLERY.portrait.src}
                   alt={FOUNDER_GALLERY.portrait.alt}
                   width={886}
                   height={886}
-                  className={styles.founderImg}
+                  className={styles.founderPhotoImg}
                 />
-              </div>
-              <div className={styles.founderCol}>
-                <div className={styles.founderTile}>
+              </figure>
+              <div className={styles.founderHeaderText}>
+                <p className={styles.founderIntro}>{renderBold(t("founderIntro"))}</p>
+                <figure className={styles.founderProof}>
                   <Image
                     src={FOUNDER_GALLERY.ig.src}
                     alt={FOUNDER_GALLERY.ig.alt}
                     width={1179}
                     height={747}
-                    className={styles.founderImg}
+                    className={styles.founderProofImg}
                   />
-                </div>
-                <div className={styles.founderTile}>
-                  <Image
-                    src={FOUNDER_GALLERY.pix.src}
-                    alt={FOUNDER_GALLERY.pix.alt}
-                    width={996}
-                    height={388}
-                    className={styles.founderImg}
-                  />
-                </div>
+                  <figcaption className={styles.founderProofCap}>
+                    Meu Instagram — <strong>@eusouangelodeixa</strong>, 2.625 seguidores.
+                  </figcaption>
+                </figure>
               </div>
             </div>
+
+            {/* Credenciais */}
+            <ul className={styles.founderCreds}>
+              {founderCreds.map((c, i) => (
+                <li key={i} className={styles.founderCred}>
+                  <span className={styles.founderCredDot} aria-hidden />
+                  <span>{renderBold(c)}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Prova do contrato da Mira — citado na última credencial (R$ 3.330) */}
+            <figure className={`${styles.founderProof} ${styles.founderProofWide}`}>
+              <Image
+                src={FOUNDER_GALLERY.pix.src}
+                alt={FOUNDER_GALLERY.pix.alt}
+                width={996}
+                height={388}
+                className={styles.founderProofImg}
+              />
+              <figcaption className={styles.founderProofCap}>
+                Comprovante da primeira parcela do contrato da Mira — <strong>R$ 3.330</strong>.
+              </figcaption>
+            </figure>
+
+            <p className={styles.founderClosing}>{t("founderClosing")}</p>
           </motion.div>
         </section>
 

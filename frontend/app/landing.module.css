@@ -1307,12 +1307,12 @@
   padding: var(--space-16) var(--space-6);
 }
 .founderInner {
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: var(--space-10);
-  align-items: start;
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
-.founderText { display: flex; flex-direction: column; gap: var(--space-4); }
 .founderIntro {
   font-size: var(--type-h3);
   color: var(--text-secondary);
@@ -1358,37 +1358,49 @@
   letter-spacing: -0.01em;
 }
 
-/* Founder credibility shots — square portrait on the left; Instagram + Pix
-   stacked in a nested column on the right. Each tile's aspect-ratio MATCHES the
-   real screenshot proportions, so object-fit: cover fills the tile while showing
-   the WHOLE image — no cropping, no black letterboxing. */
-.founderGallery {
+/* Founder identity + contextual proofs. The portrait sits beside the intro right
+   under the heading; the Instagram shot backs up the intro; the Pix receipt comes
+   right after the credentials that mention it. Every image carries its own height
+   (width:100% + height:auto) so it shows in FULL on every screen — no crop, no
+   black bars, no dependence on a parent height. */
+.founderHeader {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-  align-items: start;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-8);
+  align-items: center;
 }
-.founderCol {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.founderTile {
-  overflow: hidden;
-  border-radius: 14px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-elevated);
-  box-shadow: 0 20px 40px -24px rgba(0,0,0,0.6);
-  line-height: 0; /* remove the inline-image baseline gap */
-}
-/* Each screenshot carries its own height (width:100% + height:auto), so it shows
-   in FULL at its real proportions on every screen — no crop, no black bars, and
-   no reliance on the parent having a height (which broke on mobile with `fill`). */
-.founderImg {
+.founderPhoto { margin: 0; }
+.founderPhotoImg {
   width: 100%;
   height: auto;
   display: block;
+  border-radius: 18px;
+  border: 1px solid var(--border-default);
+  box-shadow: 0 30px 60px -30px rgba(0,0,0,0.7);
 }
+.founderHeaderText { display: flex; flex-direction: column; gap: var(--space-5); }
+.founderProof {
+  margin: 0 auto;
+  max-width: 460px;
+  width: 100%;
+}
+.founderProofWide { max-width: 560px; }
+.founderProofImg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  box-shadow: 0 20px 40px -24px rgba(0,0,0,0.6);
+}
+.founderProofCap {
+  margin-top: var(--space-3);
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  text-align: center;
+}
+.founderProofCap strong { color: var(--accent); font-weight: 700; }
 
 /* ── O ECOSSISTEMA POR DENTRO (5 features grid) ── */
 .ecoGrid {
@@ -1492,14 +1504,10 @@
 .priceSub strong { color: var(--text-primary); font-weight: 700; }
 
 /* ── Responsive (v2 copy sections) ── */
-@media (max-width: 900px) {
-  .founderInner { grid-template-columns: 1fr; gap: var(--space-8); }
-}
-
-/* Mobile gallery: one column. Portrait, then the Instagram + Pix column stack
-   below it; each tile keeps its own aspect-ratio so all three show fully. */
-@media (max-width: 560px) {
-  .founderGallery { grid-template-columns: 1fr; }
+/* On narrow screens the portrait stacks above the intro, centered. */
+@media (max-width: 760px) {
+  .founderHeader { grid-template-columns: 1fr; gap: var(--space-6); }
+  .founderPhoto { max-width: 220px; margin: 0 auto; }
 }
 
 @media (max-width: 768px) {

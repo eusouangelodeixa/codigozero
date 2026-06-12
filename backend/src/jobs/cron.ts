@@ -9,6 +9,8 @@ import { transitionDuePartnerPending } from '../services/partner.service';
 import { getActivePrice } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
+import { initiateSdrOutbound } from '../services/sdr.service';
+import { buildSurveyContext } from '../services/lifecycle.service';
 
 const prisma = new PrismaClient();
 
@@ -282,62 +284,52 @@ export function startCronJobs() {
       });
 
       const systemConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-      const visitorFunnelId = systemConfig?.komunikaVisitorFunnelId || process.env.KOMUNIKA_FUNNEL_VISITOR_ID;
-      const hasApiKey = systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+      const apiKey = systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+      const instanceId = systemConfig?.komunikaInstanceId || undefined;
+      const visitorAssistantId = systemConfig?.komunikaVisitorAssistantId || process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID;
 
-      if (abandonedLeads.length > 0 && hasApiKey && visitorFunnelId) {
+      if (abandonedLeads.length > 0 && apiKey && visitorAssistantId) {
         console.log(`[CRON] Encontrados ${abandonedLeads.length} leads abandonados.`);
-        
+
         for (const lead of abandonedLeads) {
-          let cleanPhone = lead.phone.replace(/\D/g, '');
-          if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-            cleanPhone = `258${cleanPhone}`;
-          }
-          
-          // Generate normal fallback link for remarketing agent
-          const normalUrl = new URL("https://pay.lojou.app/p/uoEHz");
-          if (lead.name) normalUrl.searchParams.append("name", lead.name);
-          if (lead.email) normalUrl.searchParams.append("email", lead.email);
-          normalUrl.searchParams.append("phone", cleanPhone);
-          const normalCheckoutUrl = normalUrl.toString();
-
-          try {
-            const res = await fetch(`${process.env.KOMUNIKA_API_URL || 'https://api.komunika.site'}/api/v1/funnels/${visitorFunnelId}/add-lead`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY || ''
-              },
-              body: JSON.stringify({
-                phone: cleanPhone,
-                name: lead.name,
-                email: lead.email,
-                customFields: { 
-                  origem: 'Landing Page Abandonada',
-                  checkout_url: lead.checkoutUrl || '',
-                  normal_checkout_url: normalCheckoutUrl,
-                  ...(lead.surveyAnswers && typeof lead.surveyAnswers === 'object' ? lead.surveyAnswers : {})
-                }
-              })
-            });
-
-            if (!res.ok) {
-              const errBody = await res.text();
-              throw new Error(`HTTP ${res.status}: ${errBody}`);
+          // Fallback checkout link for the SDR agent — prefer the persisted
+          // checkout URL, else build a personalized normal-checkout link.
+          let checkoutUrl = lead.checkoutUrl || '';
+          if (!checkoutUrl) {
+            let cleanPhone = lead.phone.replace(/\D/g, '');
+            if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
+              cleanPhone = `258${cleanPhone}`;
             }
-            
-            // Marcar como enviado o funil de visitante
+            const normalUrl = new URL('https://pay.lojou.app/p/uoEHz');
+            if (lead.name) normalUrl.searchParams.append('name', lead.name);
+            if (lead.email) normalUrl.searchParams.append('email', lead.email);
+            normalUrl.searchParams.append('phone', cleanPhone);
+            checkoutUrl = normalUrl.toString();
+          }
+
+          const context = buildSurveyContext(lead, { scenario: 'visitor', checkoutUrl });
+          const result = await initiateSdrOutbound({
+            assistantId: visitorAssistantId,
+            apiKey,
+            phone: lead.phone,
+            name: lead.name,
+            context,
+            source: 'landing-abandon',
+            instanceId,
+          });
+
+          if (result.ok) {
             await prisma.user.update({
               where: { id: lead.id },
-              data: { remarketingStage: 'visitor_sent' }
+              data: { remarketingStage: 'visitor_sent' },
             });
-            console.log(`[CRON] 🎯 Remarketing (Visitante) enviado para o lead: ${cleanPhone}`);
-          } catch (e) {
-            console.error(`[CRON] Falha ao enviar remarketing para ${cleanPhone}:`, e);
+            console.log(`[CRON] 🎯 SDR (Visitante) iniciado para o lead ${lead.phone} (${result.status})`);
+          } else {
+            console.error(`[CRON] Falha ao iniciar SDR (Visitante) para ${lead.phone}: ${result.error}`);
           }
         }
       }
-      
+
       // --- Checkout Abandonment Remarketing (15 min delay) ---
       const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
       const abandonedCheckouts = await prisma.user.findMany({
@@ -348,57 +340,48 @@ export function startCronJobs() {
         }
       });
 
-      const checkoutFunnelId = systemConfig?.komunikaCheckoutFunnelId || process.env.KOMUNIKA_FUNNEL_CHECKOUT_ID;
-      const hasCheckoutApiKey = systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+      const checkoutAssistantId = systemConfig?.komunikaCheckoutAssistantId || process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID;
 
-      if (abandonedCheckouts.length > 0 && hasCheckoutApiKey && checkoutFunnelId) {
+      if (abandonedCheckouts.length > 0 && apiKey && checkoutAssistantId) {
         console.log(`[CRON] Encontrados ${abandonedCheckouts.length} checkouts pendentes.`);
-        
+
         for (const lead of abandonedCheckouts) {
-          let cleanPhone = lead.phone.replace(/\D/g, '');
-          if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-            cleanPhone = `258${cleanPhone}`;
+          let checkoutUrl = lead.checkoutUrl || '';
+          if (!checkoutUrl) {
+            let cleanPhone = lead.phone.replace(/\D/g, '');
+            if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
+              cleanPhone = `258${cleanPhone}`;
+            }
+            const normalUrl = new URL('https://pay.lojou.app/p/uoEHz');
+            if (lead.name) normalUrl.searchParams.append('name', lead.name);
+            if (lead.email) normalUrl.searchParams.append('email', lead.email);
+            normalUrl.searchParams.append('phone', cleanPhone);
+            checkoutUrl = normalUrl.toString();
           }
 
-          // Generate normal fallback link for remarketing agent
-          const normalUrl = new URL("https://pay.lojou.app/p/uoEHz");
-          if (lead.name) normalUrl.searchParams.append("name", lead.name);
-          if (lead.email) normalUrl.searchParams.append("email", lead.email);
-          normalUrl.searchParams.append("phone", cleanPhone);
-          const normalCheckoutUrl = normalUrl.toString();
+          const context = buildSurveyContext(lead, {
+            scenario: 'checkout',
+            checkoutUrl,
+            orderId: lead.lojouOrderId || undefined,
+          });
+          const result = await initiateSdrOutbound({
+            assistantId: checkoutAssistantId,
+            apiKey,
+            phone: lead.phone,
+            name: lead.name,
+            context,
+            source: 'checkout-abandon',
+            instanceId,
+          });
 
-          try {
-            const res = await fetch(`${process.env.KOMUNIKA_API_URL || 'https://api.komunika.site'}/api/v1/funnels/${checkoutFunnelId}/add-lead`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-API-Key': systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY || ''
-              },
-              body: JSON.stringify({
-                phone: cleanPhone,
-                name: lead.name,
-                email: lead.email,
-                customFields: {
-                  order_id: lead.lojouOrderId || '',
-                  checkout_url: lead.checkoutUrl || '',
-                  normal_checkout_url: normalCheckoutUrl,
-                  ...(lead.surveyAnswers && typeof lead.surveyAnswers === 'object' ? lead.surveyAnswers : {})
-                }
-              })
-            });
-
-            if (!res.ok) {
-              const errBody = await res.text();
-              throw new Error(`HTTP ${res.status}: ${errBody}`);
-            }
-            
+          if (result.ok) {
             await prisma.user.update({
               where: { id: lead.id },
-              data: { remarketingStage: 'checkout_failed_sent' }
+              data: { remarketingStage: 'checkout_failed_sent' },
             });
-            console.log(`[CRON] 🛒 Remarketing (Checkout) enviado para o lead: ${cleanPhone}`);
-          } catch (e) {
-            console.error(`[CRON] Falha ao enviar remarketing de checkout para ${cleanPhone}:`, e);
+            console.log(`[CRON] 🛒 SDR (Checkout) iniciado para o lead ${lead.phone} (${result.status})`);
+          } else {
+            console.error(`[CRON] Falha ao iniciar SDR (Checkout) para ${lead.phone}: ${result.error}`);
           }
         }
       }

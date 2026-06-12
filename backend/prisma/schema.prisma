@@ -239,8 +239,8 @@ model SystemConfig {
   communityLink            String?
   mentoriaSchedule         String? // next mentoria ISO datetime
   mentoriaLink             String?
-  komunikaVisitorFunnelId  String?
-  komunikaCheckoutFunnelId String?
+  komunikaVisitorAssistantId  String?
+  komunikaCheckoutAssistantId String?
   komunikaAdminApiKey      String?
   komunikaInstanceId       String? // Komunika WhatsApp instance ID
   milestoneAlertPhone      String?

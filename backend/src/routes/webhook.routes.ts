@@ -716,10 +716,11 @@ router.post('/lojou', async (req: Request, res: Response) => {
         }
         
         const systemConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-        const checkoutFunnelId = systemConfig?.komunikaCheckoutFunnelId || env.KOMUNIKA_FUNNEL_CHECKOUT_ID;
+        const checkoutAssistantId = systemConfig?.komunikaCheckoutAssistantId || env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID;
 
-        // Delay strategy: Just mark as 'checkout_pending'. The Cron Job handles the rest.
-        if (customerPhone && env.KOMUNIKA_ADMIN_API_KEY && checkoutFunnelId) {
+        // Delay strategy: Just mark as 'checkout_pending'. The Cron Job handles
+        // the rest (SDR outbound initiate when the abandonment window elapses).
+        if (customerPhone && env.KOMUNIKA_ADMIN_API_KEY && checkoutAssistantId) {
           if (user && user.subscriptionStatus === 'active') {
              return res.json({ status: 'ignored_active_user' });
           }

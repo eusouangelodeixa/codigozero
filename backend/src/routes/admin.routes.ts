@@ -17,6 +17,8 @@ import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { createScheduledDispatch, processDispatch, type DispatchPayload } from '../services/dispatch.service';
 import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
+import { initiateSdrOutbound } from '../services/sdr.service';
+import { buildSurveyContext } from '../services/lifecycle.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -986,24 +988,7 @@ router.get('/system', async (_req: AuthRequest, res: Response) => {
       config = await prisma.systemConfig.create({ data: { id: 'singleton' } });
     }
 
-    // Tentar carregar a lista de funis do Komunika se a API KEY estiver configurada
-    let funnels = [];
-    const apiKeyToUse = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
-    if (apiKeyToUse) {
-      try {
-        const response = await fetch(`${process.env.KOMUNIKA_API_URL || 'https://api.komunika.site'}/api/v1/funnels`, {
-          headers: { 'X-API-Key': apiKeyToUse }
-        });
-        const data = await response.json().catch(() => null);
-        if (data && data.success && Array.isArray(data.data)) {
-          funnels = data.data;
-        }
-      } catch (e) {
-        console.error('[ADMIN] Erro ao carregar funis do Komunika:', e);
-      }
-    }
-
-    res.json({ config, funnels });
+    res.json({ config });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar config do sistema' });
   }
@@ -1011,11 +996,11 @@ router.get('/system', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {
-    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorFunnelId, komunikaCheckoutFunnelId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName } = req.body;
+    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName } = req.body;
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorFunnelId, komunikaCheckoutFunnelId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorFunnelId, komunikaCheckoutFunnelId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName },
     });
     res.json({ config });
   } catch (error) {
@@ -1024,39 +1009,30 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
 });
 
 // ═══════════════════════════════════════
-// FUNIL — listagem + re-injeção manual de vendas falhas/reembolsadas/canceladas
+// SDR OUTBOUND — re-engajamento manual de vendas falhas/reembolsadas/canceladas
 // ═══════════════════════════════════════
 
-// GET /api/admin/funnels — lista os funis do Komunika para o seletor de disparo.
-// Degrada com elegância: se o Komunika estiver fora, retorna [] + um aviso.
-router.get('/funnels', async (_req: AuthRequest, res: Response) => {
+// POST /api/admin/sdr-reengage — re-engaja vendas (por transactionIds ou
+// emails) via SDR outbound do Komunika, em segundo plano e com intervalo entre
+// cada envio. Casa o email/telefone com o usuário para montar o `context` do
+// SDR (dados do quiz + link de recuperação).
+router.post('/sdr-reengage', async (req: AuthRequest, res: Response) => {
   try {
-    const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-    const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
-    if (!apiKey) return res.json({ funnels: [], error: 'Chave da API do Komunika não configurada.' });
-    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
-    try {
-      const r = await fetch(`${apiUrl}/api/v1/funnels`, { headers: { 'X-API-Key': apiKey } });
-      const data = await r.json().catch(() => null);
-      const funnels = data && data.success && Array.isArray(data.data) ? data.data : [];
-      return res.json({ funnels });
-    } catch (e) {
-      console.error('[ADMIN] Erro ao listar funis do Komunika:', e);
-      return res.json({ funnels: [], error: 'Não foi possível carregar os funis (Komunika indisponível).' });
-    }
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao carregar funis' });
-  }
-});
+    const { transactionIds, emails, assistantId, scenario, intervalMinSec, intervalMaxSec, name } = req.body || {};
 
-// POST /api/admin/funnel-injection — re-injeta vendas (por transactionIds ou
-// emails) num funil do Komunika, em segundo plano e com intervalo entre cada
-// envio. Casa o email com o usuário para enviar os dados do quiz ao funil.
-router.post('/funnel-injection', async (req: AuthRequest, res: Response) => {
-  try {
-    const { transactionIds, emails, funnelId, intervalMinSec, intervalMaxSec, name } = req.body || {};
-    if (!funnelId || !String(funnelId).trim()) {
-      return res.status(400).json({ error: 'Selecione um funil.' });
+    // Default scenario 'checkout' — these are failed/refunded/cancelled sales,
+    // i.e. people who already reached the checkout.
+    const resolvedScenario: 'visitor' | 'checkout' = scenario === 'visitor' ? 'visitor' : 'checkout';
+
+    const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+    const resolvedAssistantId =
+      (assistantId && String(assistantId).trim()) ||
+      (resolvedScenario === 'visitor'
+        ? config?.komunikaVisitorAssistantId || process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID
+        : config?.komunikaCheckoutAssistantId || process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID);
+
+    if (!resolvedAssistantId) {
+      return res.status(400).json({ error: 'Nenhum assistente SDR configurado para este cenário.' });
     }
 
     // Gather raw targets from transaction ids and/or explicit emails.
@@ -1089,25 +1065,21 @@ router.post('/funnel-injection', async (req: AuthRequest, res: Response) => {
             ...(t.phone ? [{ phone: t.phone }] : []),
           ],
         },
-        select: { name: true, phone: true, surveyAnswers: true, renewalUrl: true, checkoutUrl: true },
+        select: { name: true, phone: true, surveyAnswers: true, renewalUrl: true, checkoutUrl: true, lojouOrderId: true },
       });
 
       const phone = (user?.phone || t.phone || '').replace(/\D/g, '');
       if (!phone) { skipped.push({ target: t.email || '—', reason: 'sem telefone' }); continue; }
 
-      const sa = (user?.surveyAnswers as Record<string, string> | null) || {};
+      const context = buildSurveyContext(user, {
+        scenario: resolvedScenario,
+        checkoutUrl: user?.checkoutUrl || user?.renewalUrl || undefined,
+        orderId: user?.lojouOrderId || undefined,
+      });
       contacts.push({
         phone,
         name: user?.name || t.name || 'Cliente',
-        variables: {
-          nome: user?.name || t.name || '',
-          goal: sa.goal || '',
-          pain: sa.pain || '',
-          commitment: sa.commitment || '',
-          awareness: sa.awareness || '',
-          checkout_url: user?.renewalUrl || user?.checkoutUrl || '',
-          origem: 'Reinjeção manual (Admin)',
-        },
+        context,
       });
     }
 
@@ -1119,20 +1091,21 @@ router.post('/funnel-injection', async (req: AuthRequest, res: Response) => {
     const maxSec = Math.max(minSec, Number(intervalMaxSec) || 180);
     const payload: DispatchPayload = {
       contacts,
-      dispatchMode: 'funnel',
-      funnelId: String(funnelId).trim(),
+      dispatchMode: 'sdr',
+      assistantId: String(resolvedAssistantId),
+      source: 'admin-reengage',
       useAdminCreds: true,
       delayMinSec: minSec,
       delayMaxSec: maxSec,
     };
-    const label = (name && String(name).trim()) || `Reinjeção de funil — ${contacts.length} contato(s)`;
+    const label = (name && String(name).trim()) || `Re-engajamento SDR — ${contacts.length} contato(s)`;
     const row = await createScheduledDispatch(req.user!.id, new Date(), payload, label);
-    processDispatch(row.id).catch((e) => console.error('[FUNNEL-INJECT] background error:', e));
+    processDispatch(row.id).catch((e) => console.error('[SDR-REENGAGE] background error:', e));
 
     return res.json({ success: true, scheduleId: row.id, queued: contacts.length, skipped });
   } catch (error) {
-    console.error('[FUNNEL-INJECT] error:', error);
-    res.status(500).json({ error: 'Erro ao re-injetar no funil' });
+    console.error('[SDR-REENGAGE] error:', error);
+    res.status(500).json({ error: 'Erro ao re-engajar via SDR' });
   }
 });
 
@@ -1219,53 +1192,52 @@ router.post('/komunika-test', async (req: AuthRequest, res: Response) => {
     const { phone, type } = req.body;
     if (!phone || !type) return res.status(400).json({ error: 'Telefone e tipo de teste são obrigatórios' });
 
-    let cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-      cleanPhone = `258${cleanPhone}`;
-    }
-
     const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
     const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
     if (!apiKey) return res.status(400).json({ error: 'Chave da API do Komunika não configurada' });
 
-    const funnelId = type === 'visitor' ? (config?.komunikaVisitorFunnelId || process.env.KOMUNIKA_FUNNEL_VISITOR_ID) : (config?.komunikaCheckoutFunnelId || process.env.KOMUNIKA_FUNNEL_CHECKOUT_ID);
-    
-    if (!funnelId) {
-      return res.status(400).json({ error: `Funil de ${type === 'visitor' ? 'Visitantes' : 'Recuperação'} não selecionado nas configurações.` });
+    const assistantId = type === 'visitor'
+      ? (config?.komunikaVisitorAssistantId || process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID)
+      : (config?.komunikaCheckoutAssistantId || process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID);
+
+    if (!assistantId) {
+      return res.status(400).json({ error: `Assistente SDR de ${type === 'visitor' ? 'Visitantes' : 'Recuperação'} não configurado.` });
     }
 
-    const payload = {
-      phone: cleanPhone,
-      name: "Teste Admin",
-      email: "teste@codigozero.com",
-      customFields: {
-        origem: "Disparo de Teste (Admin)",
-        checkout_url: "https://pay.lojou.app/token/49_Oqg8fBHum",
-        goal: "Ter uma renda extra de 10.000 a 20.000 MT mensais.",
-        pain: "Não sei programar e acho tecnologia muito complexo.",
-        commitment: "1 a 2 horas por dia.",
-        awareness: "Sim, mas não sei por onde começar."
-      }
-    };
-
-    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
-    
-    const response = await fetch(`${apiUrl}/api/v1/funnels/${funnelId}/add-lead`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': apiKey
+    // Sample context with mock quiz answers so the test exercises the same
+    // SDR context shape the cron/admin re-engage paths produce.
+    const context = buildSurveyContext(
+      {
+        name: 'Teste Admin',
+        surveyAnswers: {
+          goal: 'Ter uma renda extra de 10.000 a 20.000 MT mensais.',
+          pain: 'Não sei programar e acho tecnologia muito complexo.',
+          commitment: '1 a 2 horas por dia.',
+          awareness: 'Sim, mas não sei por onde começar.',
+        },
       },
-      body: JSON.stringify(payload)
+      {
+        scenario: type === 'visitor' ? 'visitor' : 'checkout',
+        checkoutUrl: 'https://pay.lojou.app/token/49_Oqg8fBHum',
+        orderId: 'TESTE-0001',
+      },
+    );
+
+    const result = await initiateSdrOutbound({
+      assistantId: String(assistantId),
+      apiKey,
+      phone,
+      name: 'Teste Admin',
+      context,
+      source: type === 'visitor' ? 'landing-abandon' : 'checkout-abandon',
+      instanceId: config?.komunikaInstanceId || undefined,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      return res.status(response.status).json({ error: `Komunika retornou erro: ${errBody}` });
+    if (!result.ok) {
+      return res.status(result.httpStatus || 502).json({ error: `Komunika retornou erro: ${result.error}`, ok: false, status: result.status });
     }
 
-    const responseData = await response.json();
-    res.json({ success: true, message: 'Teste disparado com sucesso!', data: responseData });
+    res.json({ success: true, ok: true, status: result.status, message: 'Teste SDR disparado com sucesso!', data: result.data });
 
   } catch (error: any) {
     console.error('[ADMIN] Erro no teste do Komunika:', error);

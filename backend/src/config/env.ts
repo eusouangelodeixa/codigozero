@@ -30,8 +30,8 @@ export const env = {
   MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '10', 10),
   KOMUNIKA_API_URL: process.env.KOMUNIKA_API_URL || 'https://api.komunika.site',
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',
-  KOMUNIKA_FUNNEL_VISITOR_ID: process.env.KOMUNIKA_FUNNEL_VISITOR_ID || '', // Funil de Visitantes Puros
-  KOMUNIKA_FUNNEL_CHECKOUT_ID: process.env.KOMUNIKA_FUNNEL_CHECKOUT_ID || '', // Funil de Carrinho Abandonado
+  KOMUNIKA_SDR_VISITOR_ASSISTANT_ID: process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID || '', // SDR outbound agent — visitantes (landing abandonada)
+  KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID: process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID || '', // SDR outbound agent — checkout abandonado
   // ── Komunika EMBEDDED MODULE (provision + SSO) ────────────────────
   // Distinct from the funnel/remarketing keys above. Komunika is bundled
   // FREE with the CZ subscription: every paying member is provisioned a

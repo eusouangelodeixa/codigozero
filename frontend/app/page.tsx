@@ -1,167 +1,203 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
 import {
-  Radar as IconRadar,
-  Send as IconSend,
-  Library as IconLibrary,
-  Hammer as IconHammer,
-  Compass as IconCompass,
-  MessagesSquare as IconMessages,
   ChevronDown as IconChevron,
   Star as IconStar,
   Shield as IconShield,
   Instagram as IconInstagram,
   Play as IconPlay,
-  ArrowRight as IconArrow,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { StackScrolly } from "@/components/landing/StackScrolly";
 import styles from "./landing.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 // ── Default texts (fallback when admin hasn't customized) ──
-// Copy is direct, no PT-PT formality, no inflated "investor" tropes — every
-// claim maps to something the product actually does (Radar/Disparador/Cofre/
-// Forja/QG/Chat) or to verifiable network state (222 members on the Whop).
+// v2 copy — mirrors the VSL arc. Direct, honest, no inflated promises. Every
+// claim maps to something the product/founder actually does. DB overrides
+// (cfg/sec) still win via t(); these are the defaults the page ships with.
+// **bold** markers in copy are rendered as real <strong> via renderBold().
 const DEFAULTS = {
   // ── Hero ─────────────────────────────────────────────────────────────
-  heroTitle: "O ecossistema completo pra criar micronegócios de IA em Moçambique.",
-  heroSubtitle: "Sem código. Sem barreiras.",
-  heroDesc: "Radar de leads, Disparador de WhatsApp, biblioteca de scripts e a network privada que se encontra <strong>todos os domingos</strong>. Tudo num lugar só.",
+  heroTitle: "Aprende a criar e vender soluções de IA pra empresas.",
+  heroSubtitle: "Sem código. Sem gastar um metical em anúncio. Sem promessa furada.",
+  heroDesc: "O ecossistema que te entrega a ferramenta que **acha os clientes**, os **scripts que fecham** e a **comunidade que te ensina a construir** — pra você prestar serviço pra empresas em Moçambique e fechar o seu primeiro contrato.",
+  heroCtaText: "Quero entrar no Código Zero (497 MT/mês)",
+  heroSubCta: "M-Pesa · e-Mola · Cartão · Acesso na hora, direto no teu WhatsApp.",
   ctaText: "Entrar no Código Zero",
-  trustText: "222 membros · Call toda semana · 6 ferramentas integradas",
-  stat1Value: "222", stat1Label: "Membros na network",
-  stat2Value: "Domingo", stat2Label: "Call ao vivo toda semana",
-  stat3Value: "30 dias", stat3Label: "Garantia condicional",
 
   // ── VSL ──────────────────────────────────────────────────────────────
   vslTitle: "Código Zero — Apresentação",
   vslSubtitle: "Assiste à apresentação completa",
   vslHint: "Clica para ouvir",
 
-  // ── Stack (6 ferramentas reais) ─────────────────────────────────────
+  // ── O que isso NÃO é ─────────────────────────────────────────────────
+  notLabel: "O que isso não é",
+  notTitle: "Esquece tudo. Isto aqui é outra coisa.",
+  notLines: [
+    "Se você já tentou dropshipping, cash on delivery, venda de ebook (o famoso PLR) ou tráfego direto — esquece tudo. Isto aqui é outra coisa.",
+    "**Eu não vou te prometer 50 ou 100 mil meticais em algumas semanas.** Não prometo dinheiro fácil, não prometo atalho, não prometo nada que eu não consiga te entregar.",
+    "A proposta é simples e honesta: **te ensinar a prestar serviço pra empresas e a criar micro-SaaS usando inteligência artificial.** Você aprende a desenvolver sistemas, sites, automações e agentes que atendem no WhatsApp — e a vender isso pra quem precisa.",
+  ],
+
+  // ── Como isso vira dinheiro de verdade (clinic story) ────────────────
+  clinicLabel: "Como isso vira dinheiro de verdade",
+  clinicTitle: "Pensa numa clínica.",
+  clinicParas: [
+    "Ela tem 3 funcionários que atendem tudo pelo WhatsApp: agendar consulta, mandar relatório, tirar dúvida. Só que a clínica tem paciente demais, e os 3 não dão conta. O atendimento fica lento. No fim do mês, faturam pouco — e o motivo é exatamente esse: ninguém consegue responder todo mundo a tempo.",
+    "Essa clínica precisa de algo que atenda os pacientes **de forma automática**, sem gastar tempo, e que faça o faturamento subir.",
+    "É exatamente o que um agente de WhatsApp faz. Ele atende todos os pacientes, economiza tempo, e libera os 3 funcionários pra focar no que importa. No fim do mês a clínica fatura muito mais, gastando pouco.",
+    "Agora multiplica isso: clínicas, restaurantes, agências de viagem, imobiliárias — **todo negócio que atende no WhatsApp precisa dessa solução.** E você vai aprender a construir e vender.",
+  ],
+
+  // ── Os números, sem inflar ───────────────────────────────────────────
+  numbersLabel: "Os números, sem inflar",
+  numbersTitle: "Faz a conta com calma.",
+  numbersLine1: "No mercado, esse tipo de solução é cobrado entre **200 e 500 reais por mês** — o equivalente a **2.400 a 6.000 MT/mês** — fora a taxa de implementação.",
+  numbersLine2: "Faz a conta com calma: **um único contrato de 3.000 MT/mês paga a tua assinatura do Código Zero por mais de 6 meses.** Não preciso te prometer fortuna. Um cliente já vira o jogo.",
+
+  // ── Quem está falando com você (founder) ─────────────────────────────
+  founderLabel: "Quem está falando com você",
+  founderIntro: "Eu sou o **Ângelo Deixa.** Moçambicano, 20 anos, morando no Brasil, apaixonado por engenharia da computação. No digital eu já construí coisas que mexeram com o negócio de vários empreendedores moçambicanos:",
+  founderCreds: [
+    "**CMO e sócio da Lojou** — plataforma de venda de infoprodutos que já processou **mais de 2 milhões de meticais.**",
+    "**CEO da Kilax** — plataforma de hospedagem de VSLs (vídeos de vendas).",
+    "**COO da Klick Builder** — plataforma de domínio e hospedagem, fundada pelo Gastene Felipe, sócio e amigo, empreendedor que você talvez já conheça.",
+    "**Sócio da Mira** — startup que tenho com um sócio brasileiro, onde usamos tecnologia pra resolver problema de empresa. O último contrato que fechamos foi de **R$ 20 mil pra desenvolver um e-commerce** — a primeira parcela paga foi de **3.330 reais, mais de 40 mil meticais.**",
+  ],
+  founderClosing: "Eu não vou te ensinar nada que eu não faça todo dia.",
+
+  // ── O ecossistema por dentro (Stack → 5 features) ────────────────────
   stackLabel: "O ecossistema por dentro",
-  stackTitle: "Seis ferramentas que",
-  stackTitleHighlight: "trabalham juntas.",
-  stackDesc: "Cada peça faz uma coisa só, e faz bem. Tudo conectado à mesma conta, ao mesmo histórico de leads, à mesma comunidade.",
-  stackTools: [
-    {
-      key: "radar",
-      name: "Radar",
-      verb: "Encontra os clientes.",
-      desc: "Scanner de leads que varre o Google Maps por cidade e categoria. Devolve nome, telefone, Instagram, website e status de cada empresa. Sem CSV, sem trabalho manual.",
-      bullets: ["Busca por cidade + categoria", "Telefone e Instagram dos donos", "Recomenda script do Cofre"],
-    },
-    {
-      key: "disparador",
-      name: "Disparador",
-      verb: "Envia em massa.",
-      desc: "Automação de WhatsApp ligada à API. Seleciona os leads do Radar, escolhe o script, dispara com variáveis personalizadas e log de cada envio para não bloquear o número.",
-      bullets: ["Anti-block com intervalos", "Variáveis por contacto", "Histórico de envios"],
-    },
-    {
-      key: "cofre",
-      name: "Cofre",
-      verb: "Guarda o que funciona.",
-      desc: "Biblioteca privada de scripts de WhatsApp e prompts de IA, organizados em pastas. Copia, cola e usa. Atualizado com o que está convertendo agora na network.",
-      bullets: ["Scripts de outbound testados", "Prompts para Make/n8n/ChatGPT", "Cópia rápida com 1 clique"],
-    },
-    {
-      key: "forja",
-      name: "Forja",
-      verb: "Ensina a construir.",
-      desc: "Aulas práticas — não teoria. Da landing page ao SaaS, passando por automações no Make, n8n e ChatGPT. Cada lição com link direto pra ferramenta usada.",
-      bullets: ["Módulos práticos passo-a-passo", "Vídeos curtos sem enrolação", "Rastreio de progresso por lição"],
-    },
-    {
-      key: "qg",
-      name: "QG",
-      verb: "Conecta a network.",
-      desc: "Hub da comunidade: link direto da network privada, agenda da próxima call ao vivo de domingo, e o botão de entrar quando começar. Sem precisar entrar em vários grupos.",
-      bullets: ["Countdown da próxima call", "Link permanente da network", "Entrada com 1 toque"],
-    },
-    {
-      key: "chat",
-      name: "Chat",
-      verb: "Tira dúvidas em tempo real.",
-      desc: "Dois canais: o feed aberto com todos os membros pra trocar ideia, e suporte 1:1 com a equipa pra quando travar em algo específico. Notificação push direto no celular.",
-      bullets: ["Feed aberto da network", "Suporte 1:1 com equipa", "Push notifications no celular"],
-    },
+  stackTitle: "Tudo está",
+  stackTitleHighlight: "conectado.",
+  stackDesc: "O Código Zero não é \"mais um curso\". É uma plataforma onde tudo está conectado — a mesma conta, o mesmo histórico de leads, a mesma comunidade.",
+  ecoFeatures: [
+    { emoji: "🛰️", title: "Radar — acha os clientes pra você", desc: "Scanner que varre o Google Maps por **cidade e nicho** e devolve nome, telefone, Instagram e website das empresas. Sem CSV, sem trabalho manual." },
+    { emoji: "📤", title: "Disparador — fala com todos de uma vez", desc: "Selecionou os contatos do Radar? Manda a abordagem pra todos eles de uma vez só, dentro da própria plataforma." },
+    { emoji: "📑", title: "Scripts — as abordagens que fecham", desc: "Banco de scripts validados pra você usar na hora de entrar em contato pela primeira vez ou fechar o contrato. Você não escreve do zero — copia o que já funciona." },
+    { emoji: "🎓", title: "Aulas e lives — aprende a construir e a vender", desc: "Aulas e lives gravadas onde eu e outros mentores ensinamos a **desenvolver as soluções** e, principalmente, a **vendê-las.**" },
+    { emoji: "💬", title: "Chat e suporte", desc: "Canal de chat onde os membros trocam ideia dentro da plataforma. E um canal de suporte onde você tira dúvida direto comigo ou com a minha equipe." },
   ],
 
   // ── Network / Comunidade ─────────────────────────────────────────────
-  networkLabel: "Código Zero — Network",
+  networkLabel: "A network",
   networkTitle: "A comunidade privada",
   networkTitleHighlight: "onde tudo acontece.",
   networkMembersCount: "222",
   networkMembersLabel: "membros ativos",
-  networkDesc: "Quem está construindo de verdade troca ideia aqui. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
+  networkDesc: "A comunidade privada onde tudo acontece. No momento, **222 membros ativos** — pessoas como você, que querem vencer e estão construindo de verdade.",
   networkPillars: [
-    { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
-    { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },
-    { title: "Construção de SaaS em conjunto", desc: "Projetos coletivos: alguém começa, a network ajuda a finalizar. Quem participa, divide." },
-    { title: "Irmandade, não audiência", desc: "Não é um grupo de Discord com 5 mil pessoas mudas. É 222 que se conhecem pelo nome." },
+    { title: "Call ao vivo todo domingo", desc: "revisão da semana, problema real, o que está convertendo agora." },
+    { title: "Troca real", desc: "membros publicam o que está funcionando: scripts, automações, contratos fechados." },
+    { title: "Construção em conjunto", desc: "projetos coletivos de SaaS: alguém começa, a network ajuda a finalizar, quem participa divide." },
+    { title: "Irmandade, não audiência", desc: "não é um Discord de 5 mil pessoas mudas. São 222 que se conhecem pelo nome." },
   ],
 
-  // ── Como funciona ────────────────────────────────────────────────────
-  flowLabel: "Como funciona",
-  flowTitle: "Quatro passos do",
-  flowTitleHighlight: "pagamento à primeira call.",
-  flowSteps: [
-    { num: "01", title: "Pagas a assinatura", desc: "M-Pesa, e-Mola ou cartão. Aprovação na hora." },
-    { num: "02", title: "Recebes acesso no WhatsApp", desc: "Email e senha enviados no número que cadastraste. Em segundos." },
-    { num: "03", title: "Entras na network", desc: "Link direto da network privada no QG. Apresentas-te e começas a interagir." },
-    { num: "04", title: "Próxima call de domingo", desc: "Aparece no Zoom no horário marcado e começa a executar o método na semana seguinte." },
+  // ── Como o Radar funciona (na prática) ───────────────────────────────
+  radarLabel: "Como o Radar funciona (na prática)",
+  radarTitle: "Os primeiros clientes sem gastar em anúncio.",
+  radarSteps: [
+    "Você entra na plataforma e clica em **Radar.**",
+    "Seleciona o nicho — por exemplo, **clínicas.**",
+    "Seleciona as cidades — **Maputo, Quelimane, Chimoio, Inhambane.**",
+    "Marca **telefone como obrigatório** e clica em **buscar.**",
+    "O sistema traz o máximo de clientes possível, automaticamente.",
+    "Vai no **Disparador**, seleciona os contatos e faz o envio — uma única vez.",
   ],
+  radarClosing: "É por isso que você **não precisa de dinheiro pra anúncio** pra achar os primeiros clientes. O Radar já faz esse trabalho por você.",
 
-  // ── Pricing ──────────────────────────────────────────────────────────
-  scarcityLabel: "Acesso atual",
-  scarcityTitle: "Network em construção.",
-  scarcityDesc: "222 membros e crescendo. Quem entra agora pega a network ainda pequena — onde dá pra conhecer todo mundo pelo nome e a tua voz na call ainda tem peso.",
+  // ── A oferta (Pricing) ───────────────────────────────────────────────
+  scarcityLabel: "A oferta",
+  scarcityTitle: "Acesso a tudo por 497 MT/mês.",
+  scarcityDesc: "O Código Zero é uma plataforma de assinatura. **497 MT por mês** te dão acesso a tudo: Radar, Disparador, Scripts, aulas, lives, comunidade e suporte.",
   priceFrom: "",
   priceAmount: "497",
   pricePeriod: "MT/mês",
-  priceSub: "Cancelas quando quiseres, sem multa. Pagamento mensal, acesso a tudo.",
-  priceCtaText: "Entrar no Código Zero — 497 MT/mês",
+  priceSub: "É mais ou menos o **preço de um hambúrguer.** E tem um motivo pro preço ser esse: **eu não quero ninguém de fora por falta de dinheiro.** Quem quer construir, constrói.",
+  priceCtaText: "Garantir minha vaga (497 MT/mês)",
 
   // ── Close Friends (upsell exibido na pricing section) ──────────────
   closeFriendsLabel: "Close Friends",
   closeFriendsTitle: "Opcional: Close Friends",
-  closeFriendsDesc: "Add-on de 1.297 MT, pagamento único no checkout. Dá <strong>3 meses corridos</strong> de acesso (em vez de 1), badge dourado na conta e prioridade nas calls de domingo.",
+  closeFriendsDesc: "Add-on de **1.297 MT**, pagamento único no checkout. Te dá **3 meses corridos** de acesso (em vez de 1), **badge dourado** na conta e **prioridade nas calls de domingo.**",
+
+  // ── Como funciona — do pagamento à primeira call (Flow) ──────────────
+  flowLabel: "Como funciona — do pagamento à primeira call",
+  flowTitle: "Do pagamento",
+  flowTitleHighlight: "à primeira call.",
+  flowSteps: [
+    { num: "01", title: "Você paga a assinatura", desc: "M-Pesa, e-Mola ou cartão. A página de pagamento já vem pronta — você escolhe o método e finaliza. Aprovação na hora." },
+    { num: "02", title: "Recebe o acesso no WhatsApp", desc: "Assim que o pagamento é confirmado, o sistema envia o seu acesso automaticamente, no número que você cadastrou. Em segundos." },
+    { num: "03", title: "Entra na network", desc: "Link direto da comunidade privada. Você se apresenta e começa a interagir." },
+    { num: "04", title: "Aparece na call de domingo", desc: "Entra no Zoom no horário marcado e começa a executar o método já na semana seguinte." },
+  ],
 
   // ── Garantia ────────────────────────────────────────────────────────
   guaranteeLabel: "Garantia",
-  guaranteeTitle: "30 dias, risco do nosso lado.",
-  guaranteeText1: "Entras, usas o Radar, envias com o Disparador, assistes à primeira call de domingo.",
+  guaranteeTitle: "Sem garantia mirabolante.",
+  guaranteeText1: "Eu não vendo sonho, então também não vou inventar garantia mirabolante.",
   guaranteeText2: "",
-  guaranteeHighlight: "Se em 30 dias não fechares pelo menos 1 contrato de 3.000 MT usando o sistema, devolvemos o dobro do que pagaste — e ainda dou 1 hora 1:1 contigo pra entender o que travou.",
-  guaranteeConclusion: "A única forma de sair perdendo aqui é não entrando.",
-  guaranteeCtaText: "Aceitar e entrar agora",
+  guaranteeHighlight: "O que eu te ofereço é o seguinte: **entra, usa o Radar, manda os scripts validados e aparece nas calls.** Se você fizer a tua parte por 30 dias e sentir que a plataforma não te entregou o que prometi, é só pedir — eu devolvo o teu dinheiro, sem drama e sem letra miúda.",
+  guaranteeConclusion: "O único risco real que você corre é continuar de fora, vendo os outros fecharem contrato.",
+  guaranteeCtaText: "Entrar no Código Zero",
 
   // ── FAQ ──────────────────────────────────────────────────────────────
   faqLabel: "Perguntas frequentes",
   faqTitle: "O que costumam perguntar.",
   faqItems: [
-    { q: "Preciso saber programar?", a: "Não. O Código Zero foi feito pra quem nunca abriu uma IDE. Tudo é visual: o Radar tem botões, o Disparador tem botões, a Forja ensina a usar IAs visuais (Make, n8n, ChatGPT). Se aparece código, é só pra copiar e colar." },
-    { q: "Quanto tempo até ver o primeiro resultado?", a: "Depende de quanto tempo dedicas. A maior parte da network fecha o primeiro contrato entre a segunda e a quarta semana. A garantia condicional é desenhada em cima desse prazo (30 dias)." },
-    { q: "O número de WhatsApp que vou usar bloqueia?", a: "O Disparador tem intervalo configurável entre envios pra simular comportamento humano. Recomendamos um número dedicado, mas o teu pessoal funciona se respeitar o limite diário." },
-    { q: "Cancelar é fácil?", a: "Sim. Pelo painel, em /assinatura, em 2 cliques. Sem ligação, sem retenção forçada. Se cancelares, o acesso vai até o fim do mês pago." },
-    { q: "Já tentei vender curso de IA e não funcionou. Aqui é diferente?", a: "Aqui não estás vendendo curso. Estás vendendo automações e SaaS pra empresas que pagam recorrente. É outro mercado: B2B com leads quentes, não info-produto pra pessoa física." },
+    { q: "Preciso saber programar?", a: "Não. O Código Zero foi feito pra quem nunca abriu uma IDE. O Radar é por botão, o Disparador é por botão, as aulas te ensinam a usar IAs visuais. Quando aparece código, é só copiar e colar." },
+    { q: "Quanto tempo até o primeiro resultado?", a: "Depende de você executar. Quem entra, usa o Radar, dispara os scripts e aparece nas calls, costuma ter conversa real com cliente nos primeiros dias. Fechar contrato é questão de volume e de seguir o método — eu não prometo prazo mágico, prometo o caminho." },
+    { q: "O número de WhatsApp que vou usar bloqueia?", a: "Nas aulas eu te mostro exatamente como disparar com segurança pra reduzir esse risco — aquecimento de número, volume certo e abordagem que não parece spam. Feito do jeito que ensino, o risco é baixo." },
+    { q: "Cancelar é fácil?", a: "É. É uma assinatura. Se quiser sair, cancela e pronto — sem fidelidade, sem multa, sem ligação de retenção." },
+    { q: "Já tentei vender curso de IA e não funcionou. Aqui é diferente?", a: "Aqui você não está comprando \"curso\". Você está entrando num ecossistema que te dá a **ferramenta que acha o cliente**, os **scripts que fecham** e a **comunidade que destrava** quando você trava. A diferença é que aqui tem execução, não só teoria." },
   ],
 
+  // ── CTA final ────────────────────────────────────────────────────────
+  finalCtaTitle: "O acesso é imediato. A próxima call é no domingo.",
+  finalCtaDesc: "Foi um prazer ter você até aqui. Agora é clicar e dar o próximo passo — eu te espero do outro lado.",
+  finalCtaText: "Garantir minha vaga (497 MT/mês)",
+
   // ── Footer ───────────────────────────────────────────────────────────
-  footerDesc: "O ecossistema de tecnologia para criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",
+  footerDesc: "Código Zero — o ecossistema de tecnologia pra criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",
 
   // ── Legacy fields (kept for backwards-compat with stored sections JSON) ──
+  trustText: "",
+  stat1Value: "", stat1Label: "", stat2Value: "", stat2Label: "", stat3Value: "", stat3Label: "",
+  stackTools: [],
   painLabel: "", painTitle: "", painTitleHighlight: "", painDesc: "", painItems: [],
   painConclusion: "", painConclusionSub: "",
   solutionLabel: "", solutionTitle: "", solutionTitleHighlight: "", solutionDesc: "", solutionCards: [],
   valueLabel: "", valueTitle: "", valueTitleHighlight: "", valueDesc: "", valueItems: [],
   valueTotalLabel: "", valueTotalAmount: "", valuePunchline: "",
 };
+
+// Founder photo gallery — the three real images (replace the placeholder files
+// under /public/founders with the actual photos using these exact names; see
+// public/founders/README.md). Order: retrato → Instagram → Pix. `tall` makes the
+// portrait span both rows; `tag` renders a caption chip over the tile.
+const FOUNDER_GALLERY = [
+  { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero", w: 600, h: 760, tall: true },
+  { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram com 2.625 seguidores", w: 600, h: 380, tag: "2.625 seguidores no Instagram" },
+  { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix recebido — primeira parcela de R$ 3.330 do contrato da Mira", w: 600, h: 300, tag: "Primeira parcela — R$ 3.330" },
+];
+
+/**
+ * Renders a copy string with **bold** markers as real <strong> spans (instead
+ * of printing literal asterisks). Splits on `**...**` pairs.
+ */
+function renderBold(text: string): React.ReactNode {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
 
 // When loaded via /r/[code], the affiliate landing variant overrides the VSL
 // and forces all checkout URLs to the standard public affiliate checkout
@@ -206,39 +242,72 @@ export default function LandingPage({
 
   const SURVEY_STEPS = [
     {
+      id: 'situation',
+      title: 'Pra começar: o que descreve melhor a tua situação hoje?',
+      options: [
+        { id: 'A', text: 'Tenho emprego e quero uma renda extra.' },
+        { id: 'B', text: 'Sou estudante e quero começar a ganhar o meu próprio dinheiro.' },
+        { id: 'C', text: 'Estou desempregado(a) e preciso de uma fonte de renda.' },
+        { id: 'D', text: 'Já trabalho por conta / freelance e quero escalar.' }
+      ]
+    },
+    {
       id: 'goal',
-      title: 'Qual é o seu principal objetivo financeiro para os próximos 6 meses?',
+      title: 'Qual é a tua meta financeira realista pros próximos 6 meses?',
       options: [
-        { id: 'A', text: 'Ter uma renda extra segura de 10.000 a 20.000 MT mensais.' },
-        { id: 'B', text: 'Substituir minha renda atual e gerar 50.000 MT ou mais.' },
-        { id: 'C', text: 'Criar um negócio digital escalável e independente.' }
+        { id: 'A', text: 'Uma renda extra de 10.000 a 20.000 MT/mês.' },
+        { id: 'B', text: 'Substituir a minha renda atual com o digital.' },
+        { id: 'C', text: 'Construir um negócio escalável, não só uma renda.' }
       ]
     },
     {
-      id: 'pain',
-      title: 'O que tem te impedido de alcançar esse resultado até hoje?',
+      id: 'driver',
+      title: 'O que mais te move a querer isso?',
       options: [
-        { id: 'A', text: 'Não sei programar e acho tecnologia muito complexo.' },
-        { id: 'B', text: 'Não tenho ideia do que vender ou como achar clientes.' },
-        { id: 'C', text: 'Já tentei mercado de afiliados/e-books e não funcionou.' },
-        { id: 'D', text: 'Não tenho dinheiro para investir em ferramentas caras de IA.' }
+        { id: 'A', text: 'Liberdade — não depender de patrão nem de salário.' },
+        { id: 'B', text: 'Dar uma vida melhor pra minha família.' },
+        { id: 'C', text: 'Ter segurança e parar de viver no aperto.' },
+        { id: 'D', text: 'Construir algo meu, de verdade.' }
       ]
     },
     {
-      id: 'commitment',
-      title: 'Se você tivesse acesso a um ecossistema que entrega os clientes e ferramentas que fazem o trabalho técnico por você, quanto tempo você se dedicaria?',
+      id: 'objection',
+      title: 'Sendo sincero(a): o que mais te trava hoje?',
       options: [
-        { id: 'A', text: '1 a 2 horas por dia.' },
-        { id: 'B', text: '3 a 4 horas por dia.' },
-        { id: 'C', text: 'O tempo que for necessário para dar certo.' }
+        { id: 'A', text: 'Não sei programar e acho tecnologia complicado demais.' },
+        { id: 'B', text: 'Não sei o que vender nem como achar cliente.' },
+        { id: 'C', text: 'Não tenho dinheiro pra investir em ferramenta cara.' },
+        { id: 'D', text: 'Já tentei outras coisas e me queimei — tenho medo de perder tempo de novo.' },
+        { id: 'E', text: 'Falta de tempo no meio da correria.' }
       ]
     },
     {
-      id: 'awareness',
-      title: 'Você sabia que hoje a demanda das empresas por automações é gigante, e que é possível criar tudo isso usando Inteligência Artificial sem digitar uma linha de código?',
+      id: 'experience',
+      title: 'Você já tentou ganhar dinheiro online antes? Como foi?',
       options: [
-        { id: 'A', text: 'Sim, mas não sei por onde começar.' },
-        { id: 'B', text: 'Não, isso é totalmente novo para mim.' }
+        { id: 'A', text: 'Nunca tentei — isso é novo pra mim.' },
+        { id: 'B', text: 'Tentei afiliado / ebook (PLR) e não rolou.' },
+        { id: 'C', text: 'Tentei dropshipping / COD e não rolou.' },
+        { id: 'D', text: 'Já presto algum serviço, mas quero estruturar melhor.' },
+        { id: 'E', text: 'Já comprei curso de IA e não saiu do papel.' }
+      ]
+    },
+    {
+      id: 'budget',
+      title: 'Pra começar um negócio que pode te dar retorno, quanto você consegue investir este mês?',
+      options: [
+        { id: 'A', text: 'Tenho um valor reservado pra investir no que valer a pena.' },
+        { id: 'B', text: 'Consigo separar algo pequeno pra começar (tipo o preço de um lanche).' },
+        { id: 'C', text: 'Tô bem apertado(a) — todo metical conta agora.' }
+      ]
+    },
+    {
+      id: 'urgency',
+      title: 'Se isso fizer sentido pra você, quando quer começar?',
+      options: [
+        { id: 'A', text: 'Agora. Tô pronto pra começar essa semana.' },
+        { id: 'B', text: 'Nos próximos dias — quero entender melhor primeiro.' },
+        { id: 'C', text: 'Tô só pesquisando, sem pressa.' }
       ]
     }
   ];
@@ -424,6 +493,39 @@ export default function LandingPage({
 
   const hasCheckout = !!checkoutUrl && checkoutUrl !== "#preco" && checkoutUrl !== "#";
 
+  // Diagnóstico copy personalized by the lead's main objection (Q4 `objection`).
+  // surveyAnswers.objection holds the full option TEXT, so we match it back to
+  // the P4 option to recover its letter (A–E), then look up the angle below.
+  const DIAGNOSIS_BY_OBJECTION: Record<string, { title: string; body: string }> = {
+    A: {
+      title: 'Você não precisa saber programar.',
+      body: 'O Código Zero foi feito pra quem nunca abriu uma IDE: Radar e Disparador são por botão, e as aulas te ensinam a usar IAs visuais. No vídeo a seguir eu te mostro exactamente como — sem digitar uma linha de código.',
+    },
+    B: {
+      title: 'O teu maior obstáculo é achar cliente — e é exactamente isso que o Radar resolve.',
+      body: 'O Radar varre o Google Maps e te entrega empresas com telefone, Instagram e website prontos pra abordar, sem gastar um metical em anúncio. No vídeo a seguir você vê o Radar a funcionar na prática.',
+    },
+    C: {
+      title: 'Você não precisa de ferramenta cara pra começar.',
+      body: 'Tudo está dentro de uma assinatura única, pelo preço de um hambúrguer por mês — e um único contrato já paga vários meses de acesso. No vídeo a seguir eu te mostro como isso fecha a conta.',
+    },
+    D: {
+      title: 'Você já se queimou antes — então deixa eu te mostrar por que aqui é diferente.',
+      body: 'Aqui tem método validado, uma comunidade que te destrava quando você trava e garantia de verdade. No vídeo a seguir eu te mostro o ecossistema por dentro, sem promessa furada.',
+    },
+    E: {
+      title: 'Pouco tempo? O sistema faz o trabalho pesado por você.',
+      body: 'O Radar acha os clientes e as aulas são gravadas pra você assistir no teu ritmo — dá pra rodar com 1 a 2 horas por dia. No vídeo a seguir eu te mostro como.',
+    },
+  };
+  const DIAGNOSIS_DEFAULT = {
+    title: 'Diagnóstico pronto.',
+    body: 'Com base nas suas respostas, você tem o perfil certo pro novo modelo de micronegócios de IA em Moçambique. Liberamos um vídeo restrito mostrando os bastidores.',
+  };
+  const objectionLetter = SURVEY_STEPS.find(s => s.id === 'objection')
+    ?.options.find(o => o.text === surveyAnswers.objection)?.id;
+  const diagnosis = (objectionLetter && DIAGNOSIS_BY_OBJECTION[objectionLetter]) || DIAGNOSIS_DEFAULT;
+
   const trackAndOpen = () => {
     // Mark checkout_pending in backend (fire & forget)
     try {
@@ -456,22 +558,15 @@ export default function LandingPage({
     );
 
 
-  // Dynamic arrays with fallbacks
-  const stackTools = (sec.stackTools || DEFAULTS.stackTools) as { key: string; name: string; verb: string; desc: string; bullets: string[] }[];
+  // Dynamic arrays with fallbacks (DB override via sec.* still wins).
+  const notLines = (sec.notLines || DEFAULTS.notLines) as string[];
+  const clinicParas = (sec.clinicParas || DEFAULTS.clinicParas) as string[];
+  const founderCreds = (sec.founderCreds || DEFAULTS.founderCreds) as string[];
+  const ecoFeatures = (sec.ecoFeatures || DEFAULTS.ecoFeatures) as { emoji: string; title: string; desc: string }[];
   const networkPillars = (sec.networkPillars || DEFAULTS.networkPillars) as { title: string; desc: string }[];
+  const radarSteps = (sec.radarSteps || DEFAULTS.radarSteps) as string[];
   const flowSteps = (sec.flowSteps || DEFAULTS.flowSteps) as { num: string; title: string; desc: string }[];
   const faqItems = (sec.faqItems || DEFAULTS.faqItems) as { q: string; a: string }[];
-
-  // Icon per tool (lucide-react) — keyed by the tool's `key` field so admin
-  // reorders don't desync icons from names.
-  const TOOL_ICONS: Record<string, React.ReactNode> = {
-    radar: <IconRadar size={22} strokeWidth={1.6} />,
-    disparador: <IconSend size={22} strokeWidth={1.6} />,
-    cofre: <IconLibrary size={22} strokeWidth={1.6} />,
-    forja: <IconHammer size={22} strokeWidth={1.6} />,
-    qg: <IconCompass size={22} strokeWidth={1.6} />,
-    chat: <IconMessages size={22} strokeWidth={1.6} />,
-  };
 
   // FAQ toggle state — only one open at a time keeps the page tidy.
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
@@ -514,7 +609,7 @@ export default function LandingPage({
                     <div className={styles.hookStep}>
                       <div className={styles.hookStepNum}>1</div>
                       <div>
-                        <strong>Responda 4 perguntas rápidas</strong>
+                        <strong>Responda 7 perguntas rápidas</strong>
                         <span>Menos de 60 segundos</span>
                       </div>
                     </div>
@@ -544,10 +639,10 @@ export default function LandingPage({
                   </p>
                 </div>
               </div>
-            ) : surveyStep <= 4 ? (
+            ) : surveyStep <= SURVEY_STEPS.length ? (
               <div key={`step-${surveyStep}`} className={styles.surveyFadeIn}>
                 <div className={styles.gateSurveyHeader}>
-                  <span className={styles.gateSurveyStep}>PERGUNTA {surveyStep} DE 4</span>
+                  <span className={styles.gateSurveyStep}>PERGUNTA {surveyStep} DE {SURVEY_STEPS.length}</span>
                   <h2 className={styles.gateSurveyTitle}>{SURVEY_STEPS[surveyStep - 1].title}</h2>
                 </div>
                 <div className={styles.surveyOptions}>
@@ -567,8 +662,11 @@ export default function LandingPage({
               <div className={styles.surveyFadeIn}>
                 <Logo size={40} />
                 <h2 className={styles.gateTitle} style={{ marginTop: '16px' }}>Diagnóstico Concluído.</h2>
+                <p className={styles.gateSubtitle} style={{ marginBottom: '8px', fontSize: '15px' }}>
+                  <span className={styles.hookHighlight} style={{ fontStyle: 'normal', fontWeight: 700 }}>{diagnosis.title}</span>
+                </p>
                 <p className={styles.gateSubtitle} style={{ marginBottom: '24px', fontSize: '14px' }}>
-                  Com base nas suas respostas, você tem o perfil ideal para o novo modelo de micronegócios de IA em Moçambique. Liberamos um vídeo restrito mostrando os bastidores.
+                  {diagnosis.body}
                 </p>
                 <form className={styles.gateForm} onSubmit={handleGateSubmit}>
                   <div>
@@ -622,8 +720,12 @@ export default function LandingPage({
         <section className={styles.hero}>
           <motion.div className={styles.heroContent} {...reveal}>
             <h1 className={styles.heroTitle}>{t("heroTitle")}</h1>
-            <p className={styles.heroSubtitle}>{t("heroSubtitle")}</p>
-            <p className={styles.heroDesc} dangerouslySetInnerHTML={{ __html: t("heroDesc") }} />
+            <p className={styles.heroSubtitle}>{renderBold(t("heroSubtitle"))}</p>
+            <p className={styles.heroDesc}>{renderBold(t("heroDesc"))}</p>
+            <div className={styles.heroCtaWrap}>
+              <CtaLink className={styles.heroCta}>{t("heroCtaText")}</CtaLink>
+              <p className={styles.heroSubCta}>{t("heroSubCta")}</p>
+            </div>
           </motion.div>
 
           {/* VSL */}
@@ -662,21 +764,115 @@ export default function LandingPage({
           </motion.div>
         </section>
 
-        {/* STACK — 6 ferramentas com pinning + scroll-triggered (desktop) */}
-        <section id="ferramentas" className={styles.sectionFlush}>
+        {/* O QUE ISSO NÃO É */}
+        <section className={styles.section}>
+          <motion.div {...reveal} className={styles.notBlock}>
+            <span className={styles.sectionLabel}>{t("notLabel")}</span>
+            <h2 className={styles.sectionTitle}>{t("notTitle")}</h2>
+            <div className={styles.notLines}>
+              {notLines.map((line, i) => (
+                <p key={i} className={styles.notLine}>{renderBold(line)}</p>
+              ))}
+            </div>
+          </motion.div>
+        </section>
+
+        {/* COMO ISSO VIRA DINHEIRO DE VERDADE (clinic story) */}
+        <section className={styles.section}>
+          <motion.div {...reveal} className={styles.clinicBlock}>
+            <span className={styles.sectionLabel}>{t("clinicLabel")}</span>
+            <h2 className={styles.clinicTitle}>{t("clinicTitle")}</h2>
+            <div className={styles.clinicParas}>
+              {clinicParas.map((p, i) => (
+                <p key={i} className={styles.clinicPara}>{renderBold(p)}</p>
+              ))}
+            </div>
+          </motion.div>
+        </section>
+
+        {/* OS NÚMEROS, SEM INFLAR */}
+        <section className={styles.section}>
+          <motion.div {...reveal} className={styles.numbersCard}>
+            <span className={styles.sectionLabel}>{t("numbersLabel")}</span>
+            <h2 className={styles.numbersTitle}>{t("numbersTitle")}</h2>
+            <p className={styles.numbersLine}>{renderBold(t("numbersLine1"))}</p>
+            <p className={styles.numbersLineHi}>{renderBold(t("numbersLine2"))}</p>
+          </motion.div>
+        </section>
+
+        {/* QUEM ESTÁ FALANDO COM VOCÊ — founder + galeria */}
+        <section className={styles.founderSection}>
+          <motion.div {...reveal} className={styles.founderInner}>
+            <div className={styles.founderText}>
+              <span className={styles.sectionLabel}>{t("founderLabel")}</span>
+              <p className={styles.founderIntro}>{renderBold(t("founderIntro"))}</p>
+              <ul className={styles.founderCreds}>
+                {founderCreds.map((c, i) => (
+                  <li key={i} className={styles.founderCred}>
+                    <span className={styles.founderCredDot} aria-hidden />
+                    <span>{renderBold(c)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className={styles.founderClosing}>{t("founderClosing")}</p>
+            </div>
+
+            {/* GALERIA — 3 imagens reais em /public/founders/ (retrato, Instagram,
+                Pix). Os arquivos atuais são placeholders; substituir mantendo os
+                nomes exatos (ver public/founders/README.md). */}
+            <div className={styles.founderGallery}>
+              {FOUNDER_GALLERY.map((img, i) => (
+                <div
+                  key={i}
+                  className={`${styles.founderTile} ${img.tall ? styles.founderTileTall : ""}`}
+                >
+                  <Image
+                    src={img.src}
+                    alt={img.alt}
+                    width={img.w}
+                    height={img.h}
+                    className={styles.founderImg}
+                    priority={false}
+                  />
+                  {img.tag && (
+                    <span className={styles.founderTileTag}>{img.tag}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </section>
+
+        {/* O ECOSSISTEMA POR DENTRO — 5 features (substitui StackScrolly) */}
+        <section id="ferramentas" className={styles.section}>
           <motion.div {...reveal} className={styles.sectionHead}>
             <span className={styles.sectionLabel}>{t("stackLabel")}</span>
-            <h2 className={styles.sectionTitle}>
+            <h2 className={styles.sectionTitle} style={{ marginLeft: "auto", marginRight: "auto" }}>
               {t("stackTitle")}{" "}
               <span className={styles.sectionTitleHighlight}>{t("stackTitleHighlight")}</span>
             </h2>
             <p className={styles.sectionDesc}>{t("stackDesc")}</p>
           </motion.div>
 
-          <StackScrolly tools={stackTools} toolIcons={TOOL_ICONS} />
+          <div className={styles.ecoGrid}>
+            {ecoFeatures.map((f, i) => (
+              <motion.div
+                key={i}
+                className={styles.ecoCard}
+                initial={reduceMotion ? false : { opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.5, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <div className={styles.ecoEmoji} aria-hidden>{f.emoji}</div>
+                <h3 className={styles.ecoTitle}>{f.title}</h3>
+                <p className={styles.ecoDesc}>{renderBold(f.desc)}</p>
+              </motion.div>
+            ))}
+          </div>
         </section>
 
-        {/* NETWORK */}
+        {/* A NETWORK */}
         <section id="network" className={styles.networkSection}>
           <motion.div {...reveal} className={styles.networkInner}>
             <div className={styles.networkText}>
@@ -685,7 +881,7 @@ export default function LandingPage({
                 {t("networkTitle")}{" "}
                 <span className={styles.sectionTitleHighlight}>{t("networkTitleHighlight")}</span>
               </h2>
-              <p className={styles.sectionDesc}>{t("networkDesc")}</p>
+              <p className={styles.sectionDesc}>{renderBold(t("networkDesc"))}</p>
 
               <div className={styles.networkCount}>
                 <span className={styles.networkCountValue}>{t("networkMembersCount")}</span>
@@ -727,11 +923,69 @@ export default function LandingPage({
           </motion.div>
         </section>
 
-        {/* FLOW */}
+        {/* COMO O RADAR FUNCIONA (na prática) */}
+        <section className={styles.section}>
+          <motion.div {...reveal} className={styles.sectionHead}>
+            <span className={styles.sectionLabel}>{t("radarLabel")}</span>
+            <h2 className={styles.sectionTitle} style={{ marginLeft: "auto", marginRight: "auto" }}>{t("radarTitle")}</h2>
+          </motion.div>
+
+          <ol className={styles.radarSteps}>
+            {radarSteps.map((step, i) => (
+              <motion.li
+                key={i}
+                className={styles.radarStep}
+                initial={reduceMotion ? false : { opacity: 0, x: -16 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.45, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <span className={styles.radarStepNum}>{i + 1}</span>
+                <span className={styles.radarStepText}>{renderBold(step)}</span>
+              </motion.li>
+            ))}
+          </ol>
+
+          <motion.p {...reveal} className={styles.radarClosing}>{renderBold(t("radarClosing"))}</motion.p>
+        </section>
+
+        {/* A OFERTA — PRICING + CLOSE FRIENDS */}
+        <section id="preco" className={styles.pricingSection}>
+          <motion.div {...reveal} className={styles.scarcityBlock}>
+            <span className={styles.sectionLabel}>{t("scarcityLabel")}</span>
+            <h3 className={styles.scarcityTitle}>{t("scarcityTitle")}</h3>
+            <p className={styles.scarcityText}>{renderBold(t("scarcityDesc"))}</p>
+          </motion.div>
+
+          <motion.div
+            className={styles.pricingCard}
+            initial={reduceMotion ? false : { opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className={styles.priceBig}>
+              {t("priceAmount")} <span className={styles.priceAccent}>{t("pricePeriod")}</span>
+            </div>
+            <p className={styles.priceSub}>{renderBold(t("priceSub"))}</p>
+            <CtaLink className={styles.priceCta}>{t("priceCtaText")}</CtaLink>
+
+            <div className={styles.cfCallout}>
+              <span className={styles.cfBadge}>
+                <IconStar size={12} fill="currentColor" strokeWidth={0} />
+                {t("closeFriendsLabel")}
+              </span>
+              <h4 className={styles.cfTitle}>{t("closeFriendsTitle")}</h4>
+              <p className={styles.cfDesc}>{renderBold(t("closeFriendsDesc"))}</p>
+            </div>
+          </motion.div>
+        </section>
+
+        {/* COMO FUNCIONA — DO PAGAMENTO À PRIMEIRA CALL (FLOW) */}
         <section className={styles.section}>
           <motion.div {...reveal} className={styles.sectionHead}>
             <span className={styles.sectionLabel}>{t("flowLabel")}</span>
-            <h2 className={styles.sectionTitle}>
+            <h2 className={styles.sectionTitle} style={{ marginLeft: "auto", marginRight: "auto" }}>
               {t("flowTitle")}{" "}
               <span className={styles.sectionTitleHighlight}>{t("flowTitleHighlight")}</span>
             </h2>
@@ -755,39 +1009,7 @@ export default function LandingPage({
           </div>
         </section>
 
-        {/* PRICING + CLOSE FRIENDS */}
-        <section id="preco" className={styles.pricingSection}>
-          <motion.div {...reveal} className={styles.scarcityBlock}>
-            <span className={styles.sectionLabel}>{t("scarcityLabel")}</span>
-            <h3 className={styles.scarcityTitle}>{t("scarcityTitle")}</h3>
-            <p className={styles.scarcityText}>{t("scarcityDesc")}</p>
-          </motion.div>
-
-          <motion.div
-            className={styles.pricingCard}
-            initial={reduceMotion ? false : { opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <div className={styles.priceBig}>
-              {t("priceAmount")} <span className={styles.priceAccent}>{t("pricePeriod")}</span>
-            </div>
-            <p className={styles.priceSub}>{t("priceSub")}</p>
-            <CtaLink className={styles.priceCta}>{t("priceCtaText")}</CtaLink>
-
-            <div className={styles.cfCallout}>
-              <span className={styles.cfBadge}>
-                <IconStar size={12} fill="currentColor" strokeWidth={0} />
-                {t("closeFriendsLabel")}
-              </span>
-              <h4 className={styles.cfTitle}>{t("closeFriendsTitle")}</h4>
-              <p className={styles.cfDesc} dangerouslySetInnerHTML={{ __html: t("closeFriendsDesc") }} />
-            </div>
-          </motion.div>
-        </section>
-
-        {/* GUARANTEE */}
+        {/* GARANTIA */}
         <section className={styles.guaranteeSection}>
           <motion.div {...reveal} className={styles.guaranteeCard}>
             <div className={styles.guaranteeShield}>
@@ -795,9 +1017,9 @@ export default function LandingPage({
             </div>
             <span className={styles.guaranteeLabel}>{t("guaranteeLabel")}</span>
             <h2 className={styles.guaranteeTitle}>{t("guaranteeTitle")}</h2>
-            {t("guaranteeText1") && <p className={styles.guaranteeText}>{t("guaranteeText1")}</p>}
-            {t("guaranteeText2") && <p className={styles.guaranteeText}>{t("guaranteeText2")}</p>}
-            <p className={styles.guaranteeHighlight}>{t("guaranteeHighlight")}</p>
+            {t("guaranteeText1") && <p className={styles.guaranteeText}>{renderBold(t("guaranteeText1"))}</p>}
+            {t("guaranteeText2") && <p className={styles.guaranteeText}>{renderBold(t("guaranteeText2"))}</p>}
+            <p className={styles.guaranteeHighlight}>{renderBold(t("guaranteeHighlight"))}</p>
             <p className={styles.guaranteeConclusion}>{t("guaranteeConclusion")}</p>
             <CtaLink className={styles.guaranteeCta}>{t("guaranteeCtaText")}</CtaLink>
           </motion.div>
@@ -840,12 +1062,12 @@ export default function LandingPage({
           </div>
         </section>
 
-        {/* FINAL CTA */}
+        {/* CTA FINAL */}
         <section className={styles.finalCta}>
           <motion.div {...reveal}>
-            <h2 className={styles.finalCtaTitle}>Pronto para entrar?</h2>
-            <p className={styles.finalCtaDesc}>O acesso é imediato. A próxima call é no domingo.</p>
-            <CtaLink className={styles.heroCta}>{t("priceCtaText")}</CtaLink>
+            <h2 className={styles.finalCtaTitle}>{t("finalCtaTitle")}</h2>
+            <p className={styles.finalCtaDesc}>{t("finalCtaDesc")}</p>
+            <CtaLink className={styles.heroCta}>{t("finalCtaText")}</CtaLink>
           </motion.div>
         </section>
 

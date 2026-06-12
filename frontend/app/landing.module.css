@@ -1183,3 +1183,341 @@
   .guaranteeTitle { font-size: clamp(1.4rem, 6vw, 1.85rem); }
 }
 
+/* ───────────────────────────────────────────────────────────
+   v2 COPY — new sections
+   (não-é · clínica · números · founder gallery · ecossistema ·
+    radar steps · hero CTA)
+   ─────────────────────────────────────────────────────────── */
+
+/* ── Hero CTA (inline primary + sub-line) ── */
+.heroCtaWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+.heroCtaWrap .heroCta {
+  display: inline-flex;
+  width: auto;
+}
+.heroSubCta {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+.heroDesc strong, .heroSubtitle strong { color: var(--text-primary); font-weight: 700; }
+
+/* ── O QUE ISSO NÃO É ── */
+.notBlock { max-width: 720px; }
+.notLines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+.notLine {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+.notLine:first-child {
+  font-size: var(--type-h3);
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.notLine strong { color: var(--accent); font-weight: 700; }
+
+/* ── COMO ISSO VIRA DINHEIRO (clinic story) ── */
+.clinicBlock {
+  max-width: 720px;
+  padding: var(--space-8);
+  border-radius: 20px;
+  background:
+    radial-gradient(600px circle at 0% 0%, rgba(45,212,191,0.06), transparent 60%),
+    var(--bg-glass);
+  border: 1px solid var(--border-default);
+}
+.clinicTitle {
+  font-size: clamp(1.75rem, 4vw, 2.4rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  margin: var(--space-2) 0 var(--space-5);
+}
+.clinicParas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.clinicPara {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+.clinicPara strong { color: var(--accent); font-weight: 700; }
+.clinicPara:last-child {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ── OS NÚMEROS, SEM INFLAR (stat callout) ── */
+.numbersCard {
+  max-width: 720px;
+  padding: var(--space-8);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(45,212,191,0.10), rgba(45,212,191,0.02)),
+    var(--bg-glass);
+  border: 1px solid var(--accent-border);
+  text-align: left;
+}
+.numbersTitle {
+  font-size: var(--type-h1);
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  margin: var(--space-2) 0 var(--space-5);
+}
+.numbersLine {
+  font-size: var(--type-h3);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--space-4);
+}
+.numbersLine strong { color: var(--text-primary); font-weight: 700; }
+.numbersLineHi {
+  font-size: var(--type-h3);
+  color: var(--text-primary);
+  line-height: 1.6;
+  padding: var(--space-4) var(--space-5);
+  border-radius: 12px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-border);
+}
+.numbersLineHi strong { color: var(--accent); font-weight: 700; }
+
+/* ── QUEM ESTÁ FALANDO COM VOCÊ (founder + gallery) ── */
+.founderSection {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-16) var(--space-6);
+}
+.founderInner {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: var(--space-10);
+  align-items: start;
+}
+.founderText { display: flex; flex-direction: column; gap: var(--space-4); }
+.founderIntro {
+  font-size: var(--type-h3);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.founderIntro strong { color: var(--text-primary); font-weight: 700; }
+.founderCreds {
+  list-style: none;
+  margin: var(--space-2) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.founderCred {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  transition: border-color 0.2s ease;
+}
+.founderCred:hover { border-color: var(--accent-border); }
+.founderCred strong { color: var(--accent); font-weight: 700; }
+.founderCredDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+.founderClosing {
+  font-size: var(--type-h3);
+  font-weight: 700;
+  color: var(--accent);
+  margin-top: var(--space-3);
+  letter-spacing: -0.01em;
+}
+
+/* Founder photo gallery — responsive 2-col grid; IG tile spans 2 rows. */
+.founderGallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 180px;
+  gap: var(--space-3);
+}
+.founderTile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  box-shadow: 0 20px 40px -24px rgba(0,0,0,0.6);
+}
+.founderTileTall { grid-row: span 2; }
+.founderImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.founderTileTag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  right: 8px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+/* ── O ECOSSISTEMA POR DENTRO (5 features grid) ── */
+.ecoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.ecoCard {
+  padding: var(--space-6);
+  border-radius: 16px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  transition: transform 0.25s, border-color 0.25s, background 0.25s;
+}
+.ecoCard:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-border);
+  background: var(--bg-glass-hover);
+}
+.ecoEmoji {
+  font-size: 1.75rem;
+  line-height: 1;
+  margin-bottom: var(--space-4);
+}
+.ecoTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-3);
+  line-height: 1.35;
+}
+.ecoDesc {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin: 0;
+}
+.ecoDesc strong { color: var(--text-primary); font-weight: 700; }
+
+/* ── COMO O RADAR FUNCIONA (numbered steps) ── */
+.radarSteps {
+  list-style: none;
+  counter-reset: radar;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.radarStep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  transition: border-color 0.2s ease;
+}
+.radarStep:hover { border-color: var(--accent-border); }
+.radarStepNum {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+}
+.radarStepText {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.radarStepText strong { color: var(--text-primary); font-weight: 700; }
+.radarClosing {
+  max-width: 720px;
+  margin: var(--space-8) auto 0;
+  padding: var(--space-5) var(--space-6);
+  text-align: center;
+  font-size: var(--type-h3);
+  color: var(--text-primary);
+  line-height: 1.6;
+  border-radius: 14px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-border);
+}
+.radarClosing strong { color: var(--accent); font-weight: 700; }
+
+.scarcityText strong { color: var(--accent); font-weight: 700; }
+.priceSub strong { color: var(--text-primary); font-weight: 700; }
+
+/* ── Responsive (v2 copy sections) ── */
+@media (max-width: 900px) {
+  .founderInner { grid-template-columns: 1fr; gap: var(--space-8); }
+  .founderGallery { grid-auto-rows: 160px; }
+}
+
+@media (max-width: 768px) {
+  .clinicBlock { padding: var(--space-5); }
+  .numbersCard { padding: var(--space-5); }
+  .numbersLine, .numbersLineHi { font-size: var(--type-body); }
+  .founderSection { padding: var(--space-10) var(--space-4); }
+  .heroCtaWrap .heroCta { width: 100%; justify-content: center; }
+  .heroCtaWrap { align-items: stretch; }
+  .radarClosing { font-size: var(--type-body); }
+}
+
+@media (max-width: 480px) {
+  .founderSection { padding: var(--space-8) var(--space-3); }
+  .founderGallery { grid-template-columns: 1fr 1fr; grid-auto-rows: 130px; }
+  .founderCred { padding: var(--space-3) var(--space-4); }
+  .clinicBlock { padding: var(--space-4); }
+  .numbersCard { padding: var(--space-4); }
+}
+

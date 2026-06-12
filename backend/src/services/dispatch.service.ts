@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import { initiateSdrOutbound } from './sdr.service';
 
 const prisma = new PrismaClient();
 
@@ -6,22 +7,28 @@ export interface DispatchContact {
   phone: string;
   name?: string;
   variables?: Record<string, string>;
+  /** Free-text SDR context (lead info / quiz answers) — only for 'sdr' mode. */
+  context?: string;
 }
 
 export interface DispatchPayload {
   contacts: DispatchContact[];
   message?: string;
-  dispatchMode?: 'message' | 'funnel';
+  dispatchMode?: 'message' | 'funnel' | 'sdr';
   type?: 'text' | 'document' | 'audio';
   mediaUrl?: string;
   funnelId?: string;
+  /** SDR outbound assistant id — required when dispatchMode === 'sdr'. */
+  assistantId?: string;
+  /** Tracking id passed to the SDR initiate endpoint (e.g. 'admin-reengage'). */
+  source?: string;
   delayMinSec?: number;
   delayMaxSec?: number;
   /**
    * When true, send using the SYSTEM Komunika admin credentials
    * (SystemConfig.komunikaAdminApiKey / komunikaInstanceId) instead of the
    * dispatching user's own keys. Used by admin-driven sends like the
-   * funnel re-injection of failed/refunded/cancelled sales.
+   * SDR re-engagement of failed/refunded/cancelled sales.
    */
   useAdminCreds?: boolean;
 }
@@ -81,9 +88,11 @@ export async function processDispatch(scheduleId: string): Promise<void> {
     apiKey = cfg?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY || null;
     instanceId = cfg?.komunikaInstanceId || process.env.KOMUNIKA_INSTANCE_ID || null;
   }
-  // Funnel add-lead only needs the API key; messages/send also needs an instanceId.
+  // Funnel add-lead + SDR initiate only need the API key; messages/send also
+  // needs an instanceId (SDR uses the first connected instance if omitted).
   const isFunnel = payload.dispatchMode === 'funnel';
-  if (!user || !apiKey || (!isFunnel && !instanceId)) {
+  const isSdr = payload.dispatchMode === 'sdr';
+  if (!user || !apiKey || (!isFunnel && !isSdr && !instanceId)) {
     await prisma.scheduledDispatch.update({
       where: { id: scheduleId },
       data: {
@@ -119,6 +128,58 @@ export async function processDispatch(scheduleId: string): Promise<void> {
     const cleanPhone = (contact.phone ?? '').replace(/\D/g, '');
     const template = payload.message ?? '';
     const personalized = template ? applyTemplate(template, contact) : '';
+
+    // ── SDR outbound initiate ───────────────────────────────────────────
+    // Uses the structured sdr.service result (never throws per-contact)
+    // instead of a raw fetch Response like the funnel/message paths.
+    if (payload.dispatchMode === 'sdr') {
+      const result = await initiateSdrOutbound({
+        assistantId: payload.assistantId!,
+        apiKey,
+        instanceId: instanceId || undefined,
+        phone: contact.phone,
+        name: contact.name,
+        context: contact.context,
+        source: payload.source || 'admin-reengage',
+      });
+      const recordedMsg = `[SDR ${payload.assistantId}] ${contact.context ? '(com contexto)' : ''}`.trim();
+      if (result.ok) {
+        sent++;
+        await prisma.dispatchLog.create({
+          data: {
+            userId: row.userId,
+            phone: contact.phone,
+            contactName: contact.name,
+            message: recordedMsg,
+            status: 'sent',
+            scheduleId,
+          },
+        });
+      } else {
+        failed++;
+        await prisma.dispatchLog.create({
+          data: {
+            userId: row.userId,
+            phone: contact.phone,
+            contactName: contact.name,
+            message: recordedMsg,
+            status: 'failed',
+            error: result.error || `HTTP ${result.httpStatus}`,
+            scheduleId,
+          },
+        });
+      }
+
+      // Persist progress + delay (mirrors the funnel/message paths below).
+      await prisma.scheduledDispatch.update({
+        where: { id: scheduleId },
+        data: { sent, failed },
+      });
+      if (i < contacts.length - 1) {
+        await sleep(randomDelayMs(minSec, maxSec));
+      }
+      continue;
+    }
 
     try {
       let response: Response;

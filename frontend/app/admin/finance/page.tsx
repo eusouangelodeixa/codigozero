@@ -206,21 +206,15 @@ export default function AdminFinance() {
 
   const [upcoming, setUpcoming] = useState<UpcomingUser[]>([]);
 
-  // ── Funnel re-injection (failed / refunded / cancelled sales) ──
+  // ── SDR re-engagement (failed / refunded / cancelled sales) ──
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [funnels, setFunnels] = useState<{ id?: string; _id?: string; name?: string; title?: string }[]>([]);
-  const [funnelsError, setFunnelsError] = useState("");
   const [injectOpen, setInjectOpen] = useState(false);
-  const [injectFunnel, setInjectFunnel] = useState("");
-  const [injectFunnelManual, setInjectFunnelManual] = useState("");
+  const [injectScenario, setInjectScenario] = useState<"visitor" | "checkout">("checkout");
+  const [injectAssistantManual, setInjectAssistantManual] = useState("");
   const [intMin, setIntMin] = useState(60);
   const [intMax, setIntMax] = useState(180);
   const [injecting, setInjecting] = useState(false);
   const [injectMsg, setInjectMsg] = useState("");
-
-  const funnelKey = (f: { id?: string; _id?: string }) => f.id || f._id || "";
-  const funnelLabel = (f: { name?: string; title?: string; id?: string; _id?: string }) =>
-    f.name || f.title || f.id || f._id || "Funil";
 
   // Debounce search input → 300ms
   useEffect(() => {
@@ -289,23 +283,6 @@ export default function AdminFinance() {
     fetchData();
   }, [fetchData, period, from, to]);
 
-  // Load the Komunika funnel list once (for the injection selector).
-  const loadFunnels = useCallback(async () => {
-    const token = localStorage.getItem("cz_token");
-    if (!token) return;
-    try {
-      const r = await fetch(`${API_URL}/api/admin/funnels`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        const j = await r.json();
-        setFunnels(j.funnels || []);
-        setFunnelsError(j.error || "");
-      }
-    } catch {
-      setFunnelsError("Não foi possível carregar os funis.");
-    }
-  }, []);
-  useEffect(() => { loadFunnels(); }, [loadFunnels]);
-
   const toggleRow = (id: string) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -320,24 +297,22 @@ export default function AdminFinance() {
   const openInject = () => {
     setInjectMsg("");
     setInjectOpen(true);
-    if (!funnels.length) loadFunnels();
   };
 
   const submitInject = async () => {
-    const funnelId = (injectFunnelManual.trim() || injectFunnel).trim();
-    if (!funnelId) { setInjectMsg("Selecione um funil ou informe um ID."); return; }
     if (selected.size === 0) { setInjectMsg("Selecione ao menos uma venda."); return; }
     if (intMax < intMin) { setInjectMsg("O intervalo máximo deve ser ≥ ao mínimo."); return; }
     const token = localStorage.getItem("cz_token");
     setInjecting(true);
     setInjectMsg("");
     try {
-      const r = await fetch(`${API_URL}/api/admin/funnel-injection`, {
+      const r = await fetch(`${API_URL}/api/admin/sdr-reengage`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           transactionIds: [...selected],
-          funnelId,
+          assistantId: injectAssistantManual.trim() || undefined,
+          scenario: injectScenario,
           intervalMinSec: intMin,
           intervalMaxSec: intMax,
         }),
@@ -345,7 +320,7 @@ export default function AdminFinance() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Erro ao disparar");
       const skipped = Array.isArray(j.skipped) && j.skipped.length ? ` · ${j.skipped.length} sem telefone (ignorados)` : "";
-      setInjectMsg(`✅ ${j.queued} contato(s) enfileirados. O envio roda em segundo plano com intervalo de ${intMin}–${intMax}s${skipped}.`);
+      setInjectMsg(`✅ ${j.queued} contato(s) enfileirados para reengajamento via SDR. Roda em segundo plano com intervalo de ${intMin}–${intMax}s${skipped}.`);
       setSelected(new Set());
     } catch (e) {
       setInjectMsg(e instanceof Error ? e.message : "Erro ao disparar");
@@ -648,7 +623,7 @@ export default function AdminFinance() {
                   fontSize: 13, fontWeight: 700, cursor: "pointer",
                 }}
               >
-                <IconFunnel /> Infectar funil ({selected.size})
+                <IconFunnel /> Reengajar via SDR ({selected.size})
               </button>
             )}
             <select
@@ -853,7 +828,7 @@ export default function AdminFinance() {
         )}
       </div>
 
-      {/* ── Funnel injection modal ──────────────────────────── */}
+      {/* ── SDR re-engagement modal ─────────────────────────── */}
       {injectOpen && (
         <div
           onClick={() => !injecting && setInjectOpen(false)}
@@ -864,28 +839,26 @@ export default function AdminFinance() {
             style={{ width: "100%", maxWidth: 460, background: "var(--bg-surface, #111)", border: "1px solid var(--border-default)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 16, maxHeight: "90vh", overflowY: "auto" }}
           >
             <div>
-              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: 8 }}><IconFunnel /> Infectar funil</h3>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: 8 }}><IconFunnel /> Reengajar via SDR</h3>
               <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5 }}>
-                {selected.size} venda(s) selecionada(s). Cada contato entra no funil já com os dados do quiz (objetivo, dor, etc.), em segundo plano e com intervalo aleatório entre os envios.
+                {selected.size} venda(s) selecionada(s). Cada contato recebe uma conversa proativa de um agente SDR já com os dados do quiz (objetivo, dor, etc.), em segundo plano e com intervalo aleatório entre os disparos.
               </p>
             </div>
 
             <label style={modalLabel}>
-              <span style={modalLabelTitle}>Funil do Komunika</span>
-              <select value={injectFunnel} onChange={(e) => setInjectFunnel(e.target.value)} style={{ ...modalField, cursor: "pointer" }}>
-                <option value="">— selecione um funil —</option>
-                {funnels.map((f) => (
-                  <option key={funnelKey(f)} value={funnelKey(f)}>{funnelLabel(f)}</option>
-                ))}
+              <span style={modalLabelTitle}>Agente SDR</span>
+              <select value={injectScenario} onChange={(e) => setInjectScenario(e.target.value as "visitor" | "checkout")} style={{ ...modalField, cursor: "pointer" }}>
+                <option value="checkout">Recuperação (abandono de checkout)</option>
+                <option value="visitor">Visitantes (abandono da LP)</option>
               </select>
-              {funnelsError && (
-                <span style={{ fontSize: 11, color: "var(--color-warning)" }}>{funnelsError} Cole um ID abaixo.</span>
-              )}
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                Usa o agente configurado em Configurações. Os contatos selecionados recebem uma conversa proativa no WhatsApp.
+              </span>
             </label>
 
             <label style={modalLabel}>
-              <span style={modalLabelTitle}>…ou cole o ID do funil</span>
-              <input value={injectFunnelManual} onChange={(e) => setInjectFunnelManual(e.target.value)} placeholder="ID do funil no Komunika" style={modalField} />
+              <span style={modalLabelTitle}>…ou cole o ID de um agente específico</span>
+              <input value={injectAssistantManual} onChange={(e) => setInjectAssistantManual(e.target.value)} placeholder="asst_…" style={modalField} />
             </label>
 
             <div style={{ display: "flex", gap: 12 }}>

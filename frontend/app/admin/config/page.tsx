@@ -20,13 +20,12 @@ interface SystemConfig {
   mentoriaLink?: string;
   komunikaAdminApiKey?: string;
   komunikaInstanceId?: string;
-  komunikaVisitorFunnelId?: string;
-  komunikaCheckoutFunnelId?: string;
+  komunikaVisitorAssistantId?: string;
+  komunikaCheckoutAssistantId?: string;
   milestoneAlertPhone?: string;
   milestoneAlertName?: string;
 }
 
-interface Funnel { id: string; name: string; }
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
 
 const IconCommunity = () => (
@@ -88,7 +87,6 @@ export default function AdminConfig() {
   const toast = useToast();
   const [config, setConfig] = useState<SystemConfig>({});
   const [original, setOriginal] = useState<SystemConfig>({});
-  const [funnels, setFunnels] = useState<Funnel[]>([]);
   const [instances, setInstances] = useState<KomunikaInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -108,7 +106,6 @@ export default function AdminConfig() {
         const cfg = d.config || {};
         setConfig(cfg);
         setOriginal(cfg);
-        setFunnels(d.funnels || []);
         if (cfg.komunikaAdminApiKey) fetchInstances();
       });
   }, []);
@@ -216,7 +213,7 @@ export default function AdminConfig() {
       document.body.removeChild(el);
     }
     setCopied(kind);
-    toast.success("Prompt copiado", "Cole no node de IA do Komunika.");
+    toast.success("Prompt copiado", "Cole no system prompt do agente SDR no Komunika.");
     setTimeout(() => setCopied((c) => (c === kind ? null : c)), 1800);
   };
 
@@ -307,7 +304,7 @@ export default function AdminConfig() {
       {/* ── Komunika ── */}
       <Section
         title="Automação Komunika"
-        subtitle="Chave da API, instância de WhatsApp e funis usados pelo cron e pelo webhook."
+        subtitle="Chave da API, instância de WhatsApp e agentes SDR (outbound) usados pelo cron e pelo webhook."
         icon={<IconKomunika />}
         actions={
           <span className={config.komunikaAdminApiKey ? styles.statusOk : styles.statusEmpty}>
@@ -327,7 +324,7 @@ export default function AdminConfig() {
                 <a href="https://app.komunika.site/dashboard/api-keys" target="_blank" rel="noreferrer">
                   app.komunika.site/dashboard/api-keys
                 </a>
-                . Usada para carregar funis, instâncias e enviar mensagens.
+                . Usada para iniciar agentes SDR, carregar instâncias e enviar mensagens.
               </>
             }
           />
@@ -374,34 +371,26 @@ export default function AdminConfig() {
 
           <div className={styles.formGrid}>
             <Field
-              label="Funil de visitantes"
-              hint="Disparado pelo cron a cada 30 min para leads que não compraram."
+              label="Agente SDR — Visitantes (abandono da LP)"
+              hint="ID do agente outbound (asst_…) disparado pelo cron para leads que preencheram o quiz e não compraram."
             >
-              <select
-                className={styles.select}
-                value={config.komunikaVisitorFunnelId || ""}
-                onChange={(e) => setField("komunikaVisitorFunnelId", e.target.value)}
-              >
-                <option value="">— Nenhum —</option>
-                {funnels.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
+              <input
+                className={styles.input}
+                placeholder="asst_xxxxxxxx"
+                value={config.komunikaVisitorAssistantId || ""}
+                onChange={(e) => setField("komunikaVisitorAssistantId", e.target.value)}
+              />
             </Field>
             <Field
-              label="Funil de recuperação"
-              hint="Disparado pelo webhook Lojou quando o checkout falha."
+              label="Agente SDR — Recuperação (abandono de checkout)"
+              hint="ID do agente outbound disparado quando o checkout falha ou é cancelado."
             >
-              <select
-                className={styles.select}
-                value={config.komunikaCheckoutFunnelId || ""}
-                onChange={(e) => setField("komunikaCheckoutFunnelId", e.target.value)}
-              >
-                <option value="">— Nenhum —</option>
-                {funnels.map((f) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
-              </select>
+              <input
+                className={styles.input}
+                placeholder="asst_xxxxxxxx"
+                value={config.komunikaCheckoutAssistantId || ""}
+                onChange={(e) => setField("komunikaCheckoutAssistantId", e.target.value)}
+              />
             </Field>
           </div>
         </div>
@@ -437,7 +426,7 @@ export default function AdminConfig() {
       {/* ── Teste ── */}
       <Section
         title="Disparar teste no Komunika"
-        subtitle="Envia um payload de teste para um número, simulando um lead real do funil."
+        subtitle="Inicia um agente SDR (outbound) de teste para um número, simulando um lead real."
         icon={<IconBeaker />}
         defaultOpen={false}
       >
@@ -450,7 +439,7 @@ export default function AdminConfig() {
               onChange={(e) => setTestPhone(e.target.value)}
             />
           </Field>
-          <Field label="Funil a testar">
+          <Field label="Agente a testar">
             <select
               className={styles.select}
               value={testType}
@@ -502,15 +491,15 @@ export default function AdminConfig() {
 
       {/* ── Prompts ── */}
       <Section
-        title="Prompts de IA (Komunika nodes)"
-        subtitle="Copie os system prompts para colar nos nodes de IA dos seus funis."
+        title="Prompts dos Agentes SDR"
+        subtitle="Cole estes system prompts no campo do agente outbound no Komunika (app.komunika.site/dashboard/agentes)."
         icon={<IconBrain />}
         defaultOpen={false}
       >
         <div className={styles.formStack}>
           <div className={styles.promptBlock}>
             <div className={styles.promptHead}>
-              <span className={styles.promptTitle}>1. Funil de visitantes</span>
+              <span className={styles.promptTitle}>1. Agente de visitantes</span>
               <button type="button" className={styles.promptCopyBtn} onClick={() => copyPrompt("visitor")}>
                 <IconCopy /> {copied === "visitor" ? "Copiado" : "Copiar prompt"}
               </button>
@@ -525,7 +514,7 @@ export default function AdminConfig() {
 
           <div className={styles.promptBlock}>
             <div className={styles.promptHead}>
-              <span className={styles.promptTitle}>2. Recuperação de checkout</span>
+              <span className={styles.promptTitle}>2. Agente de recuperação</span>
               <button type="button" className={styles.promptCopyBtn} onClick={() => copyPrompt("checkout")}>
                 <IconCopy /> {copied === "checkout" ? "Copiado" : "Copiar prompt"}
               </button>

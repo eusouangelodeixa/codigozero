@@ -50,6 +50,17 @@ model User {
   hasCompletedOnboarding Boolean @default(false)
   lastExpirationAlert DateTime?
 
+  // ── Post-purchase onboarding / first platform access ────────────────
+  // firstAccessAt is stamped the first time a paying member opens the app
+  // (GET /api/auth/me). welcomeSentAt guards the one-time welcome WhatsApp.
+  // The onboarding cron nudges buyers who haven't accessed yet (max 3, ~1/day),
+  // stopping as soon as firstAccessAt is set. Existing users are backfilled as
+  // already-accessed by the migration so they are never nudged.
+  firstAccessAt          DateTime?
+  welcomeSentAt          DateTime?
+  onboardingNudgeCount   Int       @default(0)
+  lastOnboardingNudgeAt  DateTime?
+
   // ── PWA install tracking ────────────────────────────────────────────
   // pwaInstalledAt is stamped the first time the authed app loads in
   // standalone/display-mode (added to home screen). pwaReminderSentAt is

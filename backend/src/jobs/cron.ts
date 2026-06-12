@@ -11,6 +11,7 @@ import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
+import { processOnboardingNudges } from '../services/onboarding.service';
 
 const prisma = new PrismaClient();
 
@@ -664,6 +665,20 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Affiliate + partner availability tick (hourly)');
+
+  // ── Post-purchase onboarding nudges (every 6 hours) ──
+  // Reminds recent buyers who haven't opened the platform yet to log in (max 3,
+  // ~1/day per user via a 20h gate), and retries any pending welcome message.
+  // Stops for a user the instant their firstAccessAt is stamped (GET /me).
+  cron.schedule('45 */6 * * *', async () => {
+    try {
+      const sent = await processOnboardingNudges();
+      if (sent > 0) console.log(`[CRON] 👋 Onboarding messages sent: ${sent}`);
+    } catch (error) {
+      console.error('[CRON] Onboarding nudge tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Onboarding nudge tick (every 6h)');
 
   // ── Recover orphaned dispatches on boot ──
   // Any 'running' rows left over from a previous process crash, plus any

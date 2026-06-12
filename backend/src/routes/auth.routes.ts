@@ -12,6 +12,7 @@ import { lojouService } from '../services/lojou.service';
 import { getActivePrice } from '../lib/pricing';
 import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
+import { sendFirstAccessWelcome } from '../services/onboarding.service';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -114,11 +115,25 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
         hasCompletedOnboarding: true,
         closeFriends: true,
         closeFriendsUntil: true,
+        firstAccessAt: true,
       },
     });
 
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    // First-access onboarding: the first time a paying member opens the app we
+    // stamp firstAccessAt (authoritative "they accessed" signal — stops the
+    // onboarding nudges) and fire a one-time welcome WhatsApp. Cheap guard: the
+    // branch only runs until firstAccessAt is set, then never again.
+    if (user.role === 'member' && !user.firstAccessAt) {
+      const accessedAt = new Date();
+      await prisma.user.update({ where: { id: user.id }, data: { firstAccessAt: accessedAt } });
+      user.firstAccessAt = accessedAt;
+      sendFirstAccessWelcome(user.id).catch((e) =>
+        console.error('[ONBOARDING] welcome dispatch failed (non-blocking):', e?.message || e),
+      );
     }
 
     // Whether the embedded Komunika module is provisioned and active for this

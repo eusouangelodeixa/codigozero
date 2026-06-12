@@ -546,6 +546,7 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
           id: true, name: true, email: true, phone: true, role: true,
           isActive: true, subscriptionStatus: true, subscriptionEnd: true,
           lojouOrderId: true, dailySearchCount: true, createdAt: true,
+          firstAccessAt: true,
         },
       }),
       prisma.user.count({ where }),

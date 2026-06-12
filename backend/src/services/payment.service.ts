@@ -99,55 +99,56 @@ function credentialsEmailHtml(opts: { name: string; email: string; password: str
 <html lang="pt"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
-  body,table,td,a,h1,p,div,span{font-family:'Sora',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}
-</style>
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
 </head>
-<body style="margin:0;padding:0;background:#0b1413;font-family:'Sora',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1413;padding:28px 12px;">
+<body style="margin:0;padding:0;background:#001412;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#001412;padding:28px 12px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 24px 60px -28px rgba(0,0,0,0.55);">
-        <tr><td style="background:#001412;padding:26px 28px;text-align:center;">
-          <img src="https://app.czero.sbs/logo-horizontal.png" alt="Código Zero" width="150" style="display:inline-block;width:150px;max-width:62%;height:auto;border:0;" />
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#06130f;border:1px solid #14352f;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:26px 30px 22px;text-align:center;border-bottom:1px solid #11231e;">
+          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="46" height="46" style="display:inline-block;width:46px;height:46px;border-radius:13px;vertical-align:middle;border:0;" />
+          <span style="display:inline-block;vertical-align:middle;margin-left:12px;font-size:19px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Código Zero</span>
         </td></tr>
-        <tr><td style="padding:32px 30px 8px;">
-          <h1 style="margin:0 0 8px;font-size:23px;font-weight:800;letter-spacing:-0.02em;color:#0b1413;">Bem-vindo, ${first}! 🎉</h1>
-          <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#475569;">Sua conta no <strong style="color:#0b1413;">Código Zero</strong> está pronta. Aqui estão os seus dados de acesso:</p>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;">
-            <tr><td style="padding:14px 18px 6px;">
-              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;font-weight:600;">E-mail</div>
-              <div style="font-size:16px;color:#0b1413;font-weight:600;word-break:break-all;">${opts.email}</div>
-            </td></tr>
-            <tr><td style="padding:6px 18px 16px;">
-              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#64748b;font-weight:600;">Senha</div>
-              <div style="font-size:18px;color:#0b1413;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${opts.password}</div>
-            </td></tr>
-          </table>
+        <tr><td style="padding:30px 30px 6px;">
+          <h1 style="margin:0 0 8px;font-size:23px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Bem-vindo, ${first}! 🎉</h1>
+          <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#A1A1AA;">Sua conta no <strong style="color:#ffffff;">Código Zero</strong> está pronta. Aqui estão os seus dados de acesso:</p>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#5b7a73;font-weight:700;margin:0 0 6px;">E-mail</div>
+          <div style="background:#0c1c17;border:1px solid #213029;border-radius:10px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;color:#ffffff;word-break:break-all;">${opts.email}</div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#5b7a73;font-weight:700;margin:14px 0 6px;">Senha</div>
+          <div style="background:#0c1c17;border:1px solid #1e4a43;border-radius:10px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17px;font-weight:700;color:#2DD4BF;word-break:break-all;">${opts.password}</div>
+          <p style="margin:10px 0 0;font-size:12px;color:#52605c;">Toque e segure (ou selecione) o valor para copiar.</p>
           <a href="${opts.loginUrl}" style="display:block;margin:24px 0 6px;background:#2DD4BF;color:#001412;text-decoration:none;text-align:center;font-weight:700;font-size:16px;padding:15px;border-radius:11px;">Acessar o Código Zero &rarr;</a>
-          <p style="margin:18px 0 4px;font-size:13px;line-height:1.6;color:#64748b;">Guarde esses dados em local seguro. Recomendamos fazer login e, no seu perfil, trocar a senha por uma de sua preferência.</p>
+          <p style="margin:16px 0 4px;font-size:13px;line-height:1.6;color:#7b8a85;">Guarde esses dados em local seguro. Recomendamos fazer login e, no seu perfil, trocar a senha por uma de sua preferência.</p>
         </td></tr>
-        <tr><td style="padding:14px 30px 6px;">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;font-weight:600;text-align:center;margin-bottom:12px;">Acompanha a gente no Instagram</div>
+        <tr><td style="padding:16px 30px 8px;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#52605c;font-weight:700;text-align:center;margin-bottom:12px;">Acompanhe a gente</div>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td width="50%" style="padding-right:6px;">
-              <a href="https://www.instagram.com/ocodigozero_" style="display:block;text-decoration:none;border:1px solid #e2e8f0;border-radius:12px;padding:14px 8px;text-align:center;">
-                <div style="font-size:20px;line-height:1;margin-bottom:6px;">📸</div>
-                <div style="font-size:14px;font-weight:700;color:#0b1413;">Código Zero</div>
-                <div style="font-size:12px;color:#E1306C;font-weight:600;">@ocodigozero_</div>
+            <td width="50%" style="padding-right:5px;">
+              <a href="https://www.instagram.com/ocodigozero_" style="display:block;text-decoration:none;background:#0c1c17;border:1px solid #213029;border-radius:11px;padding:11px 6px;text-align:center;">
+                <img src="https://app.czero.sbs/icons/instagram.png" alt="Instagram" width="20" height="20" style="vertical-align:middle;border-radius:6px;border:0;" />
+                <span style="vertical-align:middle;margin-left:7px;font-size:13px;font-weight:600;color:#cdd6d3;">@ocodigozero_</span>
               </a>
             </td>
-            <td width="50%" style="padding-left:6px;">
-              <a href="https://www.instagram.com/eusouangelodeixa" style="display:block;text-decoration:none;border:1px solid #e2e8f0;border-radius:12px;padding:14px 8px;text-align:center;">
-                <div style="font-size:20px;line-height:1;margin-bottom:6px;">📸</div>
-                <div style="font-size:14px;font-weight:700;color:#0b1413;">Ângelo Deixa</div>
-                <div style="font-size:12px;color:#E1306C;font-weight:600;">@eusouangelodeixa</div>
+            <td width="50%" style="padding-left:5px;">
+              <a href="https://www.instagram.com/eusouangelodeixa" style="display:block;text-decoration:none;background:#0c1c17;border:1px solid #213029;border-radius:11px;padding:11px 6px;text-align:center;">
+                <img src="https://app.czero.sbs/icons/instagram.png" alt="Instagram" width="20" height="20" style="vertical-align:middle;border-radius:6px;border:0;" />
+                <span style="vertical-align:middle;margin-left:7px;font-size:13px;font-weight:600;color:#cdd6d3;">@eusouangelodeixa</span>
               </a>
             </td>
           </tr></table>
         </td></tr>
-        <tr><td style="padding:18px 30px 26px;">
-          <p style="margin:0;padding-top:18px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;text-align:center;line-height:1.55;">Código Zero — o ecossistema pra criar micronegócios de IA. Sem código, sem barreiras.</p>
+        <tr><td style="padding:24px 30px 28px;text-align:center;border-top:1px solid #11231e;">
+          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="40" height="40" style="display:inline-block;width:40px;height:40px;border-radius:12px;border:0;" />
+          <p style="margin:14px 0 8px;font-size:13px;line-height:1.5;color:#8a9994;">O ecossistema pra criar micronegócios de IA.<br>Sem código, sem barreiras.</p>
+          <p style="margin:0 0 12px;font-size:13px;">
+            <a href="${opts.loginUrl}" style="color:#2DD4BF;text-decoration:none;">Área de Membros</a>
+            <span style="color:#3a4a45;">&nbsp;&middot;&nbsp;</span>
+            <a href="https://app.czero.sbs/privacidade" style="color:#2DD4BF;text-decoration:none;">Privacidade</a>
+            <span style="color:#3a4a45;">&nbsp;&middot;&nbsp;</span>
+            <a href="https://app.czero.sbs/termos" style="color:#2DD4BF;text-decoration:none;">Termos</a>
+          </p>
+          <p style="margin:0;font-size:12px;color:#52605c;line-height:1.5;">Você recebeu este e-mail porque tem uma conta no Código Zero.</p>
         </td></tr>
       </table>
     </td></tr>

@@ -26,6 +26,7 @@ interface SystemConfig {
   milestoneAlertName?: string;
   resendApiKey?: string;
   resendFrom?: string;
+  resendWebhookSecret?: string;
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
@@ -560,6 +561,25 @@ export default function AdminConfig() {
               {resendTestMsg.text}
             </p>
           )}
+
+          <SecretField
+            label="Webhook secret (Resend)"
+            value={config.resendWebhookSecret || ""}
+            onChange={(v) => setField("resendWebhookSecret", v)}
+            placeholder="whsec_xxxxxxxxxxxxxxxx"
+            hint="Secret do webhook (whsec_…). No Resend, crie um webhook apontando para a URL abaixo e cole o secret aqui — habilita o painel de status em /admin/emails."
+          />
+          <Field
+            label="URL do webhook (cole no Resend)"
+            hint="Eventos sugeridos: email.sent, email.delivered, email.delivery_delayed, email.bounced, email.complained, email.opened, email.clicked."
+          >
+            <input
+              className={styles.input}
+              readOnly
+              value={`${API}/api/webhooks/resend`}
+              onFocus={(e) => e.target.select()}
+            />
+          </Field>
         </div>
       </Section>
 

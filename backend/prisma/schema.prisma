@@ -264,6 +264,23 @@ model SystemConfig {
   // Resend (e-mail) — configured from /admin/config. Falls back to env when null.
   resendApiKey             String?
   resendFrom               String?
+  // Svix signing secret for the Resend webhook (whsec_…) — verifies inbound events.
+  resendWebhookSecret      String?
+}
+
+// Delivery events streamed in by the Resend webhook (sent/delivered/bounced/…),
+// powering the real-time e-mail status panel in /admin/emails.
+model EmailEvent {
+  id        String   @id @default(uuid())
+  resendId  String?  // Resend message id (data.email_id)
+  type      String   // email.sent | email.delivered | email.bounced | email.complained | email.opened | email.clicked | email.delivery_delayed
+  recipient String?
+  subject   String?
+  raw       Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([resendId])
 }
 
 model LandingConfig {

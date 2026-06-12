@@ -32,6 +32,8 @@ export const env = {
   // 'Código Zero <acesso@czero.sbs>'. Empty → e-mail sending is a silent no-op.
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   RESEND_FROM: process.env.RESEND_FROM || 'Código Zero <acesso@czero.sbs>',
+  // Svix signing secret (whsec_…) for the Resend webhook. Configured in /admin/config.
+  RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET || '',
   MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '10', 10),
   KOMUNIKA_API_URL: process.env.KOMUNIKA_API_URL || 'https://api.komunika.site',
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',

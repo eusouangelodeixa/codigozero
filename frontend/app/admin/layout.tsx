@@ -147,6 +147,7 @@ const NAV: NavGroup[] = [
     label: "Operação",
     items: [
       { href: "/admin/broadcast", label: "Broadcast", icon: I.Broadcast },
+      { href: "/admin/emails",    label: "E-mails",   icon: I.Broadcast },
       { href: "/admin/cupons",    label: "Cupons",    icon: I.Coupons },
       { href: "/admin/config",    label: "Configurações", icon: I.Config },
     ],

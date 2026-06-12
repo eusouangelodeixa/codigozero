@@ -997,11 +997,11 @@ router.get('/system', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {
-    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom } = req.body;
+    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret } = req.body;
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret },
     });
     res.json({ config });
   } catch (error) {
@@ -1029,6 +1029,37 @@ router.post('/resend-test', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[ADMIN] resend-test error:', error);
     return res.status(500).json({ error: 'Erro ao enviar e-mail de teste.' });
+  }
+});
+
+// GET /api/admin/email-events — recent Resend delivery events + summary counts,
+// powering the real-time e-mail status panel in /admin/emails.
+router.get('/email-events', async (req: AuthRequest, res: Response) => {
+  try {
+    const sinceDays = Math.min(30, Math.max(1, parseInt(req.query.days as string) || 7));
+    const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+
+    const [events, grouped] = await Promise.all([
+      prisma.emailEvent.findMany({
+        where: { createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: { id: true, type: true, recipient: true, subject: true, resendId: true, createdAt: true },
+      }),
+      prisma.emailEvent.groupBy({
+        by: ['type'],
+        where: { createdAt: { gte: since } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const counts: Record<string, number> = {};
+    for (const g of grouped) counts[g.type] = g._count._all;
+
+    res.json({ events, counts, sinceDays });
+  } catch (error) {
+    console.error('[ADMIN] email-events error:', error);
+    res.status(500).json({ error: 'Erro ao carregar eventos de e-mail' });
   }
 });
 

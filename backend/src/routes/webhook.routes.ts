@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { env } from '../config/env';
@@ -34,6 +35,86 @@ import type Stripe from 'stripe';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+/**
+ * Verify a Svix-signed webhook (Resend uses Svix). Recomputes the HMAC over
+ * `${id}.${timestamp}.${rawBody}` with the base64-decoded signing secret and
+ * compares (constant-time) against any of the space-separated `v1,<sig>` values.
+ */
+function verifySvixSignature(secret: string, id: string, ts: string, body: string, sigHeader: string): boolean {
+  try {
+    const secretBytes = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+    const expected = crypto
+      .createHmac('sha256', secretBytes)
+      .update(`${id}.${ts}.${body}`)
+      .digest('base64');
+    const expectedBuf = Buffer.from(expected, 'base64');
+    return sigHeader
+      .split(' ')
+      .map((s) => s.split(',')[1])
+      .filter(Boolean)
+      .some((s) => {
+        try {
+          const got = Buffer.from(s, 'base64');
+          return got.length === expectedBuf.length && crypto.timingSafeEqual(got, expectedBuf);
+        } catch {
+          return false;
+        }
+      });
+  } catch {
+    return false;
+  }
+}
+
+// ── Resend webhook (e-mail delivery events) ──────────────────────────────────
+// POST /api/webhooks/resend — Resend posts sent/delivered/bounced/… events here.
+// The body arrives as a Buffer (express.raw on /api/webhooks). We verify the Svix
+// signature when a secret is set, then log the event for the /admin/emails panel.
+router.post('/resend', async (req: Request, res: Response) => {
+  try {
+    const raw = Buffer.isBuffer(req.body)
+      ? req.body.toString('utf8')
+      : typeof req.body === 'string'
+        ? req.body
+        : JSON.stringify(req.body || {});
+
+    const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+    const secret = cfg?.resendWebhookSecret || env.RESEND_WEBHOOK_SECRET;
+    if (secret) {
+      const ok = verifySvixSignature(
+        secret,
+        req.header('svix-id') || '',
+        req.header('svix-timestamp') || '',
+        raw,
+        req.header('svix-signature') || '',
+      );
+      if (!ok) {
+        console.warn('[RESEND-WEBHOOK] invalid signature — rejected');
+        return res.status(401).json({ error: 'invalid signature' });
+      }
+    } else {
+      console.warn('[RESEND-WEBHOOK] no signing secret configured — accepting unverified');
+    }
+
+    const payload = JSON.parse(raw);
+    const data = payload?.data || {};
+    const to = Array.isArray(data.to) ? data.to.join(', ') : data.to || null;
+    await prisma.emailEvent.create({
+      data: {
+        resendId: data.email_id || data.id || null,
+        type: String(payload?.type || 'unknown'),
+        recipient: to,
+        subject: data.subject || null,
+        raw: payload,
+      },
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('[RESEND-WEBHOOK] error:', error);
+    // Return 200 so Resend doesn't retry-storm on a payload we simply couldn't parse.
+    return res.status(200).json({ ok: false });
+  }
+});
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BASE_SUBSCRIPTION_DAYS = 30;

@@ -34,9 +34,11 @@ function Expiry({ end }: { end?: string }) {
   );
 }
 
-/** First platform access status — ✓ + date when accessed, else "Pendente". */
-function FirstAccess({ at, role }: { at?: string; role?: string }) {
-  if (role && role !== "member") return <span className={styles.mCardLabel}>—</span>;
+/** First platform access status — ✓ + date when accessed, else "Pendente".
+ *  Only meaningful for paying members: leads (no access yet) and non-members
+ *  show "—". */
+function FirstAccess({ at, role, status }: { at?: string; role?: string; status?: string }) {
+  if ((role && role !== "member") || status === "lead") return <span className={styles.mCardLabel}>—</span>;
   if (at)
     return (
       <span className={`${styles.badge} ${styles.badgeGreen}`} title={new Date(at).toLocaleString("pt-BR")}>
@@ -152,7 +154,7 @@ export default function AdminUsers() {
                 <td>{statusBadge(u.subscriptionStatus)}</td>
                 <td><Expiry end={u.subscriptionEnd} /></td>
                 <td>{u.isActive ? "✅" : "❌"}</td>
-                <td><FirstAccess at={u.firstAccessAt} role={u.role} /></td>
+                <td><FirstAccess at={u.firstAccessAt} role={u.role} status={u.subscriptionStatus} /></td>
                 <td>{new Date(u.createdAt).toLocaleDateString("pt-BR")}</td>
                 <td>
                   <div className={styles.actions}>
@@ -179,7 +181,7 @@ export default function AdminUsers() {
               <div className={styles.mCardRow}><span className={styles.mCardLabel}>Telefone</span><span className={styles.mCardValue}>{u.phone}</span></div>
               <div className={styles.mCardRow}><span className={styles.mCardLabel}>Expira</span><span className={styles.mCardValue}><Expiry end={u.subscriptionEnd} /></span></div>
               <div className={styles.mCardRow}><span className={styles.mCardLabel}>Ativo</span><span className={styles.mCardValue}>{u.isActive ? "Sim" : "Não"}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>1º acesso</span><span className={styles.mCardValue}><FirstAccess at={u.firstAccessAt} role={u.role} /></span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>1º acesso</span><span className={styles.mCardValue}><FirstAccess at={u.firstAccessAt} role={u.role} status={u.subscriptionStatus} /></span></div>
               <div className={styles.mCardActions}>
                 <button className={styles.actionBtn} onClick={() => setEditing({ ...u })}>Editar</button>
                 <button className={styles.actionBtn} onClick={() => toggleActive(u)}>{u.isActive ? "Desativar" : "Ativar"}</button>

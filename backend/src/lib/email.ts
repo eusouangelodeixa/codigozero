@@ -3,20 +3,19 @@
  *
  * Hits the Resend REST API directly (no SDK) the same way `whatsapp.ts` hits
  * Komunika: best-effort, never throws, and silently no-ops when Resend isn't
- * configured. Sending requires RESEND_API_KEY and a RESEND_FROM address whose
- * domain is verified in the Resend dashboard.
+ * configured. Reads the API key + `from` from SystemConfig (set in
+ * /admin/config) with an env fallback — same pattern as the Komunika admin
+ * credentials. The `from` domain must be verified in the Resend dashboard.
  */
+import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
+
+const prisma = new PrismaClient();
 
 export interface EmailSendResult {
   ok: boolean;
   status: number | string;
   id?: string;
-}
-
-/** Resend is usable only when both the API key and a `from` address are set. */
-export function isEmailConfigured(): boolean {
-  return !!env.RESEND_API_KEY && !!env.RESEND_FROM;
 }
 
 /**
@@ -30,8 +29,11 @@ export async function sendEmail(opts: {
   text?: string;
   replyTo?: string;
 }): Promise<EmailSendResult> {
-  if (!isEmailConfigured()) {
-    console.warn('[EMAIL] Resend not configured (RESEND_API_KEY / RESEND_FROM) — skipping send');
+  const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+  const apiKey = sysConfig?.resendApiKey || env.RESEND_API_KEY;
+  const from = sysConfig?.resendFrom || env.RESEND_FROM;
+  if (!apiKey || !from) {
+    console.warn('[EMAIL] Resend not configured (resendApiKey / resendFrom) — skipping send');
     return { ok: false, status: 'resend-not-configured' };
   }
 
@@ -40,10 +42,10 @@ export async function sendEmail(opts: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        from: env.RESEND_FROM,
+        from,
         to: opts.to,
         subject: opts.subject,
         html: opts.html,

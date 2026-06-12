@@ -261,6 +261,9 @@ model SystemConfig {
   komunikaInstanceId       String? // Komunika WhatsApp instance ID
   milestoneAlertPhone      String?
   milestoneAlertName       String?
+  // Resend (e-mail) — configured from /admin/config. Falls back to env when null.
+  resendApiKey             String?
+  resendFrom               String?
 }
 
 model LandingConfig {

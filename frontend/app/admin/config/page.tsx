@@ -24,6 +24,8 @@ interface SystemConfig {
   komunikaCheckoutAssistantId?: string;
   milestoneAlertPhone?: string;
   milestoneAlertName?: string;
+  resendApiKey?: string;
+  resendFrom?: string;
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
@@ -457,6 +459,52 @@ export default function AdminConfig() {
               </select>
             </Field>
           </div>
+        </div>
+      </Section>
+
+      {/* ── E-mail (Resend) ── */}
+      <Section
+        title="E-mail (Resend)"
+        subtitle="Entrega os dados de acesso (e-mail + senha + link) por e-mail, além do WhatsApp — na compra e na página de resgate."
+        icon={
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="m22 7-10 5L2 7" />
+          </svg>
+        }
+        actions={
+          <span className={config.resendApiKey ? styles.statusOk : styles.statusEmpty}>
+            {config.resendApiKey ? "Ligado" : "Desligado"}
+          </span>
+        }
+      >
+        <div className={styles.formStack}>
+          <SecretField
+            label="API Key (Resend)"
+            value={config.resendApiKey || ""}
+            onChange={(v) => setField("resendApiKey", v)}
+            placeholder="re_xxxxxxxxxxxxxxxx"
+            hint={
+              <>
+                Crie em{" "}
+                <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer">
+                  resend.com/api-keys
+                </a>
+                . É preciso verificar o domínio de envio no Resend antes de enviar.
+              </>
+            }
+          />
+          <Field
+            label="Remetente (From)"
+            hint="Use um endereço do seu domínio verificado no Resend. Ex.: Código Zero <acesso@czero.sbs>"
+          >
+            <input
+              className={styles.input}
+              placeholder="Código Zero <acesso@czero.sbs>"
+              value={config.resendFrom || ""}
+              onChange={(e) => setField("resendFrom", e.target.value)}
+            />
+          </Field>
         </div>
       </Section>
 

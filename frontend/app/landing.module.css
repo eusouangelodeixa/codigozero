@@ -1358,17 +1358,19 @@
   letter-spacing: -0.01em;
 }
 
-/* Founder photo gallery — 2-col grid using named areas: the portrait sits tall
-   on the left while Instagram + Pix stack on the right. Each tile carries its
-   own aspect-ratio so its image fills cleanly (object-fit: cover) with no black
-   letterboxing. The portrait spans both rows and stretches to match the right
-   column — cover crops it gracefully. */
+/* Founder credibility shots — square portrait on the left; Instagram + Pix
+   stacked in a nested column on the right. Each tile's aspect-ratio MATCHES the
+   real screenshot proportions, so object-fit: cover fills the tile while showing
+   the WHOLE image — no cropping, no black letterboxing. */
 .founderGallery {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-areas:
-    "portrait ig"
-    "portrait pix";
+  gap: var(--space-3);
+  align-items: stretch;
+}
+.founderCol {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
 }
 .founderTile {
@@ -1379,28 +1381,15 @@
   background: var(--bg-elevated);
   box-shadow: 0 20px 40px -24px rgba(0,0,0,0.6);
 }
-.gPortrait { grid-area: portrait; aspect-ratio: 4 / 5; }
-.gIg { grid-area: ig; aspect-ratio: 16 / 10; }
-.gPix { grid-area: pix; aspect-ratio: 5 / 2; }
-/* With `fill`, next/image positions the <img> absolutely and sizes it to the
-   tile; object-fit: cover crops-to-fill so it never letterboxes. */
+/* aspect-ratios = the real pixel dimensions of each screenshot, so the full
+   image is visible (cover never has to crop into the content). */
+.gPortrait { aspect-ratio: 1 / 1; }       /* angelo.jpg 886×886 */
+.gIg { aspect-ratio: 1179 / 747; }        /* instagram.jpg */
+.gPix { aspect-ratio: 996 / 388; }        /* pix-3330.jpg */
+/* With `fill`, next/image sizes the <img> to the tile; cover + a matching tile
+   aspect-ratio shows the whole image with no crop and no bars. */
 .founderImg {
   object-fit: cover;
-}
-.founderTileTag {
-  position: absolute;
-  left: 8px;
-  bottom: 8px;
-  right: 8px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0.01em;
 }
 
 /* ── O ECOSSISTEMA POR DENTRO (5 features grid) ── */
@@ -1509,16 +1498,10 @@
   .founderInner { grid-template-columns: 1fr; gap: var(--space-8); }
 }
 
-/* Mobile gallery: single column, each tile keeps its own aspect-ratio so all
-   three images display fully and read cleanly stacked. */
+/* Mobile gallery: one column. Portrait, then the Instagram + Pix column stack
+   below it; each tile keeps its own aspect-ratio so all three show fully. */
 @media (max-width: 560px) {
-  .founderGallery {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "portrait"
-      "ig"
-      "pix";
-  }
+  .founderGallery { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 768px) {

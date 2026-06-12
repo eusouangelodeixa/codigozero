@@ -174,18 +174,16 @@ const DEFAULTS = {
   valueTotalLabel: "", valueTotalAmount: "", valuePunchline: "",
 };
 
-// Founder photo gallery — the three real images (replace the placeholder files
-// under /public/founders with the actual photos using these exact names; see
-// public/founders/README.md). Order: retrato → Instagram → Pix. `area` maps each
-// tile to a CSS grid-area (portrait sits tall on the left; ig + pix stack on the
-// right; single column on mobile). Each tile carries its own aspect-ratio in CSS
-// so the image fills cleanly (object-fit: cover) with no letterboxing. `tag`
-// renders a caption chip over the tile.
-const FOUNDER_GALLERY = [
-  { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero", area: "portrait" as const },
-  { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram com 2.625 seguidores", area: "ig" as const, tag: "2.625 seguidores no Instagram" },
-  { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix recebido — primeira parcela de R$ 3.330 do contrato da Mira", area: "pix" as const, tag: "Primeira parcela — R$ 3.330" },
-];
+// Founder credibility shots (square portrait on the left; Instagram + Pix
+// stacked on the right; single column on mobile). These are SCREENSHOTS, so each
+// tile's aspect-ratio in CSS matches the image's real proportions — they show in
+// FULL, no cropping, no black bars. Replace the placeholder files under
+// /public/founders keeping these exact names (see public/founders/README.md).
+const FOUNDER_GALLERY = {
+  portrait: { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero" },
+  ig: { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram com 2.625 seguidores" },
+  pix: { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix — primeira parcela de R$ 3.330 do contrato da Mira" },
+};
 
 /**
  * Renders a copy string with **bold** markers as real <strong> spans (instead
@@ -820,33 +818,39 @@ export default function LandingPage({
               <p className={styles.founderClosing}>{t("founderClosing")}</p>
             </div>
 
-            {/* GALERIA — 3 imagens reais em /public/founders/ (retrato, Instagram,
-                Pix). Os arquivos atuais são placeholders; substituir mantendo os
-                nomes exatos (ver public/founders/README.md). */}
+            {/* GALERIA — 3 screenshots em /public/founders/ (retrato + Instagram +
+                Pix), cada um exibido por inteiro. Substituir mantendo os nomes
+                exatos (ver public/founders/README.md). */}
             <div className={styles.founderGallery}>
-              {FOUNDER_GALLERY.map((img, i) => (
-                <div
-                  key={i}
-                  className={`${styles.founderTile} ${
-                    img.area === "portrait"
-                      ? styles.gPortrait
-                      : img.area === "ig"
-                        ? styles.gIg
-                        : styles.gPix
-                  }`}
-                >
+              <div className={`${styles.founderTile} ${styles.gPortrait}`}>
+                <Image
+                  src={FOUNDER_GALLERY.portrait.src}
+                  alt={FOUNDER_GALLERY.portrait.alt}
+                  fill
+                  sizes="(max-width:560px) 100vw, 50vw"
+                  className={styles.founderImg}
+                />
+              </div>
+              <div className={styles.founderCol}>
+                <div className={`${styles.founderTile} ${styles.gIg}`}>
                   <Image
-                    src={img.src}
-                    alt={img.alt}
+                    src={FOUNDER_GALLERY.ig.src}
+                    alt={FOUNDER_GALLERY.ig.alt}
                     fill
-                    sizes="(max-width:560px) 100vw, 360px"
+                    sizes="(max-width:560px) 100vw, 50vw"
                     className={styles.founderImg}
                   />
-                  {img.tag && (
-                    <span className={styles.founderTileTag}>{img.tag}</span>
-                  )}
                 </div>
-              ))}
+                <div className={`${styles.founderTile} ${styles.gPix}`}>
+                  <Image
+                    src={FOUNDER_GALLERY.pix.src}
+                    alt={FOUNDER_GALLERY.pix.alt}
+                    fill
+                    sizes="(max-width:560px) 100vw, 50vw"
+                    className={styles.founderImg}
+                  />
+                </div>
+              </div>
             </div>
           </motion.div>
         </section>

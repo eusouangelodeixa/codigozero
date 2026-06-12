@@ -1,111 +1,32 @@
 "use client";
 import { useState, useEffect } from "react";
 import styles from "../admin.module.css";
+import { LANDING_DEFAULTS } from "../../landingDefaults";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
 
 // ── ALL default landing page texts ──
-// Stays in sync with frontend/app/page.tsx DEFAULTS — admin edits these via
-// the JSON `sections` blob on LandingConfig.
-const DEFAULTS: Record<string, any> = {
-  heroTitle: "O ecossistema completo pra criar micronegócios de IA em Moçambique.",
-  heroSubtitle: "Sem código. Sem barreiras.",
-  heroDesc: "Radar de leads, Disparador de WhatsApp, biblioteca de scripts e a network privada que se encontra <strong>todos os domingos</strong>. Tudo num lugar só.",
-  ctaText: "Entrar no Código Zero",
-  trustText: "143 membros · Call toda semana · 6 ferramentas integradas",
-  stat1Value: "143", stat1Label: "Membros na network",
-  stat2Value: "Domingo", stat2Label: "Call ao vivo toda semana",
-  stat3Value: "30 dias", stat3Label: "Garantia condicional",
-  vslTitle: "Código Zero — Apresentação",
-  vslSubtitle: "Assiste à apresentação completa",
-  vslHint: "Clica para ouvir",
-
-  // Stack — 6 ferramentas
-  stackLabel: "O ecossistema por dentro",
-  stackTitle: "Seis ferramentas que",
-  stackTitleHighlight: "trabalham juntas.",
-  stackDesc: "Cada peça faz uma coisa só, e faz bem. Tudo conectado à mesma conta, ao mesmo histórico de leads, à mesma comunidade.",
-  stackTools: [
-    { key: "radar", name: "Radar", verb: "Encontra os clientes.", desc: "Scanner de leads que varre o Google Maps por cidade e categoria. Devolve nome, telefone, Instagram, website e status de cada empresa. Sem CSV, sem trabalho manual.", bullets: ["Busca por cidade + categoria", "Telefone e Instagram dos donos", "Recomenda script do Cofre"] },
-    { key: "disparador", name: "Disparador", verb: "Envia em massa.", desc: "Automação de WhatsApp ligada à API. Seleciona os leads do Radar, escolhe o script, dispara com variáveis personalizadas e log de cada envio para não bloquear o número.", bullets: ["Anti-block com intervalos", "Variáveis por contacto", "Histórico de envios"] },
-    { key: "cofre", name: "Cofre", verb: "Guarda o que funciona.", desc: "Biblioteca privada de scripts de WhatsApp e prompts de IA, organizados em pastas. Copia, cola e usa. Atualizado com o que está convertendo agora na network.", bullets: ["Scripts de outbound testados", "Prompts para Make/n8n/ChatGPT", "Cópia rápida com 1 clique"] },
-    { key: "forja", name: "Forja", verb: "Ensina a construir.", desc: "Aulas práticas — não teoria. Da landing page ao SaaS, passando por automações no Make, n8n e ChatGPT. Cada lição com link direto pra ferramenta usada.", bullets: ["Módulos práticos passo-a-passo", "Vídeos curtos sem enrolação", "Rastreio de progresso por lição"] },
-    { key: "qg", name: "QG", verb: "Conecta a network.", desc: "Hub da comunidade: link direto da network privada, agenda da próxima call ao vivo de domingo, e o botão de entrar quando começar. Sem precisar entrar em vários grupos.", bullets: ["Countdown da próxima call", "Link permanente da network", "Entrada com 1 toque"] },
-    { key: "chat", name: "Chat", verb: "Tira dúvidas em tempo real.", desc: "Dois canais: o feed aberto com todos os membros pra trocar ideia, e suporte 1:1 com a equipa pra quando travar em algo específico. Notificação push direto no celular.", bullets: ["Feed aberto da network", "Suporte 1:1 com equipa", "Push notifications no celular"] },
-  ],
-
-  // Network
-  networkLabel: "Código Zero — Network",
-  networkTitle: "A comunidade privada",
-  networkTitleHighlight: "onde tudo acontece.",
-  networkMembersCount: "143",
-  networkMembersLabel: "membros ativos",
-  networkDesc: "Quem está construindo de verdade troca ideia aqui. Sem feed de gurus, sem teoria reciclada. Conteúdo de quem está executando.",
-  networkPillars: [
-    { title: "Call ao vivo todo domingo", desc: "Encontro semanal pra revisão da semana, problemas reais e o que está convertendo agora." },
-    { title: "Troca real de conteúdo", desc: "Membros publicam o que está funcionando — scripts, prompts, automações que fecharam contrato." },
-    { title: "Construção de SaaS em conjunto", desc: "Projetos coletivos: alguém começa, a network ajuda a finalizar. Quem participa, divide." },
-    { title: "Irmandade, não audiência", desc: "Não é um grupo de Discord com 5 mil pessoas mudas. É 143 que se conhecem pelo nome." },
-  ],
-
-  // Flow
-  flowLabel: "Como funciona",
-  flowTitle: "Quatro passos do",
-  flowTitleHighlight: "pagamento à primeira call.",
-  flowSteps: [
-    { num: "01", title: "Pagas a assinatura", desc: "M-Pesa, e-Mola ou cartão. Aprovação na hora." },
-    { num: "02", title: "Recebes acesso no WhatsApp", desc: "Email e senha enviados no número que cadastraste. Em segundos." },
-    { num: "03", title: "Entras na network", desc: "Link direto da network privada no QG. Apresentas-te e começas a interagir." },
-    { num: "04", title: "Próxima call de domingo", desc: "Aparece no Zoom no horário marcado e começa a executar o método na semana seguinte." },
-  ],
-
-  // Pricing
-  scarcityLabel: "Acesso atual",
-  scarcityTitle: "Network em construção.",
-  scarcityDesc: "143 membros e crescendo. Quem entra agora pega a network ainda pequena — onde dá pra conhecer todo mundo pelo nome e a tua voz na call ainda tem peso.",
-  priceFrom: "",
-  priceAmount: "497",
-  pricePeriod: "MT/mês",
-  priceSub: "Cancelas quando quiseres, sem multa. Pagamento mensal, acesso a tudo.",
-  priceCtaText: "Entrar no Código Zero — 497 MT/mês",
-  closeFriendsLabel: "Close Friends",
-  closeFriendsTitle: "Opcional: Close Friends",
-  closeFriendsDesc: "Add-on de 1.297 MT, pagamento único no checkout. Dá <strong>3 meses corridos</strong> de acesso (em vez de 1), badge dourado na conta e prioridade nas calls de domingo.",
-
-  // Guarantee
-  guaranteeLabel: "Garantia",
-  guaranteeTitle: "30 dias, risco do nosso lado.",
-  guaranteeText1: "Entras, usas o Radar, envias com o Disparador, assistes à primeira call de domingo.",
-  guaranteeText2: "",
-  guaranteeHighlight: "Se em 30 dias não fechares pelo menos 1 contrato de 3.000 MT usando o sistema, devolvemos o dobro do que pagaste — e ainda dou 1 hora 1:1 contigo pra entender o que travou.",
-  guaranteeConclusion: "A única forma de sair perdendo aqui é não entrando.",
-  guaranteeCtaText: "Aceitar e entrar agora",
-
-  // FAQ
-  faqLabel: "Perguntas frequentes",
-  faqTitle: "O que costumam perguntar.",
-  faqItems: [
-    { q: "Preciso saber programar?", a: "Não. O Código Zero foi feito pra quem nunca abriu uma IDE. Tudo é visual: o Radar tem botões, o Disparador tem botões, a Forja ensina a usar IAs visuais (Make, n8n, ChatGPT). Se aparece código, é só pra copiar e colar." },
-    { q: "Quanto tempo até ver o primeiro resultado?", a: "Depende de quanto tempo dedicas. A maior parte da network fecha o primeiro contrato entre a segunda e a quarta semana. A garantia condicional é desenhada em cima desse prazo (30 dias)." },
-    { q: "O número de WhatsApp que vou usar bloqueia?", a: "O Disparador tem intervalo configurável entre envios pra simular comportamento humano. Recomendamos um número dedicado, mas o teu pessoal funciona se respeitar o limite diário." },
-    { q: "Cancelar é fácil?", a: "Sim. Pelo painel, em /assinatura, em 2 cliques. Sem ligação, sem retenção forçada. Se cancelares, o acesso vai até o fim do mês pago." },
-    { q: "Já tentei vender curso de IA e não funcionou. Aqui é diferente?", a: "Aqui não estás vendendo curso. Estás vendendo automações e SaaS pra empresas que pagam recorrente. É outro mercado: B2B com leads quentes, não info-produto pra pessoa física." },
-  ],
-
-  // Footer
-  footerDesc: "O ecossistema de tecnologia para criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",
-};
+// Single source of truth: shared with the public landing page (app/page.tsx)
+// via app/landingDefaults.ts, so the editor and the page never drift. Admin
+// edits these via the JSON `sections` blob on LandingConfig.
+const DEFAULTS: Record<string, any> = LANDING_DEFAULTS;
 
 const TABS = [
   { id: "vsl", label: "🎬 VSL" },
   { id: "hero", label: "🏠 Hero" },
-  { id: "stack", label: "🧩 Stack (6 ferramentas)" },
+  { id: "note", label: "🚫 O que não é" },
+  { id: "clinic", label: "🏥 Clínica" },
+  { id: "numbers", label: "🔢 Números" },
+  { id: "founder", label: "🙋 Fundador" },
+  { id: "stack", label: "🧩 Ecossistema" },
   { id: "network", label: "🤝 Network" },
+  { id: "radar", label: "🛰️ Radar" },
+  { id: "pricing", label: "💰 Oferta" },
   { id: "flow", label: "🪜 Como funciona" },
-  { id: "pricing", label: "💰 Preço + Close Friends" },
   { id: "guarantee", label: "🛡️ Garantia" },
   { id: "faq", label: "❓ FAQ" },
+  { id: "finalcta", label: "🎯 CTA final" },
   { id: "footer", label: "📄 Footer" },
   { id: "tracking", label: "📈 Tracking" },
   { id: "affiliate", label: "🤝 Afiliados" },
@@ -156,7 +77,7 @@ export default function AdminLanding() {
         heroDesc: sec.heroDesc !== DEFAULTS.heroDesc ? sec.heroDesc : null,
         ctaText: sec.ctaText !== DEFAULTS.ctaText ? sec.ctaText : null,
         priceAmount: parseInt(sec.priceAmount) || 497,
-        maxVagas: parseInt(sec.stat2Value) || 50,
+        maxVagas: parseInt(cfg.maxVagas) || 50,
         sections: sec,
         affiliateVslEmbedHtml: cfg.affiliateVslEmbedHtml || null,
         affiliateCreativesUrl: cfg.affiliateCreativesUrl || null,
@@ -176,7 +97,7 @@ export default function AdminLanding() {
       body: JSON.stringify({
         ...cfg,
         priceAmount: parseInt(sec.priceAmount) || cfg.priceAmount || 497,
-        maxVagas: parseInt(sec.stat2Value) || cfg.maxVagas || 50,
+        maxVagas: parseInt(cfg.maxVagas) || 50,
         sections: sec,
       }),
     });
@@ -197,6 +118,40 @@ export default function AdminLanding() {
         <input className={styles.formInput} value={sec[field] || ""} onChange={e => u(field, e.target.value)} />
       )}
     </div>
+  );
+
+  // Editor for an array of plain STRINGS (e.g. notLines, clinicParas,
+  // founderCreds, radarSteps). Mirrors the object-array editors' visual style;
+  // copy is long so each item is a <textarea>. **bold** markers render on the page.
+  const StringArray = ({ field, itemLabel, addLabel }: { field: string; itemLabel: string; addLabel: string }) => (
+    <>
+      {((sec[field] as string[]) || []).map((line: string, i: number) => (
+        <div key={i} className={styles.formGrid} style={{ marginBottom: 12, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+          <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+            <label className={styles.formLabel}>{itemLabel} {i + 1}</label>
+            <textarea className={styles.formTextarea} style={{ minHeight: 70 }} value={line} onChange={e => {
+              const arr = [...(sec[field] || [])]; arr[i] = e.target.value;
+              u(field, arr);
+            }} />
+          </div>
+          <button
+            type="button"
+            className={styles.btnSecondary}
+            style={{ fontSize: 11 }}
+            onClick={() => {
+              const arr = [...(sec[field] || [])]; arr.splice(i, 1);
+              u(field, arr);
+            }}
+          >✕ Remover</button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className={styles.btnSecondary}
+        style={{ marginTop: 8, fontSize: 12 }}
+        onClick={() => u(field, [...(sec[field] || []), ""])}
+      >{addLabel}</button>
+    </>
   );
 
   const revertToDefaults = async () => {
@@ -276,44 +231,100 @@ export default function AdminLanding() {
       {activeTab === "hero" && (
         <div className={styles.card}>
           <h3 className={styles.cardTitle}>🏠 Hero Section</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito.
+          </p>
           <div className={styles.formGrid}>
             <Field label="Título Principal" field="heroTitle" />
             <Field label="Subtítulo" field="heroSubtitle" />
             <Field label="Descrição" field="heroDesc" multiline />
-            <Field label="Texto do CTA" field="ctaText" />
-            <Field label="Texto de Confiança (abaixo do CTA)" field="trustText" />
-            <div className={`${styles.formGroup}`}>
-              <label className={styles.formLabel}>Stat 1 — Valor</label>
-              <input className={styles.formInput} value={sec.stat1Value || ""} onChange={e => u("stat1Value", e.target.value)} />
-            </div>
-            <div className={`${styles.formGroup}`}>
-              <label className={styles.formLabel}>Stat 1 — Label</label>
-              <input className={styles.formInput} value={sec.stat1Label || ""} onChange={e => u("stat1Label", e.target.value)} />
-            </div>
-            <div className={`${styles.formGroup}`}>
-              <label className={styles.formLabel}>Stat 2 — Valor</label>
-              <input className={styles.formInput} value={sec.stat2Value || ""} onChange={e => u("stat2Value", e.target.value)} />
-            </div>
-            <div className={`${styles.formGroup}`}>
-              <label className={styles.formLabel}>Stat 2 — Label</label>
-              <input className={styles.formInput} value={sec.stat2Label || ""} onChange={e => u("stat2Label", e.target.value)} />
-            </div>
-            <div className={`${styles.formGroup}`}>
-              <label className={styles.formLabel}>Stat 3 — Valor</label>
-              <input className={styles.formInput} value={sec.stat3Value || ""} onChange={e => u("stat3Value", e.target.value)} />
-            </div>
-            <div className={`${styles.formGroup}`}>
-              <label className={styles.formLabel}>Stat 3 — Label</label>
-              <input className={styles.formInput} value={sec.stat3Label || ""} onChange={e => u("stat3Label", e.target.value)} />
-            </div>
+            <Field label="Texto do CTA principal" field="heroCtaText" />
+            <Field label="Sub-CTA (linha abaixo do botão)" field="heroSubCta" multiline />
+            <Field label="Texto do CTA (legado, fallback)" field="ctaText" />
           </div>
         </div>
       )}
 
-      {/* ═══ Stack — 6 ferramentas ═══ */}
+      {/* ═══ O que isso NÃO é ═══ */}
+      {activeTab === "note" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🚫 O que isso não é</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito.
+          </p>
+          <div className={styles.formGrid}>
+            <Field label="Label (tag)" field="notLabel" />
+            <Field label="Título" field="notTitle" />
+          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Linhas (parágrafos)
+          </h4>
+          <StringArray field="notLines" itemLabel="Linha" addLabel="+ Adicionar linha" />
+        </div>
+      )}
+
+      {/* ═══ Como isso vira dinheiro — clínica ═══ */}
+      {activeTab === "clinic" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🏥 Como isso vira dinheiro (clínica)</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito.
+          </p>
+          <div className={styles.formGrid}>
+            <Field label="Label (tag)" field="clinicLabel" />
+            <Field label="Título" field="clinicTitle" />
+          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Parágrafos
+          </h4>
+          <StringArray field="clinicParas" itemLabel="Parágrafo" addLabel="+ Adicionar parágrafo" />
+        </div>
+      )}
+
+      {/* ═══ Os números ═══ */}
+      {activeTab === "numbers" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🔢 Os números, sem inflar</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito.
+          </p>
+          <div className={styles.formGrid}>
+            <Field label="Label (tag)" field="numbersLabel" />
+            <Field label="Título" field="numbersTitle" />
+            <Field label="Linha 1" field="numbersLine1" multiline />
+            <Field label="Linha 2 (destaque)" field="numbersLine2" multiline />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Fundador ═══ */}
+      {activeTab === "founder" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🙋 Quem está falando com você</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito. As imagens (retrato, Instagram e comprovante) vêm de <code>/public/founders/</code> — substitua os arquivos direto pra trocar.
+          </p>
+          <div className={styles.formGrid}>
+            <Field label="Label (tag)" field="founderLabel" />
+            <Field label="Apresentação" field="founderIntro" multiline />
+          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Credenciais
+          </h4>
+          <StringArray field="founderCreds" itemLabel="Credencial" addLabel="+ Adicionar credencial" />
+          <div className={styles.formGrid} style={{ marginTop: 16 }}>
+            <Field label="Fecho (frase final)" field="founderClosing" />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Ecossistema (features) ═══ */}
       {activeTab === "stack" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>🧩 Stack — as 6 ferramentas reais</h3>
+          <h3 className={styles.cardTitle}>🧩 O ecossistema por dentro</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito nas descrições.
+          </p>
           <div className={styles.formGrid}>
             <Field label="Label (tag)" field="stackLabel" />
             <Field label="Título" field="stackTitle" />
@@ -321,51 +332,48 @@ export default function AdminLanding() {
             <Field label="Descrição" field="stackDesc" multiline />
           </div>
           <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Cards das ferramentas (key não deve mudar — controla o ícone)
+            Features (cards do ecossistema)
           </h4>
-          {(sec.stackTools || []).map((tool: any, i: number) => (
-            <div key={i} style={{ marginBottom: 16, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
-              <div className={styles.formGrid}>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Key #{i + 1} (slug interno)</label>
-                  <input className={styles.formInput} value={tool.key} onChange={e => {
-                    const c = [...sec.stackTools]; c[i] = { ...tool, key: e.target.value };
-                    u("stackTools", c);
-                  }} />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Nome (ex: Radar)</label>
-                  <input className={styles.formInput} value={tool.name} onChange={e => {
-                    const c = [...sec.stackTools]; c[i] = { ...tool, name: e.target.value };
-                    u("stackTools", c);
-                  }} />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Verbo (ex: Encontra os clientes.)</label>
-                  <input className={styles.formInput} value={tool.verb} onChange={e => {
-                    const c = [...sec.stackTools]; c[i] = { ...tool, verb: e.target.value };
-                    u("stackTools", c);
-                  }} />
-                </div>
-                <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                  <label className={styles.formLabel}>Descrição</label>
-                  <textarea className={styles.formTextarea} style={{ minHeight: 70 }} value={tool.desc} onChange={e => {
-                    const c = [...sec.stackTools]; c[i] = { ...tool, desc: e.target.value };
-                    u("stackTools", c);
-                  }} />
-                </div>
-                <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
-                  <label className={styles.formLabel}>Bullets (um por linha — 3 ideal)</label>
-                  <textarea className={styles.formTextarea} style={{ minHeight: 80 }}
-                    value={(tool.bullets || []).join("\n")}
-                    onChange={e => {
-                      const c = [...sec.stackTools]; c[i] = { ...tool, bullets: e.target.value.split("\n").filter((s: string) => s.trim()) };
-                      u("stackTools", c);
-                    }} />
-                </div>
+          {(sec.ecoFeatures || []).map((f: any, i: number) => (
+            <div key={i} className={styles.formGrid} style={{ marginBottom: 12, padding: 16, background: "rgba(0,0,0,0.2)", borderRadius: 8 }}>
+              <div className={styles.formGroup} style={{ maxWidth: 120 }}>
+                <label className={styles.formLabel}>Emoji</label>
+                <input className={styles.formInput} value={f.emoji} onChange={e => {
+                  const arr = [...sec.ecoFeatures]; arr[i] = { ...f, emoji: e.target.value };
+                  u("ecoFeatures", arr);
+                }} />
               </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Título {i + 1}</label>
+                <input className={styles.formInput} value={f.title} onChange={e => {
+                  const arr = [...sec.ecoFeatures]; arr[i] = { ...f, title: e.target.value };
+                  u("ecoFeatures", arr);
+                }} />
+              </div>
+              <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
+                <label className={styles.formLabel}>Descrição {i + 1}</label>
+                <textarea className={styles.formTextarea} style={{ minHeight: 60 }} value={f.desc} onChange={e => {
+                  const arr = [...sec.ecoFeatures]; arr[i] = { ...f, desc: e.target.value };
+                  u("ecoFeatures", arr);
+                }} />
+              </div>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                style={{ fontSize: 11 }}
+                onClick={() => {
+                  const arr = [...sec.ecoFeatures]; arr.splice(i, 1);
+                  u("ecoFeatures", arr);
+                }}
+              >✕ Remover</button>
             </div>
           ))}
+          <button
+            type="button"
+            className={styles.btnSecondary}
+            style={{ marginTop: 8, fontSize: 12 }}
+            onClick={() => u("ecoFeatures", [...(sec.ecoFeatures || []), { emoji: "", title: "", desc: "" }])}
+          >+ Adicionar feature</button>
         </div>
       )}
 
@@ -405,6 +413,27 @@ export default function AdminLanding() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ═══ Radar (como funciona) ═══ */}
+      {activeTab === "radar" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🛰️ Como o Radar funciona (na prática)</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito.
+          </p>
+          <div className={styles.formGrid}>
+            <Field label="Label (tag)" field="radarLabel" />
+            <Field label="Título" field="radarTitle" />
+          </div>
+          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Passos (numerados automaticamente)
+          </h4>
+          <StringArray field="radarSteps" itemLabel="Passo" addLabel="+ Adicionar passo" />
+          <div className={styles.formGrid} style={{ marginTop: 16 }}>
+            <Field label="Fecho (frase final)" field="radarClosing" multiline />
+          </div>
         </div>
       )}
 
@@ -495,14 +524,21 @@ export default function AdminLanding() {
         </div>
       )}
 
-      {/* ═══ Pricing + Close Friends ═══ */}
+      {/* ═══ Oferta — Pricing + Close Friends ═══ */}
       {activeTab === "pricing" && (
         <div className={styles.card}>
-          <h3 className={styles.cardTitle}>💰 Preço & Close Friends</h3>
+          <h3 className={styles.cardTitle}>💰 A oferta (preço & Close Friends)</h3>
+          <p className={styles.cardDesc} style={{ marginBottom: 16 }}>
+            Use <code>**texto**</code> para deixar trechos em negrito.
+          </p>
           <div className={styles.formGrid}>
-            <Field label="Label de contexto (ex: Acesso atual)" field="scarcityLabel" />
+            <Field label="Label de contexto (ex: A oferta)" field="scarcityLabel" />
             <Field label="Título de contexto" field="scarcityTitle" />
             <Field label="Descrição de contexto" field="scarcityDesc" multiline />
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>"De" (preço riscado — opcional)</label>
+              <input className={styles.formInput} value={sec.priceFrom || ""} onChange={e => u("priceFrom", e.target.value)} />
+            </div>
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>Preço Atual</label>
               <input className={styles.formInput} value={sec.priceAmount || "497"} onChange={e => u("priceAmount", e.target.value)} />
@@ -537,6 +573,18 @@ export default function AdminLanding() {
             <Field label="Destaque (texto em destaque)" field="guaranteeHighlight" multiline />
             <Field label="Conclusão" field="guaranteeConclusion" />
             <Field label="Texto do CTA" field="guaranteeCtaText" />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ CTA final ═══ */}
+      {activeTab === "finalcta" && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>🎯 CTA final</h3>
+          <div className={styles.formGrid}>
+            <Field label="Título" field="finalCtaTitle" />
+            <Field label="Descrição" field="finalCtaDesc" multiline />
+            <Field label="Texto do botão" field="finalCtaText" />
           </div>
         </div>
       )}

@@ -18,6 +18,7 @@ import { deprovisionKomunika } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
+import { sendCredentialsEmail } from '../services/payment.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1005,6 +1006,29 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
     res.json({ config });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar config do sistema' });
+  }
+});
+
+// POST /api/admin/resend-test — sends a sample access e-mail (Resend) to a given
+// address so the admin can check the visual + delivery straight from /admin/config.
+router.post('/resend-test', async (req: AuthRequest, res: Response) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Informe um e-mail válido.' });
+    }
+    const rawPassword = 'teste-' + Math.random().toString(36).slice(2, 8);
+    const r = await sendCredentialsEmail({ name: 'Aluno Teste', email, rawPassword });
+    if (r.ok) return res.json({ success: true, id: r.id });
+    if (r.status === 'resend-not-configured') {
+      return res.status(400).json({ error: 'Resend não configurado. Salve a API Key e o remetente primeiro.' });
+    }
+    return res.status(502).json({
+      error: `Resend recusou o envio (status ${r.status}). Confira a API Key e se o domínio do remetente está verificado.`,
+    });
+  } catch (error) {
+    console.error('[ADMIN] resend-test error:', error);
+    return res.status(500).json({ error: 'Erro ao enviar e-mail de teste.' });
   }
 });
 

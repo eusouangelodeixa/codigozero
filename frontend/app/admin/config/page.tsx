@@ -94,6 +94,9 @@ export default function AdminConfig() {
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [assistants, setAssistants] = useState<KomunikaAssistant[]>([]);
   const [loadingAssistants, setLoadingAssistants] = useState(false);
+  const [resendTestEmail, setResendTestEmail] = useState("");
+  const [resendTesting, setResendTesting] = useState(false);
+  const [resendTestMsg, setResendTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [testType, setTestType] = useState<"visitor" | "checkout">("visitor");
@@ -144,6 +147,29 @@ export default function AdminConfig() {
       toast.error("Erro de conexão ao carregar agentes SDR");
     }
     setLoadingAssistants(false);
+  };
+
+  const sendResendTest = async () => {
+    const email = resendTestEmail.trim();
+    if (!email) return;
+    setResendTesting(true);
+    setResendTestMsg(null);
+    try {
+      const res = await fetch(`${API}/api/admin/resend-test`, {
+        method: "POST",
+        headers: hdr(),
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResendTestMsg({ ok: true, text: `✅ Enviado para ${email}. Confira a caixa de entrada (e o spam na 1ª vez).` });
+      } else {
+        setResendTestMsg({ ok: false, text: data.error || `Falha no envio (status ${res.status}).` });
+      }
+    } catch {
+      setResendTestMsg({ ok: false, text: "Erro de conexão ao enviar." });
+    }
+    setResendTesting(false);
   };
 
   const dirty =
@@ -505,6 +531,35 @@ export default function AdminConfig() {
               onChange={(e) => setField("resendFrom", e.target.value)}
             />
           </Field>
+
+          <Field
+            label="Enviar e-mail de teste"
+            hint="Dispara o e-mail de acesso (com dados de exemplo) para conferir o visual e a entrega. Salve a API Key e o remetente antes."
+          >
+            <div className={styles.inlineRow}>
+              <input
+                className={styles.input}
+                type="email"
+                placeholder="email@destino.com"
+                value={resendTestEmail}
+                onChange={(e) => setResendTestEmail(e.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.smallBtn}
+                onClick={sendResendTest}
+                disabled={resendTesting || !resendTestEmail.trim() || !config.resendApiKey}
+                title={!config.resendApiKey ? "Configure a API Key primeiro" : "Enviar e-mail de teste"}
+              >
+                {resendTesting ? "Enviando…" : "Enviar teste"}
+              </button>
+            </div>
+          </Field>
+          {resendTestMsg && (
+            <p className={styles.fieldHint} style={{ color: resendTestMsg.ok ? "var(--accent)" : "#f87171", marginTop: 4 }}>
+              {resendTestMsg.text}
+            </p>
+          )}
         </div>
       </Section>
 

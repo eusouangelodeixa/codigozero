@@ -96,7 +96,7 @@ export async function sendCredentialsViaWhatsApp(opts: {
 function credentialsEmailHtml(opts: { name: string; email: string; password: string; loginUrl: string }): string {
   const first = (opts.name || '').split(' ')[0] || 'membro';
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#0b1413;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;">
+<html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#0b1413;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1413;padding:28px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;">

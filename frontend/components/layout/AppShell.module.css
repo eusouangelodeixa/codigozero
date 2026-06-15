@@ -249,15 +249,14 @@
   animation: contentIn 360ms var(--ease-out);
 }
 
-/* Full-bleed pages (ex.: chat): removem o box central com padding para que a
-   página ocupe toda a coluna principal, do topo ao fim — "tela cheia". O filho
-   (.page do chat) preenche via flex. */
+/* Full-bleed pages (ex.: chat): removem o box central com padding/largura
+   máxima para a página ocupar toda a coluna principal — "tela cheia". NÃO usar
+   flex aqui: o filho (.page do chat) tem altura própria (100dvh / calc no
+   mobile); se este container fosse flex, o .page encolheria (flex-shrink) e o
+   campo de digitar não iria até o fim da tela. Bloco normal mantém a altura. */
 .contentFlush {
   padding: 0;
   max-width: none;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
 @keyframes contentIn {

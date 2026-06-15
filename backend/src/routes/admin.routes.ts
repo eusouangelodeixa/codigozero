@@ -37,7 +37,13 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
       prisma.user.count(),
       prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member' } }),
       prisma.user.count({ where: { subscriptionStatus: 'lead' } }),
-      prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member', lojouOrderId: { not: null } } }),
+      // Pagantes reais = assinatura ativa COM pagamento de verdade. Excluímos
+      // grantedManually (acessos liberados pelo admin: comp/trial/refund) — eles
+      // recebem um lojouOrderId sintético "MANUAL_…", então o filtro
+      // lojouOrderId != null sozinho não basta. Sem isso, o MRR (paidUsers ×
+      // preço) e o card "Pagos · ativos" inflavam com quem não paga. Mesma
+      // regra do /finance (activePaidUsers).
+      prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member', lojouOrderId: { not: null }, grantedManually: false } }),
       prisma.transaction.findMany({ where: { status: 'approved' }, select: { amount: true } }),
       prisma.systemConfig.findFirst({ where: { id: 'singleton' } }),
     ]);

@@ -205,8 +205,12 @@ router.post('/lojou', async (req: Request, res: Response) => {
       where: { orderId: String(orderId) },
     });
 
-    if (existingTransaction && existingTransaction.status === 'approved') {
-      console.log(`[WEBHOOK] Order ${orderId} already processed, skipping`);
+    // Dedup APENAS re-entregas do order.approved. NÃO bloquear aqui os eventos
+    // posteriores (order.refunded / order.cancelled) de um pedido já aprovado —
+    // senão o reembolso/cancelamento nunca chega ao seu case e o status nunca
+    // vira 'refunded'/'failed' (era por isso que REEMBOLSOS ficava sempre 0).
+    if (existingTransaction && existingTransaction.status === 'approved' && event === 'order.approved') {
+      console.log(`[WEBHOOK] Order ${orderId} already processed (approved), skipping`);
       return res.json({ status: 'already_processed' });
     }
 
@@ -698,8 +702,11 @@ router.post('/lojou', async (req: Request, res: Response) => {
       }
 
       case 'order.refunded': {
-        // Find user by order and deactivate
-        if (existingTransaction) {
+        // Find user by order and deactivate. Idempotente: só roda os efeitos
+        // (desativar usuário, decrementar contador, marcar tx, notificar) se a
+        // transação ainda NÃO estava reembolsada — assim uma re-entrega do
+        // webhook da Lojou não decrementa currentUsers duas vezes.
+        if (existingTransaction && existingTransaction.status !== 'refunded') {
           const user = await prisma.user.findFirst({
             where: {
               OR: [

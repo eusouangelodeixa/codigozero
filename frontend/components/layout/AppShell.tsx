@@ -168,6 +168,10 @@ export function AppShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  // Chat é tela cheia: a coluna .main recebe altura DEFINIDA (mainChat) e o
+  // <main> fica flush, para o composer ficar preso ao rodapé e as mensagens
+  // rolarem internamente.
+  const isChatRoute = pathname === "/chat" || (pathname?.startsWith("/chat/") ?? false);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -307,7 +311,7 @@ export function AppShell({
       </aside>
 
       {/* ───────── Main column ───────── */}
-      <div className={styles.main}>
+      <div className={cx(styles.main, isChatRoute && styles.mainChat)}>
         {/* Mobile topbar */}
         <header className={styles.mobileTopbar}>
           <div className={styles.topbarBrand}>
@@ -326,7 +330,7 @@ export function AppShell({
           </a>
         </header>
 
-        <main className={cx(styles.content, (pathname === "/chat" || pathname?.startsWith("/chat/")) && styles.contentFlush)}>{children}</main>
+        <main className={cx(styles.content, isChatRoute && styles.contentFlush)}>{children}</main>
       </div>
 
       {/* ───────── Mobile bottom-nav ───────── */}

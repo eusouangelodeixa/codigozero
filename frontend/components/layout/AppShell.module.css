@@ -238,9 +238,16 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  /* Definite height so full-bleed children (chat) can flex-fill the column. */
-  min-height: 100vh;
-  min-height: 100dvh;
+}
+
+/* Chat = tela cheia. A coluna principal recebe altura DEFINIDA (não só
+   min-height): só com height definida a cadeia flex limita a área de mensagens
+   e ativa a rolagem interna — assim o composer fica preso ao rodapé e não
+   "sobe" ao rolar. Escopado ao chat para não travar o scroll das outras telas. */
+.mainChat {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
 }
 
 .content {

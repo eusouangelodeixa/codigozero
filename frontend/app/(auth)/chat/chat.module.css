@@ -2,36 +2,20 @@
    Chat — Código Zero
    ───────────────────────────────────────────────────────── */
 
-/* Full-bleed chat. The AppShell renders /chat inside a flush <main> (no padding,
-   no max-width — see .contentFlush), so the panel fills the whole screen and owns
-   its own scroll. `svh`/`dvh` keep it correct on mobile when the address bar is
-   visible — `100vh` overshot and pushed the input under the bottom nav. */
+/* Full-bleed chat. The AppShell renders /chat inside a flush <main> (.contentFlush:
+   a flex column with a definite height), so the panel simply flex-fills it. Using
+   flex:1 instead of a calc()'d viewport height means the composer is ALWAYS pinned
+   to the bottom — no magic topbar pixel, no svh / safe-area math to get wrong. The
+   messages area (flex:1 inside) scrolls; header and composer stay put. */
 .page {
   display: flex;
   flex-direction: column;
-  /* Desktop: fill the full viewport height (sidebar sits beside it). */
-  height: 100vh;
-  height: 100dvh;
-  min-height: 420px;
+  flex: 1;
+  min-height: 0;
   background: var(--bg-surface);
   border: none;
   border-radius: 0;
   overflow: hidden;
-}
-
-@media (max-width: 768px) {
-  .page {
-    min-height: 0;
-    /* Fill the visible area between the mobile topbar (~56px) and the fixed
-       bottom nav. Content has no padding now (.contentFlush), so we only
-       subtract the bars + safe areas. */
-    height: calc(
-      100svh - 56px
-      - var(--bottomnav-height)
-      - env(safe-area-inset-top, 0px)
-      - env(safe-area-inset-bottom, 0px)
-    );
-  }
 }
 
 /* ── Header ── */

@@ -238,6 +238,9 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* Definite height so full-bleed children (chat) can flex-fill the column. */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .content {
@@ -249,14 +252,17 @@
   animation: contentIn 360ms var(--ease-out);
 }
 
-/* Full-bleed pages (ex.: chat): removem o box central com padding/largura
-   máxima para a página ocupar toda a coluna principal — "tela cheia". NÃO usar
-   flex aqui: o filho (.page do chat) tem altura própria (100dvh / calc no
-   mobile); se este container fosse flex, o .page encolheria (flex-shrink) e o
-   campo de digitar não iria até o fim da tela. Bloco normal mantém a altura. */
+/* Full-bleed pages (ex.: chat): coluna flex que ocupa toda a área principal —
+   "tela cheia". O filho (.page do chat) usa flex:1 e preenche tudo; o campo de
+   digitar fica colado no rodapé sem depender de altura calculada / número
+   mágico do topbar. .main tem altura definida (min-height:100dvh), então este
+   flex:1 resolve. */
 .contentFlush {
   padding: 0;
   max-width: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 @keyframes contentIn {
@@ -518,10 +524,12 @@
     padding-bottom: calc(var(--bottomnav-height) + var(--space-6) + env(safe-area-inset-bottom, 0px));
     animation: contentIn 240ms var(--ease-out);
   }
-  /* Chat full-bleed no mobile: sem padding — a própria .page do chat reserva
-     topbar + bottom-nav na altura dela. */
+  /* Chat full-bleed no mobile: sem padding lateral, mas reservando a barra de
+     navegação fixa embaixo (a .page do chat para acima dela). O topbar já é
+     consumido naturalmente pelo fluxo flex da coluna .main. */
   .contentFlush {
     padding: 0;
+    padding-bottom: calc(var(--bottomnav-height) + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -532,6 +540,7 @@
   }
   .contentFlush {
     padding: 0;
+    padding-bottom: calc(var(--bottomnav-height) + env(safe-area-inset-bottom, 0px));
   }
 }
 

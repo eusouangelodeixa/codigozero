@@ -24,6 +24,14 @@ import {
 const router = Router();
 const prisma = new PrismaClient();
 
+// Subscription statuses that count as "has/had a paid plan". Anything else —
+// notably 'lead' (a never-paid signup or a refunded account) or an empty/unknown
+// status — is NOT a customer: it must never log in, recover access, or receive a
+// recovery code. Roles below bypass this (they don't hold a member subscription).
+const PAID_STATUSES = ['active', 'grace_period', 'overdue', 'canceled'];
+const PRIVILEGED_ROLES = ['admin', 'superadmin', 'coproducer'];
+const isPaidSubscriber = (status?: string | null) => !!status && PAID_STATUSES.includes(status);
+
 // Avatar upload config
 const avatarDir = path.join(__dirname, '..', '..', 'uploads', 'avatars');
 if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
@@ -65,6 +73,17 @@ router.post('/login', async (req: Request, res: Response) => {
 
     if (!user.isActive) {
       return res.status(403).json({ error: 'Conta desativada. Entre em contato com o suporte.' });
+    }
+
+    // Never issue a token to a non-customer. Leads (form signups that never
+    // paid) are created with role=member + isActive=true, so without this gate
+    // they could authenticate and only hit the paywall deeper in the app. Paid
+    // statuses (incl. overdue/canceled) still log in so they can reach /blocked
+    // and renew. Admin/superadmin/coproducer don't hold a member subscription.
+    if (!PRIVILEGED_ROLES.includes(user.role) && !isPaidSubscriber(user.subscriptionStatus)) {
+      return res.status(403).json({
+        error: 'Esta conta ainda não tem uma assinatura ativa. Conclua o pagamento para liberar o acesso à plataforma.',
+      });
     }
 
     const token = jwt.sign(
@@ -179,7 +198,12 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
       user = await prisma.user.findFirst({ where: { OR: [{ phone: norm }, { phone: digits }] } });
     }
 
-    if (!user || user.role !== 'member') {
+    // Must be a real customer: role=member AND a paid status. Leads (never-paid
+    // form signups) are also role=member with isActive=true, so WITHOUT the
+    // isPaidSubscriber gate this endpoint would reset+reveal a working password
+    // to them — letting a non-customer into the app (blocked only later at the
+    // paywall). Same generic message so we don't disclose that a lead exists.
+    if (!user || user.role !== 'member' || !isPaidSubscriber(user.subscriptionStatus)) {
       return res.status(404).json({
         error: 'Não encontramos uma compra com esses dados. Confira o telefone ou e-mail que usou na compra.',
       });
@@ -293,12 +317,6 @@ const otpLimiter = rateLimit({
   message: { error: 'Muitas solicitações de código. Tente novamente em alguns minutos.' },
 });
 
-// Subscription statuses that count as "has/had a paid plan". Anything else —
-// notably 'lead' (a never-paid signup or a refunded account) or an empty/unknown
-// status — is NOT eligible for password recovery. We must NEVER send a recovery
-// code to someone without a plan.
-const PAID_STATUSES = ['active', 'grace_period', 'overdue', 'canceled'];
-const isPaidSubscriber = (status?: string | null) => !!status && PAID_STATUSES.includes(status);
 // Mask all but the last 2 digits, e.g. "258841234567" -> "••••••••••67".
 const maskPhone = (phone: string) => phone.replace(/\d(?=\d{2})/g, '•');
 

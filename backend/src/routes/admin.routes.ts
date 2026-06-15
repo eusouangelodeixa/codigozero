@@ -407,6 +407,18 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
+    // ── Fee breakdown + truthful net revenue (window) ──────────────────
+    // grossRevenue = gross the customers paid (principal + bump). lojouFee +
+    // coproducerFee are what's deducted on top of it. netRevenue is what
+    // actually lands with us, and LUCRO LÍQUIDO (profit) = netRevenue − costs
+    // — NOT gross − costs, which used to overstate profit by the whole Lojou
+    // fee. (grossAmount/lojouFee are now stored from the real charged amount;
+    // historical 797-polluted rows were backfilled.)
+    const grossRevenue = currentTransactions.reduce((s, t) => s + (t.grossAmount || t.amount), 0);
+    const totalLojouFee = currentTransactions.reduce((s, t) => s + (t.lojouFee || 0), 0);
+    const totalCoproducerFee = currentTransactions.reduce((s, t) => s + (t.coproducerFee || 0), 0);
+    const netRevenue = currentRevenue - totalLojouFee - totalCoproducerFee;
+
     res.json({
       window: { period, from: startDate.toISOString(), to: endDate.toISOString(), source },
       metrics: {
@@ -426,9 +438,10 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         mrrTheoretical,
         netTicketAvg: Math.round(recentNet),
         // Fee breakdown (window)
-        grossRevenue: currentTransactions.reduce((s, t) => s + (t.grossAmount || t.amount), 0),
-        totalLojouFee: currentTransactions.reduce((s, t) => s + (t.lojouFee || 0), 0),
-        totalCoproducerFee: currentTransactions.reduce((s, t) => s + (t.coproducerFee || 0), 0),
+        grossRevenue,
+        totalLojouFee,
+        totalCoproducerFee,
+        netRevenue: Math.round(netRevenue * 100) / 100,
         activePaidUsers,
         renewalRate,
         churnRate,
@@ -443,7 +456,7 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         costsTotal: costs.total,
         costsCompany: costs.company,
         costsShared: costs.shared,
-        profit: Math.round((currentRevenue - costs.total) * 100) / 100,
+        profit: Math.round((netRevenue - costs.total) * 100) / 100,
       },
       chartData,
       transactions: {

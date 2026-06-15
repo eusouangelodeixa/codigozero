@@ -13,11 +13,22 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
+  /* Safety net: if the card ever exceeds the viewport (very short screens),
+     let the overlay itself scroll instead of clipping the footer. */
+  overflow-y: auto;
 }
 
 .card {
   width: 100%;
   max-width: 560px;
+  /* Never taller than the viewport (minus the overlay padding). The card is a
+     flex column so the body scrolls internally while the footer stays pinned —
+     this is what keeps the "Começar" button reachable on small devices. dvh
+     overrides vh where supported (handles mobile browser chrome). */
+  max-height: calc(100vh - 2 * var(--space-4));
+  max-height: calc(100dvh - 2 * var(--space-4));
+  display: flex;
+  flex-direction: column;
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-xl);
@@ -33,6 +44,7 @@
 
 .progressTrack {
   height: 3px;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -48,6 +60,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  /* Scroll the content here (long steps like step 5) so the footer below stays
+     visible. min-height:0 is required for a flex child to be allowed to shrink
+     and scroll instead of overflowing the card. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   animation: fadeIn 320ms var(--ease-out);
 }
 
@@ -251,6 +269,8 @@
   gap: var(--space-2);
   background: rgba(0, 0, 0, 0.2);
   border-top: 1px solid var(--border-subtle);
+  /* Always visible — never compressed when the body content is tall. */
+  flex-shrink: 0;
 }
 
 .footerLeft {

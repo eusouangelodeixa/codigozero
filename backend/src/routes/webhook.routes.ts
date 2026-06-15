@@ -298,17 +298,14 @@ router.post('/lojou', async (req: Request, res: Response) => {
         if (bump197) {
           console.log(`[WEBHOOK] ➕ Bump 197 detected at ${bump197.matchedAt} (pid=${env.LOJOU_BUMP_197_PID})`);
         }
-        // Prefer the explicit principal product price from the payload
-        // (data.product.price comes as a string in the Lojou format), with
-        // total-minus-bump as fallback. This keeps the affiliate commission
-        // honest even when the bump amount can't be parsed.
-        const productPriceFromPayload = parseFloat(String(data.product?.price || 0));
-        const principalAmount =
-          productPriceFromPayload > 0
-            ? productPriceFromPayload
-            : bumpAmount > 0
-              ? Math.max(0, totalAmount - bumpAmount)
-              : totalAmount;
+        // The principal is what was ACTUALLY charged for the main product:
+        // the real total (totalAmount, from data.amount) minus any detected
+        // bump. We deliberately do NOT trust data.product.price here — that
+        // field carries the stale Lojou plan LIST price (e.g. 797 long after
+        // the plan moved to 497) and ignores coupons, so using it polluted
+        // grossAmount/lojouFee (faturamento bruto) and affiliate commissions
+        // with phantom 797 values. totalAmount already reflects coupons.
+        const principalAmount = bumpAmount > 0 ? Math.max(0, totalAmount - bumpAmount) : totalAmount;
 
         // Generate random password
         const rawPassword = uuidv4().slice(0, 8);

@@ -326,7 +326,7 @@ export function AppShell({
           </a>
         </header>
 
-        <main className={styles.content}>{children}</main>
+        <main className={cx(styles.content, (pathname === "/chat" || pathname?.startsWith("/chat/")) && styles.contentFlush)}>{children}</main>
       </div>
 
       {/* ───────── Mobile bottom-nav ───────── */}

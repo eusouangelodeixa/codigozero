@@ -184,9 +184,15 @@ export default function AdminFinance() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [page, setPage] = useState(1);
-  const limit = 25;
+  const limit = 10;
 
   const [upcoming, setUpcoming] = useState<UpcomingUser[]>([]);
+  // "Próximas renovações" vem inteira do backend; paginamos no cliente, 10/página.
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const upcomingLimit = 10;
+  const upcomingTotalPages = Math.max(1, Math.ceil(upcoming.length / upcomingLimit));
+  const upcomingClamped = Math.min(upcomingPage, upcomingTotalPages);
+  const upcomingSlice = upcoming.slice((upcomingClamped - 1) * upcomingLimit, upcomingClamped * upcomingLimit);
 
   // Debounce search input → 300ms
   useEffect(() => {
@@ -225,7 +231,7 @@ export default function AdminFinance() {
         fetch(`${API_URL}/api/admin/finance?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_URL}/api/admin/finance/upcoming-renewals?days=30&limit=25`, {
+        fetch(`${API_URL}/api/admin/finance/upcoming-renewals?days=30&limit=100`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         coproducers.length === 0
@@ -487,7 +493,7 @@ export default function AdminFinance() {
                 </tr>
               </thead>
               <tbody>
-                {upcoming.map((u) => (
+                {upcomingSlice.map((u) => (
                   <tr key={u.id}>
                     <td>
                       <div className={styles.client}>
@@ -514,7 +520,7 @@ export default function AdminFinance() {
             </table>
 
             <div className={styles.txMobile}>
-              {upcoming.map((u) => (
+              {upcomingSlice.map((u) => (
                 <div key={u.id} className={styles.txMobileCard}>
                   <div className={styles.txmHead}>
                     <span className={styles.txmName}>
@@ -530,6 +536,13 @@ export default function AdminFinance() {
               ))}
             </div>
           </div>
+          {upcoming.length > upcomingLimit && (
+            <div className={styles.pagination}>
+              <button type="button" className={styles.pageBtn} onClick={() => setUpcomingPage((p) => Math.max(1, p - 1))} disabled={upcomingClamped <= 1}>‹ Anterior</button>
+              <span className={styles.pageInfo}>Página {upcomingClamped} de {upcomingTotalPages}</span>
+              <button type="button" className={styles.pageBtn} onClick={() => setUpcomingPage((p) => Math.min(upcomingTotalPages, p + 1))} disabled={upcomingClamped >= upcomingTotalPages}>Próxima ›</button>
+            </div>
+          )}
         </div>
       )}
 

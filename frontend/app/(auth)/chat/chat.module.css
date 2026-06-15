@@ -2,31 +2,32 @@
    Chat — Código Zero
    ───────────────────────────────────────────────────────── */
 
-/* The document scrolls in AppShell (sidebar is sticky), so the chat panel needs
-   an explicit height to own its own scroll. `svh` (small viewport height) keeps
-   it correct on mobile when the address bar is visible — `100vh` overshot and
-   pushed the input below the fold / under the bottom nav (the "distortion"). */
+/* Full-bleed chat. The AppShell renders /chat inside a flush <main> (no padding,
+   no max-width — see .contentFlush), so the panel fills the whole screen and owns
+   its own scroll. `svh`/`dvh` keep it correct on mobile when the address bar is
+   visible — `100vh` overshot and pushed the input under the bottom nav. */
 .page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--page-padding) * 2);
-  height: calc(100svh - var(--page-padding) * 2);
+  /* Desktop: fill the full viewport height (sidebar sits beside it). */
+  height: 100vh;
+  height: 100dvh;
   min-height: 420px;
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xl);
+  border: none;
+  border-radius: 0;
   overflow: hidden;
 }
 
 @media (max-width: 768px) {
   .page {
-    /* Fill the visible area between the mobile topbar and the fixed bottom nav
-       (which the content's bottom padding already reserves). */
     min-height: 0;
+    /* Fill the visible area between the mobile topbar (~56px) and the fixed
+       bottom nav. Content has no padding now (.contentFlush), so we only
+       subtract the bars + safe areas. */
     height: calc(
       100svh - 56px
-      - var(--space-5)
-      - var(--bottomnav-height) - var(--space-6)
+      - var(--bottomnav-height)
       - env(safe-area-inset-top, 0px)
       - env(safe-area-inset-bottom, 0px)
     );

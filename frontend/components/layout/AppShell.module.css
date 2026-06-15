@@ -249,6 +249,17 @@
   animation: contentIn 360ms var(--ease-out);
 }
 
+/* Full-bleed pages (ex.: chat): removem o box central com padding para que a
+   página ocupe toda a coluna principal, do topo ao fim — "tela cheia". O filho
+   (.page do chat) preenche via flex. */
+.contentFlush {
+  padding: 0;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 @keyframes contentIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -508,12 +519,20 @@
     padding-bottom: calc(var(--bottomnav-height) + var(--space-6) + env(safe-area-inset-bottom, 0px));
     animation: contentIn 240ms var(--ease-out);
   }
+  /* Chat full-bleed no mobile: sem padding — a própria .page do chat reserva
+     topbar + bottom-nav na altura dela. */
+  .contentFlush {
+    padding: 0;
+  }
 }
 
 @media (max-width: 480px) {
   .content {
     padding: var(--space-4) var(--space-3);
     padding-bottom: calc(var(--bottomnav-height) + var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
+  .contentFlush {
+    padding: 0;
   }
 }
 

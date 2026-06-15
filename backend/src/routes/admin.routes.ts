@@ -43,7 +43,8 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
       // lojouOrderId != null sozinho não basta. Sem isso, o MRR (paidUsers ×
       // preço) e o card "Pagos · ativos" inflavam com quem não paga. Mesma
       // regra do /finance (activePaidUsers).
-      prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member', lojouOrderId: { not: null }, grantedManually: false } }),
+      // Pagantes reais: Lojou (lojouOrderId) OU Stripe (stripeSubscriptionId).
+      prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member', grantedManually: false, OR: [{ lojouOrderId: { not: null } }, { stripeSubscriptionId: { not: null } }] } }),
       prisma.transaction.findMany({ where: { status: 'approved' }, select: { amount: true } }),
       prisma.systemConfig.findFirst({ where: { id: 'singleton' } }),
     ]);
@@ -288,8 +289,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       where: {
         subscriptionStatus: 'active',
         role: 'member',
-        lojouOrderId: { not: null },
         grantedManually: false,
+        // Pagante real = pagou via Lojou (lojouOrderId) OU via Stripe
+        // (stripeSubscriptionId, assinantes internacionais). Sem o ramo
+        // Stripe eles ficavam de fora do MRR/Pagos·ativos.
+        OR: [{ lojouOrderId: { not: null } }, { stripeSubscriptionId: { not: null } }],
       },
     });
     const activePrice = await getActivePrice();

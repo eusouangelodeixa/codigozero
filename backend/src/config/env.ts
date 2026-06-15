@@ -34,7 +34,9 @@ export const env = {
   RESEND_FROM: process.env.RESEND_FROM || 'Código Zero <acesso@czero.sbs>',
   // Svix signing secret (whsec_…) for the Resend webhook. Configured in /admin/config.
   RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET || '',
-  MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '10', 10),
+  // Limite DIÁRIO de buscas do Radar. O contador soma por CIDADE (cada busca
+  // aceita até 5 cidades), então 50 = ~10 buscas multi-cidade/dia.
+  MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '50', 10),
   KOMUNIKA_API_URL: process.env.KOMUNIKA_API_URL || 'https://api.komunika.site',
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',
   KOMUNIKA_SDR_VISITOR_ASSISTANT_ID: process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID || '', // SDR outbound agent — visitantes (landing abandonada)

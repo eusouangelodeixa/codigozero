@@ -232,9 +232,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       }),
     ]);
 
-    // Refunds + cancellations in the window (by original sale date), so the
-    // admin can gauge losses alongside revenue. 'failed' = cancelled orders.
-    const [refundedAgg, failedAgg] = await Promise.all([
+    // Refunds + cancellations + checkouts iniciados, no window (by original date).
+    // 'refunded' = reembolso de venda; 'failed' = pedido cancelado após aprovado;
+    // 'pending' = "Pagamento iniciado" (checkout começado mas não concluído —
+    // order.cancelled da Lojou). Métricas separadas pra não misturar.
+    const [refundedAgg, failedAgg, initiatedAgg] = await Promise.all([
       prisma.transaction.aggregate({
         where: { status: 'refunded', createdAt: { gte: startDate, lte: endDate }, ...searchClause, ...sourceClause },
         _count: true,
@@ -242,6 +244,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       }),
       prisma.transaction.aggregate({
         where: { status: 'failed', createdAt: { gte: startDate, lte: endDate }, ...searchClause, ...sourceClause },
+        _count: true,
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { status: 'pending', createdAt: { gte: startDate, lte: endDate }, ...searchClause, ...sourceClause },
         _count: true,
         _sum: { amount: true },
       }),
@@ -462,6 +469,9 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         refundedAmount: refundedAgg._sum.amount || 0,
         failedCount: failedAgg._count || 0,
         failedAmount: failedAgg._sum.amount || 0,
+        // Pagamento iniciado (checkout começado, não concluído)
+        initiatedCount: initiatedAgg._count || 0,
+        initiatedAmount: initiatedAgg._sum.amount || 0,
         // Costs + profit (net revenue − costs) in the window
         costsTotal: costs.total,
         costsCompany: costs.company,

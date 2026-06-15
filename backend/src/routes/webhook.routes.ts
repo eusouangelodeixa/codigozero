@@ -779,14 +779,30 @@ router.post('/lojou', async (req: Request, res: Response) => {
       }
 
       case 'order.cancelled': {
-        if (existingTransaction) {
-          await prisma.transaction.update({
+        // "Pagamento iniciado": o cliente começou o checkout mas não concluiu.
+        // Registramos como transação 'pending' pra aparecer no painel (métrica
+        // separada de vendas/reembolsos). Nunca rebaixa um pedido já aprovado
+        // ou reembolsado. Amount preferindo o valor real do pedido (data.amount),
+        // caindo no preço ativo — NUNCA data.product.price (que vem stale = 797).
+        if (!existingTransaction || (existingTransaction.status !== 'approved' && existingTransaction.status !== 'refunded')) {
+          const initiatedAmount = parseFloat(String(data.amount || data.total || 0)) || (await getActivePrice());
+          await prisma.transaction.upsert({
             where: { orderId: String(orderId) },
-            data: { status: 'failed', metadata: data },
+            create: {
+              orderId: String(orderId),
+              userEmail: data.customer?.email || null,
+              userPhone: data.customer?.phone || data.customer?.cellphone || data.customer?.mobile_number || null,
+              userName: data.customer?.name || null,
+              amount: initiatedAmount,
+              status: 'pending',
+              paymentMethod: data.payment_method || null,
+              metadata: data,
+            },
+            update: { status: 'pending', metadata: data },
           });
         }
 
-        console.log(`[WEBHOOK] ❌ Order cancelled: ${orderId}`);
+        console.log(`[WEBHOOK] 🟡 Pagamento iniciado (checkout não concluído): ${orderId}`);
 
         // Integração Komunika: Remarketing de Abandono/Cancelamento
         const customerEmail = data.customer?.email;

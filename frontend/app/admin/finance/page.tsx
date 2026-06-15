@@ -38,6 +38,8 @@ interface Metrics {
   refundedAmount?: number;
   failedCount?: number;
   failedAmount?: number;
+  initiatedCount?: number;
+  initiatedAmount?: number;
   costsTotal?: number;
   costsCompany?: number;
   costsShared?: number;
@@ -435,11 +437,11 @@ export default function AdminFinance() {
           sub={data ? `${fmtMoney(data.metrics.refundedAmount ?? 0)} no período` : ""}
         />
         <MetricCard
-          label="Canceladas"
-          value={data ? (data.metrics.failedCount ?? 0).toLocaleString("pt-MZ") : undefined}
+          label="Pagamento iniciado"
+          value={data ? (data.metrics.initiatedCount ?? 0).toLocaleString("pt-MZ") : undefined}
           loading={loading && !data}
           icon={<IconCancel />}
-          sub={data ? `${fmtMoney(data.metrics.failedAmount ?? 0)} no período` : ""}
+          sub={data ? `${fmtMoney(data.metrics.initiatedAmount ?? 0)} — checkout não concluído` : ""}
         />
         <MetricCard
           label="Custos"
@@ -570,7 +572,7 @@ export default function AdminFinance() {
               <option value="approved">Aprovadas</option>
               <option value="refunded">Reembolsadas</option>
               <option value="failed">Canceladas</option>
-              <option value="pending">Pendentes</option>
+              <option value="pending">Pagamento iniciado</option>
             </select>
             <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
               {data ? `${data.transactions.items.length} de ${data.transactions.total}` : "—"}

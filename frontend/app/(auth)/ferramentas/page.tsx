@@ -61,8 +61,12 @@ export default function FerramentasPage() {
   // Open the embedded Komunika via SSO. The backend mints a short-lived
   // magic-link; the JWT secret never reaches the browser. Open the tab
   // synchronously on click so popup blockers don't swallow it, then navigate.
+  // NOTE: do NOT pass "noopener" here — it makes window.open() return null per
+  // spec, so we'd lose the handle and could never navigate the blank tab to the
+  // SSO url (which is exactly the bug we're fixing). Komunika is first-party, so
+  // the lost opener-severing is an acceptable trade for a tab that actually opens.
   const openKomunika = async () => {
-    const win = window.open("about:blank", "_blank", "noopener");
+    const win = window.open("about:blank", "_blank");
     setOpening(true);
     try {
       const res = await fetch(`${API}/api/komunika/sso-link`, { headers: hdr() });

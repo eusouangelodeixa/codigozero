@@ -127,6 +127,59 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Full profile for one lead/user — powers the detail drawer in /admin/leads.
+// Bundles the user row, their subscription/payment history and a few activity
+// counters so the admin sees the whole picture in one click.
+router.get('/leads/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      include: {
+        affiliateAccount: { select: { code: true, enabled: true } },
+        coproducerAccount: { select: { code: true, displayName: true } },
+        _count: { select: { leads: true, dispatchLogs: true, chatMessages: true } },
+      },
+    });
+    if (!user) return res.status(404).json({ error: 'Lead não encontrado' });
+
+    // Transaction has no FK to User — it's matched by the email/phone captured
+    // at checkout time. Covers both shapes in case one was missing on an order.
+    const transactions = await prisma.transaction.findMany({
+      where: { OR: [{ userEmail: user.email }, { userPhone: user.phone }] },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    const lessonsCompleted = await prisma.lessonProgress.count({
+      where: { userId: user.id, completed: true },
+    });
+
+    const approved = transactions.filter((t) => t.status === 'approved');
+    const totalPaid = approved.reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    const lead: any = { ...user };
+    delete lead.passwordHash;
+
+    res.json({
+      lead,
+      transactions,
+      stats: {
+        totalPaid,
+        paymentsCount: approved.length,
+        firstPaymentAt: approved.length ? approved[approved.length - 1].createdAt : null,
+        lastPaymentAt: approved.length ? approved[0].createdAt : null,
+        scrapedLeads: user._count.leads,
+        dispatchesSent: user._count.dispatchLogs,
+        chatMessages: user._count.chatMessages,
+        lessonsCompleted,
+      },
+    });
+  } catch (error) {
+    console.error('[ADMIN] Lead detail error:', error);
+    res.status(500).json({ error: 'Erro ao carregar detalhes do lead' });
+  }
+});
+
 // ═══════════════════════════════════════
 // FINANCE
 // ═══════════════════════════════════════

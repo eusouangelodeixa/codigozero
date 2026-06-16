@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import styles from "../admin.module.css";
 import DateRangeFilter, { DateRange } from "@/components/admin/DateRangeFilter";
+import { Modal, useToast } from "@/components/ui";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
@@ -14,20 +15,32 @@ const STATUS_LABEL: Record<string, string> = {
   lead: "Lead",
 };
 
+const TX_STATUS_LABEL: Record<string, string> = {
+  approved: "Aprovado",
+  pending: "Pendente",
+  failed: "Falhou",
+  refunded: "Reembolsado",
+};
+
 function statusClass(status: string) {
-  if (status === "active") return styles.badgeGreen;
-  if (status === "lead") return styles.badgeYellow;
-  if (status === "overdue" || status === "canceled") return styles.badgeRed;
-  if (status === "grace_period") return styles.badgeYellow;
+  if (status === "active" || status === "approved") return styles.badgeGreen;
+  if (status === "lead" || status === "grace_period" || status === "pending") return styles.badgeYellow;
+  if (status === "overdue" || status === "canceled" || status === "failed" || status === "refunded") return styles.badgeRed;
   return styles.badgeGray;
 }
 
 export default function AdminLeads() {
+  const toast = useToast();
   const [leads, setLeads] = useState<any[]>([]);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [range, setRange] = useState<DateRange>({ period: "all" });
   const [total, setTotal] = useState(0);
+
+  // Detail drawer
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -48,13 +61,44 @@ export default function AdminLeads() {
 
   useEffect(() => { load(); }, [load]);
 
-  const badge = (lead: any) => (
-    <span className={`${styles.badge} ${statusClass(lead.subscriptionStatus)}`}>
-      {STATUS_LABEL[lead.subscriptionStatus] || lead.subscriptionStatus}
+  const openLead = useCallback((id: string) => {
+    setSelectedId(id);
+    setDetail(null);
+    setDetailLoading(true);
+    fetch(`${API}/api/admin/leads/${id}`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.lead) setDetail(d);
+        else toast.error("Não foi possível carregar o lead", d?.error);
+      })
+      .catch(() => toast.error("Erro de conexão"))
+      .finally(() => setDetailLoading(false));
+  }, [toast]);
+
+  const closeLead = () => { setSelectedId(null); setDetail(null); };
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+      .then(() => toast.success(`${label} copiado`))
+      .catch(() => toast.error("Não foi possível copiar"));
+  };
+
+  const badge = (status: string) => (
+    <span className={`${styles.badge} ${statusClass(status)}`}>
+      {STATUS_LABEL[status] || status}
     </span>
   );
 
-  const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
+  const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
+  const fmtDateTime = (d?: string | null) =>
+    d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+  const fmtMoney = (amount?: number | null, currency = "MZN") =>
+    amount == null ? "—" : `${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+
+  const lead = detail?.lead;
+  const stats = detail?.stats;
+  const txs: any[] = detail?.transactions || [];
+  const waDigits = (lead?.phone || "").replace(/\D/g, "");
 
   return (
     <>
@@ -103,14 +147,14 @@ export default function AdminLeads() {
           <tbody>
             {leads.length === 0 ? (
               <tr><td colSpan={6} className={styles.empty}>Nenhum lead encontrado</td></tr>
-            ) : leads.map((lead) => (
-              <tr key={lead.id}>
-                <td>{lead.name}</td>
-                <td>{lead.email}</td>
-                <td>{lead.phone}</td>
-                <td>{badge(lead)}</td>
-                <td>{fmtDate(lead.createdAt)}</td>
-                <td>{fmtDate(lead.subscriptionEnd)}</td>
+            ) : leads.map((l) => (
+              <tr key={l.id} className={styles.clickableRow} onClick={() => openLead(l.id)}>
+                <td>{l.name}</td>
+                <td>{l.email}</td>
+                <td>{l.phone}</td>
+                <td>{badge(l.subscriptionStatus)}</td>
+                <td>{fmtDate(l.createdAt)}</td>
+                <td>{fmtDate(l.subscriptionEnd)}</td>
               </tr>
             ))}
           </tbody>
@@ -119,20 +163,154 @@ export default function AdminLeads() {
         <div className={styles.mobileCards}>
           {leads.length === 0 ? (
             <div className={styles.empty}>Nenhum lead encontrado</div>
-          ) : leads.map((lead) => (
-            <div key={lead.id} className={styles.mCard}>
+          ) : leads.map((l) => (
+            <div key={l.id} className={`${styles.mCard} ${styles.clickableRow}`} onClick={() => openLead(l.id)}>
               <div className={styles.mCardHead}>
-                <span className={styles.mCardName}>{lead.name}</span>
-                {badge(lead)}
+                <span className={styles.mCardName}>{l.name}</span>
+                {badge(l.subscriptionStatus)}
               </div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Email</span><span className={styles.mCardValue}>{lead.email}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Telefone</span><span className={styles.mCardValue}>{lead.phone}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Cadastro</span><span className={styles.mCardValue}>{fmtDate(lead.createdAt)}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Expira</span><span className={styles.mCardValue}>{fmtDate(lead.subscriptionEnd)}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Email</span><span className={styles.mCardValue}>{l.email}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Telefone</span><span className={styles.mCardValue}>{l.phone}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Cadastro</span><span className={styles.mCardValue}>{fmtDate(l.createdAt)}</span></div>
+              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Expira</span><span className={styles.mCardValue}>{fmtDate(l.subscriptionEnd)}</span></div>
             </div>
           ))}
         </div>
       </div>
+
+      <Modal
+        open={!!selectedId}
+        onClose={closeLead}
+        size="lg"
+        title={lead ? lead.name : "Carregando…"}
+        description={lead ? lead.email : undefined}
+      >
+        {detailLoading && !lead ? (
+          <div className={styles.detailLoading}>Carregando detalhes…</div>
+        ) : !lead ? (
+          <div className={styles.detailLoading}>Não foi possível carregar o lead.</div>
+        ) : (
+          <div className={styles.detail}>
+            {/* Status + quick actions */}
+            <div className={styles.detailActions}>
+              {badge(lead.subscriptionStatus)}
+              {waDigits && (
+                <a
+                  className={`${styles.detailActionBtn} ${styles.detailActionPrimary}`}
+                  href={`https://wa.me/${waDigits}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  WhatsApp
+                </a>
+              )}
+              <button className={styles.detailActionBtn} onClick={() => copy(lead.email, "Email")}>Copiar email</button>
+              <button className={styles.detailActionBtn} onClick={() => copy(lead.phone, "Telefone")}>Copiar telefone</button>
+              {lead.checkoutUrl && (
+                <button className={styles.detailActionBtn} onClick={() => copy(lead.checkoutUrl, "Link de checkout")}>Copiar checkout</button>
+              )}
+              {lead.renewalUrl && (
+                <button className={styles.detailActionBtn} onClick={() => copy(lead.renewalUrl, "Link de renovação")}>Copiar renovação</button>
+              )}
+            </div>
+
+            {/* Activity counters */}
+            {stats && (
+              <div className={styles.detailStats}>
+                <div className={styles.detailStat}>
+                  <div className={styles.detailStatValue}>{fmtMoney(stats.totalPaid)}</div>
+                  <div className={styles.detailStatLabel}>Total pago</div>
+                </div>
+                <div className={styles.detailStat}>
+                  <div className={styles.detailStatValue}>{stats.paymentsCount}</div>
+                  <div className={styles.detailStatLabel}>Pagamentos</div>
+                </div>
+                <div className={styles.detailStat}>
+                  <div className={styles.detailStatValue}>{stats.scrapedLeads}</div>
+                  <div className={styles.detailStatLabel}>Leads gerados</div>
+                </div>
+                <div className={styles.detailStat}>
+                  <div className={styles.detailStatValue}>{stats.lessonsCompleted}</div>
+                  <div className={styles.detailStatLabel}>Aulas concluídas</div>
+                </div>
+              </div>
+            )}
+
+            {/* Subscription */}
+            <Section title="Assinatura">
+              <Field label="Status" value={STATUS_LABEL[lead.subscriptionStatus] || lead.subscriptionStatus} />
+              <Field label="Início" value={fmtDate(lead.subscriptionStart)} />
+              <Field label="Expira" value={fmtDate(lead.subscriptionEnd)} />
+              <Field label="Pedido (Lojou)" value={lead.lojouOrderId || "—"} />
+              <Field label="Acesso manual" value={lead.grantedManually ? "Sim" : "Não"} />
+              <Field label="Close Friends" value={lead.closeFriends ? `Sim · até ${fmtDate(lead.closeFriendsUntil)}` : "Não"} />
+              <Field label="Komunika" value={lead.komunikaCompanyId ? (lead.komunikaDeprovisionedAt ? "Suspenso" : "Ativo") : "—"} />
+            </Section>
+
+            {/* Attribution */}
+            <Section title="Origem & atribuição">
+              <Field label="Afiliado de origem" value={lead.referredByCode || "—"} />
+              <Field label="Coprodutor de origem" value={lead.referredByCoproducer || "—"} />
+              <Field label="É afiliado" value={lead.affiliateAccount?.code ? `Sim (${lead.affiliateAccount.code})` : "Não"} />
+              <Field label="É coprodutor" value={lead.coproducerAccount?.code ? `Sim (${lead.coproducerAccount.code})` : "Não"} />
+            </Section>
+
+            {/* Activity / onboarding */}
+            <Section title="Atividade">
+              <Field label="Cadastro" value={fmtDateTime(lead.createdAt)} />
+              <Field label="Primeiro acesso" value={fmtDateTime(lead.firstAccessAt)} />
+              <Field label="Onboarding" value={lead.hasCompletedOnboarding ? "Concluído" : "Pendente"} />
+              <Field label="Disparos enviados" value={String(stats?.dispatchesSent ?? 0)} />
+              <Field label="Mensagens no chat" value={String(stats?.chatMessages ?? 0)} />
+              <Field label="ID" value={lead.id} />
+            </Section>
+
+            {/* Payment history */}
+            <Section title={`Histórico de pagamentos${txs.length ? ` (${txs.length})` : ""}`}>
+              {txs.length === 0 ? (
+                <div className={styles.detailEmpty}>Nenhuma transação registrada.</div>
+              ) : (
+                <div className={styles.txList}>
+                  {txs.map((t) => (
+                    <div key={t.id} className={styles.txRow}>
+                      <div className={styles.txLeft}>
+                        <span className={styles.txAmount}>{fmtMoney(t.amount, t.currency)}</span>
+                        <span className={styles.txMeta}>
+                          {fmtDateTime(t.createdAt)}
+                          {t.isRenewal ? " · Renovação" : ""}
+                          {t.paymentMethod ? ` · ${t.paymentMethod}` : ""}
+                          {t.gateway ? ` · ${t.gateway}` : ""}
+                        </span>
+                      </div>
+                      <span className={`${styles.badge} ${statusClass(t.status)}`}>
+                        {TX_STATUS_LABEL[t.status] || t.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+          </div>
+        )}
+      </Modal>
     </>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className={styles.detailSection}>
+      <h3 className={styles.detailSectionTitle}>{title}</h3>
+      <div className={styles.detailGrid}>{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className={styles.detailRow}>
+      <span className={styles.detailLabel}>{label}</span>
+      <span className={styles.detailValue}>{value}</span>
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cz-aluno-v4';
+const CACHE_NAME = 'cz-aluno-v5';
 
 // Install — activate immediately, cache in background
 self.addEventListener('install', (event) => {
@@ -35,7 +35,9 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch — network first, cache fallback
+// Fetch — network first, cache fallback. Network-first means an online client
+// always gets the freshly-deployed HTML/chunks (so there's no stale-shell
+// problem); the cache only kicks in when the network actually fails.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.url.includes('/api/')) return; // Don't cache API calls
@@ -44,16 +46,32 @@ self.addEventListener('fetch', (event) => {
   if (event.request.url.includes('/uploads/')) return;
 
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cache successful responses
+    (async () => {
+      try {
+        const response = await fetch(event.request);
+        // Cache successful same-origin responses for offline fallback.
         if (response.ok && response.type === 'basic') {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
         }
         return response;
-      })
-      .catch(() => caches.match(event.request))
+      } catch (err) {
+        // Network failed (offline / flaky link). Serve the cached copy if we
+        // have one for this exact URL.
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        // Page navigation with nothing cached for this URL → fall back to the
+        // app shell so the installed PWA still OPENS instead of a blank screen.
+        if (event.request.mode === 'navigate') {
+          const shell = await caches.match('/dashboard');
+          if (shell) return shell;
+        }
+        // Last resort: a real (error) Response. NEVER resolve to undefined —
+        // respondWith(undefined) makes the request fail hard, which is the old
+        // bug that could leave the PWA blank.
+        return Response.error();
+      }
+    })()
   );
 });
 

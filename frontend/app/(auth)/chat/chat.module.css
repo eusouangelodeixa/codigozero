@@ -473,3 +473,223 @@
   .inputBar { padding: var(--space-3) var(--space-4); }
   .message { max-width: 88%; }
 }
+
+/* ─────────────────────────────────────────────────────────
+   Rich chat: pins, mentions, image, audio, polls, composer+
+   ───────────────────────────────────────────────────────── */
+
+/* ── Pinned banner ── */
+.pinnedBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--space-5);
+  background: var(--accent-dim);
+  border-bottom: 1px solid var(--accent-border);
+  flex-shrink: 0;
+}
+.pinnedIcon { color: var(--accent); display: inline-flex; flex-shrink: 0; }
+.pinnedBody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.pinnedLabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+.pinnedText { font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pinnedUnpin {
+  flex-shrink: 0; width: 24px; height: 24px; border: none; cursor: pointer;
+  background: transparent; color: var(--text-tertiary); border-radius: var(--radius-full); font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pinnedUnpin:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+
+/* "Fixado" chip inside a bubble + a subtle ring on the pinned bubble */
+.pinnedTag {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--accent); padding: 1px 6px; border-radius: var(--radius-full);
+  background: var(--accent-dim); border: 1px solid var(--accent-border);
+}
+.bubblePinned { box-shadow: 0 0 0 1px var(--accent-border) inset; }
+
+/* ── @mention highlight ── */
+.mentionTag { color: var(--accent); font-weight: 700; }
+
+/* ── Image message ── */
+.msgImage {
+  display: block;
+  max-width: min(260px, 100%);
+  max-height: 320px;
+  width: auto;
+  border-radius: 12px;
+  margin: 2px 0;
+  cursor: zoom-in;
+  object-fit: cover;
+}
+
+/* ── Audio message ── */
+.audioWrap { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.audioEl { height: 38px; max-width: 240px; width: 240px; }
+.audioDuration { font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+@media (max-width: 540px) { .audioEl { width: 200px; max-width: 200px; } }
+
+/* ── Poll ── */
+.pollCard { display: flex; flex-direction: column; gap: 8px; min-width: 240px; margin: 2px 0; }
+.pollQuestion { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.4; }
+.pollOptions { display: flex; flex-direction: column; gap: 6px; }
+.pollOption {
+  position: relative; display: flex; align-items: center; gap: 8px; width: 100%;
+  text-align: left; padding: 9px 12px; border: 1px solid var(--border-default);
+  border-radius: 10px; background: var(--bg-base); cursor: pointer; overflow: hidden;
+  transition: border-color var(--motion-fast);
+}
+.pollOption:hover:not(:disabled) { border-color: var(--border-strong); }
+.pollOption:disabled { cursor: default; }
+.pollBar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-dim); z-index: 0; transition: width 320ms var(--ease-out); }
+.pollOptionLabel { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.pollRadio {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border-strong);
+  display: inline-flex; align-items: center; justify-content: center; color: var(--accent-fg); flex-shrink: 0;
+}
+.pollRadioOn { background: var(--accent); border-color: var(--accent); }
+.pollOptionText { font-size: 13.5px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pollOptionChosen { border-color: var(--accent-border); }
+.pollPct { position: relative; z-index: 1; font-size: 12px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.pollMeta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-tertiary); flex-wrap: wrap; }
+
+/* ── Pin duration chips inside the action bar ── */
+.pinDur {
+  border: none; background: var(--bg-glass); color: var(--text-secondary); cursor: pointer;
+  font-size: 11px; font-weight: 600; padding: 5px 9px; border-radius: var(--radius-full);
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.pinDur:hover { background: var(--accent-dim); color: var(--accent); }
+.actionBtnActive { color: var(--accent); }
+
+/* ── Composer: attach button + menu ── */
+.attachWrap { position: relative; flex-shrink: 0; }
+.attachBtn {
+  width: 40px; height: 40px; border-radius: var(--radius-full);
+  background: var(--bg-elevated); border: 1px solid var(--border-default);
+  color: var(--text-secondary); font-size: 22px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+.attachBtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.attachBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.attachMenu {
+  position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 20;
+  display: flex; flex-direction: column; min-width: 168px; padding: 6px;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); box-shadow: var(--elevation-2);
+  animation: slideUp 140ms var(--ease-out);
+}
+.attachItem {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: none;
+  background: transparent; color: var(--text-primary); font-size: 13.5px; cursor: pointer;
+  border-radius: var(--radius-sm); text-align: left; font-family: inherit;
+}
+.attachItem:hover { background: var(--bg-glass-hover); }
+.attachItem svg { color: var(--accent); }
+
+/* ── Audio recording bar ── */
+.recordBar { display: flex; align-items: center; gap: 12px; padding: var(--space-3) var(--space-5); }
+.recordDot { width: 11px; height: 11px; border-radius: 50%; background: var(--color-error, #ef4444); animation: recPulse 1s ease-in-out infinite; flex-shrink: 0; }
+.recordTime { font-size: 14px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.recordHint { flex: 1; font-size: 13px; color: var(--text-tertiary); }
+.recordCancel { border: none; background: transparent; color: var(--text-secondary); font-size: 13px; cursor: pointer; padding: 6px 10px; border-radius: var(--radius-full); }
+.recordCancel:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+.recordStop {
+  width: 40px; height: 40px; border-radius: var(--radius-full); background: var(--accent); color: var(--accent-fg);
+  border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.recordStop:hover { background: rgba(45,212,191,0.88); }
+@keyframes recPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ── @mention autocomplete ── */
+.mentionBox {
+  display: flex; flex-direction: column; max-height: 220px; overflow-y: auto;
+  margin: 8px var(--space-5) 0; padding: 5px;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); box-shadow: var(--elevation-2);
+}
+.mentionItem {
+  display: flex; align-items: center; gap: 10px; padding: 7px 9px; border: none;
+  background: transparent; cursor: pointer; border-radius: var(--radius-sm); text-align: left; width: 100%; font-family: inherit;
+}
+.mentionItem:hover { background: var(--bg-glass-hover); }
+.mentionAvatar {
+  width: 28px; height: 28px; border-radius: var(--radius-full); flex-shrink: 0; overflow: hidden;
+  background: rgba(255,255,255,0.06); color: var(--text-secondary);
+  font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.mentionAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.mentionAll { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+.mentionName { font-size: 13.5px; color: var(--text-primary); font-weight: 500; }
+.mentionHint { font-size: 11px; color: var(--text-tertiary); font-weight: 400; }
+
+/* ── Poll modal ── */
+.modalOverlay {
+  position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center; padding: var(--space-4);
+  animation: fadeIn 120ms var(--ease-out);
+}
+.modal {
+  width: 100%; max-width: 420px; max-height: 88vh; overflow-y: auto;
+  background: var(--bg-surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--elevation-3, var(--elevation-2));
+  display: flex; flex-direction: column; gap: 12px;
+}
+.modalTitle { font-size: var(--type-h3); font-weight: 700; color: var(--text-primary); }
+.modalInput {
+  width: 100%; padding: 10px 12px; border-radius: var(--radius-md);
+  background: var(--bg-elevated); border: 1px solid var(--border-default);
+  color: var(--text-primary); font-size: 14px; font-family: inherit; outline: none;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+.modalInput:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+.modalOptions { display: flex; flex-direction: column; gap: 8px; }
+.modalOptionRow { display: flex; align-items: center; gap: 8px; }
+.modalRemoveOpt {
+  flex-shrink: 0; width: 32px; height: 32px; border: none; cursor: pointer;
+  background: var(--bg-glass); color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 13px;
+}
+.modalRemoveOpt:hover { background: rgba(239,68,68,0.12); color: var(--color-error, #ef4444); }
+.modalAddOpt {
+  align-self: flex-start; border: 1px dashed var(--border-strong); background: transparent;
+  color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 7px 12px; border-radius: var(--radius-md);
+}
+.modalAddOpt:hover { background: var(--accent-dim); }
+.modalCheckRow { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text-secondary); cursor: pointer; }
+.modalCheckRow input { width: 16px; height: 16px; accent-color: var(--accent); }
+.modalField { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.modalFieldLabel { font-size: 13.5px; color: var(--text-secondary); }
+.modalSelect {
+  padding: 8px 10px; border-radius: var(--radius-md); background: var(--bg-elevated);
+  border: 1px solid var(--border-default); color: var(--text-primary); font-size: 13.5px; font-family: inherit; cursor: pointer; outline: none;
+}
+.modalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.btnGhost {
+  border: 1px solid var(--border-default); background: transparent; color: var(--text-secondary);
+  font-size: 13.5px; font-weight: 600; cursor: pointer; padding: 9px 16px; border-radius: var(--radius-full); font-family: inherit;
+}
+.btnGhost:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+.btnPrimary {
+  border: none; background: var(--accent); color: var(--accent-fg);
+  font-size: 13.5px; font-weight: 700; cursor: pointer; padding: 9px 18px; border-radius: var(--radius-full); font-family: inherit;
+  transition: background var(--motion-fast), opacity var(--motion-fast);
+}
+.btnPrimary:hover:not(:disabled) { background: rgba(45,212,191,0.88); }
+.btnPrimary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Lightbox ── */
+.lightbox {
+  position: fixed; inset: 0; z-index: 120; background: rgba(0,0,0,0.88);
+  display: flex; align-items: center; justify-content: center; padding: var(--space-4);
+  animation: fadeIn 120ms var(--ease-out); cursor: zoom-out;
+}
+.lightboxImg { max-width: 96vw; max-height: 92vh; border-radius: var(--radius-md); object-fit: contain; }
+.lightboxClose {
+  position: absolute; top: 16px; right: 16px; width: 40px; height: 40px; border-radius: var(--radius-full);
+  background: rgba(255,255,255,0.12); color: #fff; border: none; cursor: pointer; font-size: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.lightboxClose:hover { background: rgba(255,255,255,0.22); }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

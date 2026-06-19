@@ -6,21 +6,28 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
 // avatarUrl is relative to the API host; resolve it there (the admin origin 404s → broken "?").
 const avatarSrc = (u?: string) => (u ? (u.startsWith("http") ? u : `${API}${u}`) : "");
+const mediaSrc = (u?: string | null) => (u ? (u.startsWith("http") ? u : `${API}${u}`) : "");
 const hideOnError = (e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = "none"; };
 
 interface Conversation {
   channel: string;
   userId: string;
   user: { id: string; name: string; email: string; subscriptionStatus: string; avatarUrl?: string } | null;
-  lastMessage: { content: string; createdAt: string; sender: { name: string; role: string } } | null;
+  lastMessage: { content: string; type?: string; createdAt: string; sender: { name: string; role: string } } | null;
   unreadCount: number;
   totalMessages: number;
 }
 
+interface AdminPollOption { id: string; text: string; count: number; }
+interface AdminPoll { id: string; question: string; totalVoters: number; options: AdminPollOption[] }
 interface Message {
   id: string;
   content: string;
   createdAt: string;
+  type?: "text" | "image" | "audio" | "poll";
+  mediaUrl?: string | null;
+  mediaDurationSec?: number | null;
+  poll?: AdminPoll | null;
   sender: { id: string; name: string; role: string; avatarUrl?: string };
 }
 
@@ -260,7 +267,7 @@ export default function AdminChatPage() {
                       </div>
                       <div style={{ fontSize: "12px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {convo.lastMessage
-                          ? `${convo.lastMessage.sender.role === "admin" ? "Você: " : ""}${convo.lastMessage.content}`
+                          ? `${convo.lastMessage.sender.role === "admin" ? "Você: " : ""}${convo.lastMessage.content || (convo.lastMessage.type === "image" ? "📷 Imagem" : convo.lastMessage.type === "audio" ? "🎤 Áudio" : convo.lastMessage.type === "poll" ? "📊 Enquete" : "")}`
                           : "Sem mensagens"}
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
@@ -387,9 +394,34 @@ export default function AdminChatPage() {
                             )}
                           </div>
                         )}
-                        <p style={{ fontSize: "13px", color: "#ddd", margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                          {msg.content}
-                        </p>
+                        {msg.type === "image" && msg.mediaUrl ? (
+                          <img src={mediaSrc(msg.mediaUrl)} alt={msg.content || "imagem"} onClick={() => window.open(mediaSrc(msg.mediaUrl), "_blank")} style={{ maxWidth: "220px", maxHeight: "260px", borderRadius: "10px", display: "block", cursor: "pointer" }} />
+                        ) : msg.type === "audio" && msg.mediaUrl ? (
+                          <audio controls preload="none" src={mediaSrc(msg.mediaUrl)} style={{ height: "36px", maxWidth: "220px" }} />
+                        ) : msg.type === "poll" && msg.poll ? (
+                          <div style={{ minWidth: "200px" }}>
+                            <p style={{ fontSize: "13px", fontWeight: 700, color: "#fff", margin: "0 0 6px" }}>📊 {msg.poll.question}</p>
+                            {(() => {
+                              const total = msg.poll.options.reduce((s, o) => s + o.count, 0);
+                              return msg.poll.options.map((o) => {
+                                const pct = total > 0 ? Math.round((o.count / total) * 100) : 0;
+                                return (
+                                  <div key={o.id} style={{ position: "relative", padding: "5px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "4px", overflow: "hidden" }}>
+                                    <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: "rgba(45,212,191,0.12)" }} />
+                                    <span style={{ position: "relative", fontSize: "12px", color: "#ddd", display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                                      <span>{o.text}</span><span style={{ fontWeight: 700 }}>{pct}%</span>
+                                    </span>
+                                  </div>
+                                );
+                              });
+                            })()}
+                            <span style={{ fontSize: "10px", color: "#666" }}>{msg.poll.totalVoters} voto(s)</span>
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: "13px", color: "#ddd", margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                            {msg.content}
+                          </p>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px", gap: "8px" }}>
                           <span style={{ fontSize: "10px", color: "#555" }}>{formatTime(msg.createdAt)}</span>
                           <button

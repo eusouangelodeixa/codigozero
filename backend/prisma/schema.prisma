@@ -114,8 +114,11 @@ model User {
 
   leads              Lead[]
   lessonProgress     LessonProgress[]
-  chatMessages       ChatMessage[]
+  chatMessages       ChatMessage[]      @relation("ChatSender")
   messageReactions   MessageReaction[]
+  pinnedMessages     ChatMessage[]      @relation("ChatPinnedBy")
+  chatMentions       ChatMention[]
+  pollVotes          PollVote[]
   dispatchLogs       DispatchLog[]
   pushSubscriptions  PushSubscription[]
   scheduledDispatches ScheduledDispatch[]
@@ -357,9 +360,29 @@ model ScrapedLead {
 model ChatMessage {
   id        String    @id @default(uuid())
   senderId  String
-  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender    User      @relation("ChatSender", fields: [senderId], references: [id], onDelete: Cascade)
   channel   String    // "community" or "support_{userId}"
-  content   String
+
+  // Message kind: "text" (default; also covers mention-only text), "image",
+  // "audio", "poll". Existing rows backfill to "text" via the column default.
+  type      String    @default("text")
+  content   String    // text body, or caption for media (may be empty for media/poll)
+
+  // Media (type=image|audio): stored under /uploads/chat/* and served statically.
+  mediaUrl         String?
+  mediaMime        String?
+  mediaDurationSec Int?     // audio length in seconds (for the player)
+
+  // @todos — notifies the whole community. Admin-only (enforced in the route).
+  mentionsAll Boolean @default(false)
+
+  // Pin (admin-only). A message is "currently pinned" when pinnedUntil is in the
+  // future; it auto-unpins once that passes (filtered at read time).
+  pinnedUntil DateTime?
+  pinnedAt    DateTime?
+  pinnedById  String?
+  pinnedBy    User?     @relation("ChatPinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
@@ -370,10 +393,13 @@ model ChatMessage {
   replies   ChatMessage[] @relation("ChatReply")
 
   reactions MessageReaction[]
+  mentions  ChatMention[]
+  poll      Poll?
 
   @@index([channel, createdAt])
   @@index([senderId])
   @@index([replyToId])
+  @@index([channel, pinnedUntil])
 }
 
 // One emoji reaction by one user on one message. Unique per (message,user,emoji)
@@ -389,6 +415,65 @@ model MessageReaction {
 
   @@unique([messageId, userId, emoji])
   @@index([messageId])
+}
+
+// A user mentioned (@membro) in a chat message. Drives the in-bubble highlight
+// plus a targeted push. @todos is stored as mentionsAll on ChatMessage instead
+// (admin-only), so it doesn't create a row per member.
+model ChatMention {
+  id        String      @id @default(uuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([messageId])
+}
+
+// A poll attached 1:1 to a ChatMessage (type="poll"). Options + votes hang off
+// it. Single-choice by default; allowMultiple lets a user pick several options.
+model Poll {
+  id            String       @id @default(uuid())
+  messageId     String       @unique
+  message       ChatMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  question      String
+  allowMultiple Boolean      @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+
+  options       PollOption[]
+  votes         PollVote[]
+}
+
+model PollOption {
+  id     String     @id @default(uuid())
+  pollId String
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text   String
+  order  Int        @default(0)
+  votes  PollVote[]
+
+  @@index([pollId])
+}
+
+model PollVote {
+  id        String     @id @default(uuid())
+  pollId    String
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  // One row per (option,user). Single-choice polls clear a user's prior votes
+  // in the route before inserting; multi-select keeps several rows.
+  @@unique([optionId, userId])
+  @@index([pollId, userId])
+  @@index([optionId])
 }
 
 model DispatchLog {

@@ -1,5 +1,8 @@
 import { Router, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 import { sendPushToUser, sendPushToUsers } from './auth.routes';
@@ -15,47 +18,166 @@ const SENDER_SELECT = {
   id: true, name: true, role: true, avatarUrl: true,
 };
 
-// Shared shape for every message we return: the sender, the quoted message it
-// replies to (id + content + sender name), and its reactions (emoji + who).
-// `satisfies` keeps the literal type so Prisma infers `reactions`/`replyTo`.
+// Everything we return for a message: sender, the quoted reply (id+content+type
+// +sender name), reactions, @mentions (with names), the pinner, and the poll
+// (options + raw votes — folded into counts by `serialize`).
 const MESSAGE_INCLUDE = {
   sender: { select: SENDER_SELECT },
-  replyTo: { select: { id: true, content: true, sender: { select: { id: true, name: true } } } },
+  replyTo: { select: { id: true, content: true, type: true, sender: { select: { id: true, name: true } } } },
   reactions: { select: { emoji: true, userId: true } },
+  mentions: { select: { userId: true, user: { select: { id: true, name: true } } } },
+  pinnedBy: { select: { id: true, name: true } },
+  poll: {
+    include: {
+      options: { orderBy: { order: 'asc' }, select: { id: true, text: true, order: true } },
+      votes: { select: { optionId: true, userId: true } },
+    },
+  },
 } satisfies Prisma.ChatMessageInclude;
 
-// Both 'admin' and 'superadmin' act as the support agent. Checking only
-// 'admin' silently broke support for superadmin owners: GET/POST /support
-// fell back to the superadmin's own id (so the member's conversation looked
-// empty and replies went nowhere) and new-message pushes skipped them.
+type FullMessage = Prisma.ChatMessageGetPayload<{ include: typeof MESSAGE_INCLUDE }>;
+
+// Both 'admin' and 'superadmin' act as the support agent / moderator.
 const isAdminRole = (role?: string) => role === 'admin' || role === 'superadmin';
+
+// Pin durations the UI offers, mapped to hours.
+const PIN_DURATIONS: Record<string, number> = { '1h': 1, '1d': 24, '7d': 168, '30d': 720 };
+
+// Reshape a DB message for the client: fold poll votes into per-option counts +
+// the viewer's own choices, and flatten mentions to {userId,name}. The raw
+// `votes` array (which leaks every voter) never reaches the wire.
+function serialize(m: FullMessage, viewerId: string) {
+  let poll:
+    | null
+    | {
+        id: string; question: string; allowMultiple: boolean; expiresAt: Date | null;
+        totalVoters: number; options: { id: string; text: string; order: number; count: number }[]; myVotes: string[];
+      } = null;
+
+  if (m.poll) {
+    const counts: Record<string, number> = {};
+    const myVotes: string[] = [];
+    const voters = new Set<string>();
+    for (const v of m.poll.votes) {
+      counts[v.optionId] = (counts[v.optionId] || 0) + 1;
+      voters.add(v.userId);
+      if (v.userId === viewerId) myVotes.push(v.optionId);
+    }
+    poll = {
+      id: m.poll.id,
+      question: m.poll.question,
+      allowMultiple: m.poll.allowMultiple,
+      expiresAt: m.poll.expiresAt,
+      totalVoters: voters.size,
+      options: m.poll.options.map((o) => ({ id: o.id, text: o.text, order: o.order, count: counts[o.id] || 0 })),
+      myVotes,
+    };
+  }
+
+  const { poll: _poll, mentions, ...rest } = m;
+  return {
+    ...rest,
+    mentions: (mentions || []).map((x) => ({ userId: x.userId, name: x.user?.name || '' })),
+    poll,
+  };
+}
+
+// ═══════════════════════════════════════
+// MEDIA UPLOAD (images + audio)
+// ═══════════════════════════════════════
+
+// Stored on disk under uploads/chat and served by the /uploads static mount in
+// server.ts — same pattern as avatars. The SW skips /uploads so media is always
+// fetched fresh.
+const chatMediaDir = path.join(__dirname, '..', '..', 'uploads', 'chat');
+fs.mkdirSync(chatMediaDir, { recursive: true });
+
+const chatUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, chatMediaDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || (file.mimetype.startsWith('audio/') ? '.webm' : '');
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB — covers photos + a few minutes of audio
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) cb(null, true);
+    else cb(new Error('Apenas imagens ou áudio são permitidos'));
+  },
+});
+
+/**
+ * POST /api/chat/upload  (multipart, field "file")
+ * Uploads an image or audio clip, returns the URL to attach to a message.
+ */
+router.post('/upload', (req: AuthRequest, res: Response) => {
+  chatUpload.single('file')(req, res, (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || 'Falha no upload' });
+    if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
+    const isAudio = req.file.mimetype.startsWith('audio/');
+    res.json({
+      url: `/uploads/chat/${req.file.filename}`,
+      mime: req.file.mimetype,
+      type: isAudio ? 'audio' : 'image',
+    });
+  });
+});
+
+// ═══════════════════════════════════════
+// MEMBERS (for @mention autocomplete)
+// ═══════════════════════════════════════
+
+/**
+ * GET /api/chat/members?q=  — active members for the @mention picker.
+ */
+router.get('/members', async (req: AuthRequest, res: Response) => {
+  try {
+    const q = ((req.query.q as string) || '').trim();
+    const where: Prisma.UserWhereInput = { isActive: true };
+    if (q) where.name = { contains: q, mode: 'insensitive' };
+    const members = await prisma.user.findMany({
+      where,
+      select: { id: true, name: true, avatarUrl: true, role: true },
+      orderBy: { name: 'asc' },
+      take: 20,
+    });
+    res.json({ members });
+  } catch (error) {
+    console.error('[CHAT] members error:', error);
+    res.status(500).json({ error: 'Erro ao buscar membros' });
+  }
+});
 
 // ═══════════════════════════════════════
 // COMMUNITY CHAT
 // ═══════════════════════════════════════
 
 /**
- * GET /api/chat/community
- * Fetch community messages (latest, paginated)
+ * GET /api/chat/community  — latest messages (paginated) + the active pins.
  */
 router.get('/community', async (req: AuthRequest, res: Response) => {
   try {
     const before = req.query.before as string;
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-    const where: any = { channel: 'community' };
-    if (before) {
-      where.createdAt = { lt: new Date(before) };
-    }
+    const where: Prisma.ChatMessageWhereInput = { channel: 'community' };
+    if (before) where.createdAt = { lt: new Date(before) };
 
-    const messages = await prisma.chatMessage.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      include: MESSAGE_INCLUDE,
+    const [messages, pinned] = await Promise.all([
+      prisma.chatMessage.findMany({ where, orderBy: { createdAt: 'desc' }, take: limit, include: MESSAGE_INCLUDE }),
+      prisma.chatMessage.findMany({
+        where: { channel: 'community', pinnedUntil: { gt: new Date() } },
+        orderBy: { pinnedAt: 'desc' },
+        take: 5,
+        include: MESSAGE_INCLUDE,
+      }),
+    ]);
+
+    res.json({
+      messages: messages.reverse().map((m) => serialize(m, req.user!.id)),
+      pinned: pinned.map((m) => serialize(m, req.user!.id)),
     });
-
-    res.json({ messages: messages.reverse() });
   } catch (error) {
     console.error('[CHAT] Community fetch error:', error);
     res.status(500).json({ error: 'Erro ao carregar mensagens' });
@@ -64,55 +186,209 @@ router.get('/community', async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/chat/community
- * Send a message to community chat
+ * Body: { content?, replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec?,
+ *         mentionUserIds?: string[], mentionsAll?: boolean,
+ *         poll?: { question, options[], allowMultiple?, expiresHours? } }
  */
 router.post('/community', async (req: AuthRequest, res: Response) => {
   try {
-    const { content, replyToId } = req.body;
-    if (!content || !content.trim()) {
-      return res.status(400).json({ error: 'Mensagem vazia' });
+    const b = req.body || {};
+    const type: 'text' | 'image' | 'audio' | 'poll' =
+      ['image', 'audio', 'poll'].includes(b.type) ? b.type : 'text';
+    const isAdmin = isAdminRole(req.user!.role);
+
+    let content = typeof b.content === 'string' ? b.content.trim() : '';
+    if (content.length > 2000) return res.status(400).json({ error: 'Mensagem muito longa (máx 2000 caracteres)' });
+
+    let mediaUrl: string | null = null;
+    let mediaMime: string | null = null;
+    let mediaDurationSec: number | null = null;
+    let pollData: { question: string; options: string[]; allowMultiple: boolean; expiresAt: Date | null } | null = null;
+
+    if (type === 'image' || type === 'audio') {
+      if (typeof b.mediaUrl !== 'string' || !b.mediaUrl.startsWith('/uploads/chat/')) {
+        return res.status(400).json({ error: 'Mídia inválida' });
+      }
+      mediaUrl = b.mediaUrl;
+      mediaMime = typeof b.mediaMime === 'string' ? b.mediaMime.slice(0, 100) : null;
+      if (type === 'audio' && Number.isFinite(Number(b.mediaDurationSec))) {
+        mediaDurationSec = Math.min(Math.max(Math.round(Number(b.mediaDurationSec)), 0), 3600);
+      }
+    } else if (type === 'poll') {
+      const q = typeof b.poll?.question === 'string' ? b.poll.question.trim() : '';
+      const opts = Array.isArray(b.poll?.options)
+        ? b.poll.options.map((o: any) => String(o ?? '').trim()).filter(Boolean)
+        : [];
+      if (!q || opts.length < 2) return res.status(400).json({ error: 'Enquete precisa de pergunta e ao menos 2 opções' });
+      if (opts.length > 12) return res.status(400).json({ error: 'Máximo de 12 opções' });
+      const hours = Number(b.poll?.expiresHours);
+      pollData = {
+        question: q.slice(0, 300),
+        options: opts.slice(0, 12).map((o: string) => o.slice(0, 120)),
+        allowMultiple: !!b.poll?.allowMultiple,
+        expiresAt: hours && hours > 0 ? new Date(Date.now() + hours * 3600_000) : null,
+      };
+      content = pollData.question; // graceful fallback for non-poll-aware viewers
+    } else {
+      if (!content) return res.status(400).json({ error: 'Mensagem vazia' });
     }
-    if (content.length > 2000) {
-      return res.status(400).json({ error: 'Mensagem muito longa (máx 2000 caracteres)' });
+
+    // @mentions — validate against real active users; @todos is admin-only.
+    const rawIds: string[] = Array.isArray(b.mentionUserIds)
+      ? b.mentionUserIds.filter((x: any) => typeof x === 'string').slice(0, 50)
+      : [];
+    const mentionsAll = !!b.mentionsAll && isAdmin;
+    let mentionIds: string[] = [];
+    if (rawIds.length) {
+      const found = await prisma.user.findMany({ where: { id: { in: rawIds }, isActive: true }, select: { id: true } });
+      mentionIds = found.map((u) => u.id).filter((id) => id !== req.user!.id);
     }
 
     // Only accept a reply to a message in the same channel.
     let validReplyId: string | null = null;
-    if (replyToId) {
-      const parent = await prisma.chatMessage.findUnique({ where: { id: String(replyToId) }, select: { channel: true } });
-      if (parent && parent.channel === 'community') validReplyId = String(replyToId);
+    if (b.replyToId) {
+      const parent = await prisma.chatMessage.findUnique({ where: { id: String(b.replyToId) }, select: { channel: true } });
+      if (parent && parent.channel === 'community') validReplyId = String(b.replyToId);
     }
 
-    const message = await prisma.chatMessage.create({
+    const created = await prisma.chatMessage.create({
       data: {
         senderId: req.user!.id,
         channel: 'community',
-        content: content.trim(),
+        type,
+        content,
+        mediaUrl,
+        mediaMime,
+        mediaDurationSec,
+        mentionsAll,
         replyToId: validReplyId,
+        ...(mentionIds.length ? { mentions: { create: mentionIds.map((userId) => ({ userId })) } } : {}),
+        ...(pollData
+          ? {
+              poll: {
+                create: {
+                  question: pollData.question,
+                  allowMultiple: pollData.allowMultiple,
+                  expiresAt: pollData.expiresAt,
+                  options: { create: pollData.options.map((text, i) => ({ text, order: i })) },
+                },
+              },
+            }
+          : {}),
       },
       include: MESSAGE_INCLUDE,
     });
 
-    res.json({ message });
+    res.json({ message: serialize(created, req.user!.id) });
 
-    // Push notification to all other active users (fire-and-forget, batched in one query)
-    const allUsers = await prisma.user.findMany({
-      where: { id: { not: req.user!.id }, isActive: true },
-      select: { id: true },
-    });
-    const senderName = message.sender?.name || 'Alguém';
-    sendPushToUsers(
-      allUsers.map((u) => u.id),
-      {
-        title: `💬 ${senderName} na Comunidade`,
-        body: content.trim().substring(0, 140),
-        url: '/chat',
-      },
-      'community',
-    ).catch((e) => console.error('[CHAT] community push error:', e));
+    // ── Push (fire-and-forget). Mentioned users get a distinct, higher-signal
+    // notification; everyone else gets the normal community ping. @todos pings
+    // the whole community with a dedicated title. ──
+    const senderName = created.sender?.name || 'Alguém';
+    const preview = (content || (type === 'image' ? '📷 Imagem' : type === 'audio' ? '🎤 Áudio' : 'Mensagem')).substring(0, 140);
+    (async () => {
+      const others = await prisma.user.findMany({ where: { id: { not: req.user!.id }, isActive: true }, select: { id: true } });
+      const otherIds = others.map((u) => u.id);
+      if (mentionsAll) {
+        await sendPushToUsers(otherIds, { title: `📣 ${senderName} marcou @todos`, body: preview, url: '/chat' }, 'community');
+      } else if (mentionIds.length) {
+        const mentionSet = new Set(mentionIds);
+        await sendPushToUsers(mentionIds, { title: `💬 ${senderName} mencionou você`, body: preview, url: '/chat' }, 'community');
+        await sendPushToUsers(otherIds.filter((id) => !mentionSet.has(id)), { title: `💬 ${senderName} na Comunidade`, body: preview, url: '/chat' }, 'community');
+      } else {
+        await sendPushToUsers(otherIds, { title: `💬 ${senderName} na Comunidade`, body: preview, url: '/chat' }, 'community');
+      }
+    })().catch((e) => console.error('[CHAT] community push error:', e));
   } catch (error) {
     console.error('[CHAT] Community send error:', error);
     res.status(500).json({ error: 'Erro ao enviar mensagem' });
+  }
+});
+
+// ═══════════════════════════════════════
+// PIN / UNPIN  (admin only, community only)
+// ═══════════════════════════════════════
+
+/**
+ * POST /api/chat/messages/:id/pin  { duration: "1h" | "1d" | "7d" | "30d" }
+ */
+router.post('/messages/:id/pin', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Apenas administradores podem fixar mensagens' });
+    const hours = PIN_DURATIONS[String(req.body?.duration || '')];
+    if (!hours) return res.status(400).json({ error: 'Duração inválida (use 1h, 1d, 7d ou 30d)' });
+
+    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true, channel: true } });
+    if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+    if (msg.channel !== 'community') return res.status(400).json({ error: 'Só é possível fixar na Comunidade' });
+
+    const updated = await prisma.chatMessage.update({
+      where: { id: msg.id },
+      data: { pinnedUntil: new Date(Date.now() + hours * 3600_000), pinnedAt: new Date(), pinnedById: req.user!.id },
+      include: MESSAGE_INCLUDE,
+    });
+    res.json({ message: serialize(updated, req.user!.id) });
+  } catch (error) {
+    console.error('[CHAT] Pin error:', error);
+    res.status(500).json({ error: 'Erro ao fixar mensagem' });
+  }
+});
+
+/**
+ * DELETE /api/chat/messages/:id/pin  — unpin (admin only).
+ */
+router.delete('/messages/:id/pin', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Apenas administradores podem desafixar' });
+    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+    await prisma.chatMessage.update({ where: { id: msg.id }, data: { pinnedUntil: null, pinnedAt: null, pinnedById: null } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[CHAT] Unpin error:', error);
+    res.status(500).json({ error: 'Erro ao desafixar mensagem' });
+  }
+});
+
+// ═══════════════════════════════════════
+// POLLS — voting
+// ═══════════════════════════════════════
+
+/**
+ * POST /api/chat/polls/:id/vote  { optionIds: string[] }
+ * Single-choice polls keep one vote (prior votes are replaced); multi-select
+ * keeps the full set. An empty array clears the viewer's vote.
+ */
+router.post('/polls/:id/vote', async (req: AuthRequest, res: Response) => {
+  try {
+    const poll = await prisma.poll.findUnique({
+      where: { id: req.params.id },
+      include: { options: { select: { id: true } } },
+    });
+    if (!poll) return res.status(404).json({ error: 'Enquete não encontrada' });
+    if (poll.expiresAt && poll.expiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Esta enquete já encerrou' });
+    }
+
+    const optionIds: string[] = Array.isArray(req.body?.optionIds)
+      ? req.body.optionIds.filter((x: any) => typeof x === 'string')
+      : [];
+    const valid = new Set(poll.options.map((o) => o.id));
+    const chosen = [...new Set(optionIds)].filter((id) => valid.has(id));
+    const finalChosen = poll.allowMultiple ? chosen : chosen.slice(0, 1);
+
+    await prisma.$transaction([
+      prisma.pollVote.deleteMany({ where: { pollId: poll.id, userId: req.user!.id } }),
+      ...(finalChosen.length
+        ? [prisma.pollVote.createMany({ data: finalChosen.map((optionId) => ({ pollId: poll.id, optionId, userId: req.user!.id })) })]
+        : []),
+    ]);
+
+    const msg = await prisma.chatMessage.findFirst({ where: { poll: { id: poll.id } }, include: MESSAGE_INCLUDE });
+    res.json({ message: msg ? serialize(msg, req.user!.id) : null });
+  } catch (error) {
+    console.error('[CHAT] Vote error:', error);
+    res.status(500).json({ error: 'Erro ao votar' });
   }
 });
 
@@ -122,8 +398,8 @@ router.post('/community', async (req: AuthRequest, res: Response) => {
 
 /**
  * DELETE /api/chat/messages/:id
- * Users can delete own messages within 15 minutes.
- * Admins can delete any message at any time.
+ * Owner can delete within 15 minutes; admins can delete any message anytime.
+ * Cascades to poll/options/votes/mentions/reactions via FK onDelete.
  */
 router.delete('/messages/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -131,19 +407,16 @@ router.delete('/messages/:id', async (req: AuthRequest, res: Response) => {
     if (!message) return res.status(404).json({ error: 'Mensagem não encontrada' });
 
     const role = req.user!.role;
-    const isAdmin = role === 'admin' || role === 'superadmin';
+    const isAdmin = isAdminRole(role);
     const isOwner = message.senderId === req.user!.id;
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({ error: 'Sem permissão para deletar esta mensagem' });
     }
 
-    // Owners (non-admin) only have a 15-minute window. Admins/superadmins
-    // can delete any message at any time.
     if (isOwner && !isAdmin) {
       const ageMs = Date.now() - new Date(message.createdAt).getTime();
-      const fifteenMin = 15 * 60 * 1000;
-      if (ageMs > fifteenMin) {
+      if (ageMs > 15 * 60 * 1000) {
         return res.status(403).json({ error: 'O prazo de 15 minutos para deletar já expirou' });
       }
     }
@@ -161,8 +434,7 @@ router.delete('/messages/:id', async (req: AuthRequest, res: Response) => {
 // ═══════════════════════════════════════
 
 /**
- * POST /api/chat/messages/:id/react  { emoji }
- * Toggle one emoji reaction for the current user on a message.
+ * POST /api/chat/messages/:id/react  { emoji }  — toggle a reaction.
  */
 router.post('/messages/:id/react', async (req: AuthRequest, res: Response) => {
   try {
@@ -184,9 +456,7 @@ router.post('/messages/:id/react', async (req: AuthRequest, res: Response) => {
       return res.json({ toggled: 'off', emoji });
     }
 
-    await prisma.messageReaction.create({
-      data: { messageId: msg.id, userId: req.user!.id, emoji },
-    });
+    await prisma.messageReaction.create({ data: { messageId: msg.id, userId: req.user!.id, emoji } });
     return res.json({ toggled: 'on', emoji });
   } catch (error) {
     console.error('[CHAT] React error:', error);
@@ -195,31 +465,25 @@ router.post('/messages/:id/react', async (req: AuthRequest, res: Response) => {
 });
 
 // ═══════════════════════════════════════
-// SUPPORT CHAT (1:1 with Admin)
+// SUPPORT CHAT (1:1 with Admin) — text + image/audio
 // ═══════════════════════════════════════
 
 /**
  * GET /api/chat/support
- * For members: fetch their support conversation
- * For admins: fetch a specific user's conversation via ?userId=xxx
+ * Members: their own conversation. Admins: a user's conversation via ?userId=.
  */
 router.get('/support', async (req: AuthRequest, res: Response) => {
   try {
     const isAdmin = isAdminRole(req.user!.role);
     const targetUserId = isAdmin ? (req.query.userId as string) : req.user!.id;
-
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'userId obrigatório para admin' });
-    }
+    if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
 
     const channel = `support_${targetUserId}`;
     const before = req.query.before as string;
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-    const where: any = { channel };
-    if (before) {
-      where.createdAt = { lt: new Date(before) };
-    }
+    const where: Prisma.ChatMessageWhereInput = { channel };
+    if (before) where.createdAt = { lt: new Date(before) };
 
     const messages = await prisma.chatMessage.findMany({
       where,
@@ -228,19 +492,14 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
       include: MESSAGE_INCLUDE,
     });
 
-    // Mark unread messages as read for the viewer
     if (messages.length > 0) {
       await prisma.chatMessage.updateMany({
-        where: {
-          channel,
-          senderId: { not: req.user!.id },
-          readAt: null,
-        },
+        where: { channel, senderId: { not: req.user!.id }, readAt: null },
         data: { readAt: new Date() },
       });
     }
 
-    res.json({ messages: messages.reverse(), channel });
+    res.json({ messages: messages.reverse().map((m) => serialize(m, req.user!.id)), channel });
   } catch (error) {
     console.error('[CHAT] Support fetch error:', error);
     res.status(500).json({ error: 'Erro ao carregar mensagens de suporte' });
@@ -249,59 +508,68 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/chat/support
- * Send a support message
+ * Body: { content?, userId?(admin), replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec? }
+ * Support allows text + image + audio (no polls / mentions / pins).
  */
 router.post('/support', async (req: AuthRequest, res: Response) => {
   try {
-    const { content, userId, replyToId } = req.body;
-    if (!content || !content.trim()) {
+    const b = req.body || {};
+    const isAdmin = isAdminRole(req.user!.role);
+    const targetUserId = isAdmin ? b.userId : req.user!.id;
+    if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
+
+    const channel = `support_${targetUserId}`;
+    const type: 'text' | 'image' | 'audio' = ['image', 'audio'].includes(b.type) ? b.type : 'text';
+
+    let content = typeof b.content === 'string' ? b.content.trim() : '';
+    if (content.length > 2000) return res.status(400).json({ error: 'Mensagem muito longa (máx 2000 caracteres)' });
+
+    let mediaUrl: string | null = null;
+    let mediaMime: string | null = null;
+    let mediaDurationSec: number | null = null;
+    if (type === 'image' || type === 'audio') {
+      if (typeof b.mediaUrl !== 'string' || !b.mediaUrl.startsWith('/uploads/chat/')) {
+        return res.status(400).json({ error: 'Mídia inválida' });
+      }
+      mediaUrl = b.mediaUrl;
+      mediaMime = typeof b.mediaMime === 'string' ? b.mediaMime.slice(0, 100) : null;
+      if (type === 'audio' && Number.isFinite(Number(b.mediaDurationSec))) {
+        mediaDurationSec = Math.min(Math.max(Math.round(Number(b.mediaDurationSec)), 0), 3600);
+      }
+    } else if (!content) {
       return res.status(400).json({ error: 'Mensagem vazia' });
     }
 
-    const isAdmin = isAdminRole(req.user!.role);
-    const targetUserId = isAdmin ? userId : req.user!.id;
-
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'userId obrigatório para admin' });
-    }
-
-    const channel = `support_${targetUserId}`;
-
-    // Only accept a reply to a message in this same support channel.
     let validReplyId: string | null = null;
-    if (replyToId) {
-      const parent = await prisma.chatMessage.findUnique({ where: { id: String(replyToId) }, select: { channel: true } });
-      if (parent && parent.channel === channel) validReplyId = String(replyToId);
+    if (b.replyToId) {
+      const parent = await prisma.chatMessage.findUnique({ where: { id: String(b.replyToId) }, select: { channel: true } });
+      if (parent && parent.channel === channel) validReplyId = String(b.replyToId);
     }
 
-    const message = await prisma.chatMessage.create({
+    const created = await prisma.chatMessage.create({
       data: {
         senderId: req.user!.id,
         channel,
-        content: content.trim(),
+        type,
+        content,
+        mediaUrl,
+        mediaMime,
+        mediaDurationSec,
         replyToId: validReplyId,
       },
       include: MESSAGE_INCLUDE,
     });
 
-    res.json({ message });
+    res.json({ message: serialize(created, req.user!.id) });
 
-    // Push notification to the other party (fire-and-forget)
+    const preview = (content || (type === 'image' ? '📷 Imagem' : type === 'audio' ? '🎤 Áudio' : 'Mensagem')).substring(0, 140);
     if (isAdmin) {
-      sendPushToUser(targetUserId, {
-        title: '🛟 Suporte — Código Zero',
-        body: content.trim().substring(0, 140),
-        url: '/chat',
-      }).catch((e) => console.error('[CHAT] support push error:', e));
+      sendPushToUser(targetUserId, { title: '🛟 Suporte — Código Zero', body: preview, url: '/chat' })
+        .catch((e) => console.error('[CHAT] support push error:', e));
     } else {
-      const admins = await prisma.user.findMany({
-        where: { role: { in: ['admin', 'superadmin'] } },
-        select: { id: true },
-      });
-      sendPushToUsers(
-        admins.map((a) => a.id),
-        { title: '🛟 Nova mensagem de suporte', body: content.trim().substring(0, 140), url: '/chat' },
-      ).catch((e) => console.error('[CHAT] support push (admins) error:', e));
+      const admins = await prisma.user.findMany({ where: { role: { in: ['admin', 'superadmin'] } }, select: { id: true } });
+      sendPushToUsers(admins.map((a) => a.id), { title: '🛟 Nova mensagem de suporte', body: preview, url: '/chat' })
+        .catch((e) => console.error('[CHAT] support push (admins) error:', e));
     }
   } catch (error) {
     console.error('[CHAT] Support send error:', error);
@@ -310,14 +578,11 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /api/chat/support/inbox
- * Admin only: list all support conversations with last message + unread count
+ * GET /api/chat/support/inbox  — admin: all support conversations.
  */
 router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
   try {
-    if (!isAdminRole(req.user!.role)) {
-      return res.status(403).json({ error: 'Admin only' });
-    }
+    if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Admin only' });
 
     const channels = await prisma.chatMessage.groupBy({
       by: ['channel'],
@@ -330,7 +595,6 @@ router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
     const conversations = await Promise.all(
       channels.map(async (ch) => {
         const userId = ch.channel.replace('support_', '');
-
         const [user, lastMessage, unreadCount] = await Promise.all([
           prisma.user.findUnique({
             where: { id: userId },
@@ -341,23 +605,9 @@ router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
             orderBy: { createdAt: 'desc' },
             include: { sender: { select: { name: true, role: true } } },
           }),
-          prisma.chatMessage.count({
-            where: {
-              channel: ch.channel,
-              senderId: { not: req.user!.id },
-              readAt: null,
-            },
-          }),
+          prisma.chatMessage.count({ where: { channel: ch.channel, senderId: { not: req.user!.id }, readAt: null } }),
         ]);
-
-        return {
-          channel: ch.channel,
-          userId,
-          user,
-          lastMessage,
-          unreadCount,
-          totalMessages: ch._count,
-        };
+        return { channel: ch.channel, userId, user, lastMessage, unreadCount, totalMessages: ch._count };
       })
     );
 
@@ -369,32 +619,16 @@ router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * GET /api/chat/unread
- * Returns unread counts for the current user
+ * GET /api/chat/unread  — unread counts for the current user.
  */
 router.get('/unread', async (req: AuthRequest, res: Response) => {
   try {
     const isAdmin = isAdminRole(req.user!.role);
-
-    let supportUnread = 0;
-    if (isAdmin) {
-      supportUnread = await prisma.chatMessage.count({
-        where: {
-          channel: { startsWith: 'support_' },
-          senderId: { not: req.user!.id },
-          readAt: null,
-        },
-      });
-    } else {
-      supportUnread = await prisma.chatMessage.count({
-        where: {
-          channel: `support_${req.user!.id}`,
-          senderId: { not: req.user!.id },
-          readAt: null,
-        },
-      });
-    }
-
+    const supportUnread = await prisma.chatMessage.count({
+      where: isAdmin
+        ? { channel: { startsWith: 'support_' }, senderId: { not: req.user!.id }, readAt: null }
+        : { channel: `support_${req.user!.id}`, senderId: { not: req.user!.id }, readAt: null },
+    });
     res.json({ supportUnread });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao verificar não-lidas' });

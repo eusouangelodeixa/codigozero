@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import rateLimit from 'express-rate-limit';
 import { env } from '../config/env';
 import crypto from 'crypto';
 import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
@@ -16,12 +17,23 @@ const LOJOU_KEY = env.LOJOU_API_KEY;
 const PRODUCT_PID = env.LOJOU_PRODUCT_PID;
 const PLAN_ID = env.LOJOU_PLAN_ID;
 
+// Throttle lead capture: at most 5 submissions / 10 min per IP. Curbs bots
+// spamming the funnel form (and the Lojou order calls it triggers) without
+// getting in the way of a real buyer retrying.
+const leadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
+});
+
 /**
  * POST /api/landing/lead
  * Capture lead data from landing page gate form.
  * Creates a Lojou subscription order and returns checkout_url.
  */
-router.post('/lead', async (req: Request, res: Response) => {
+router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
   try {
     const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode, phoneCode } = req.body;
 

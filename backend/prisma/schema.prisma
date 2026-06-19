@@ -868,3 +868,17 @@ model PartnerCostShare {
   @@index([partnerId, status])
   @@index([costId])
 }
+
+// Single-use token for the EMAIL-based password recovery flow (distinct from the
+// WhatsApp/OTP flow in OtpCode). The raw token travels only in the e-mailed link;
+// we persist its sha256 hash so a DB leak can't be used to reset a password.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    // sha256(rawToken) — never store the plaintext token
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}

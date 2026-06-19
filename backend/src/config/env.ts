@@ -1,11 +1,28 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Insecure dev fallback for JWT_SECRET. Fine for local dev, but it must NEVER
+// be the active secret in production (tokens could be forged), so we fail fast
+// at startup below if it is.
+const INSECURE_JWT_SECRET = 'codigo-zero-secret-change-me';
+
+// Fail fast in production if the JWT secret is missing or still the placeholder.
+// Doing this at module load means the process refuses to boot misconfigured
+// rather than silently signing tokens an attacker could forge.
+if (process.env.NODE_ENV === 'production') {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret === INSECURE_JWT_SECRET) {
+    throw new Error(
+      '[env] JWT_SECRET must be set to a strong, unique value in production (the insecure default is not allowed). Set JWT_SECRET in the environment.',
+    );
+  }
+}
+
 export const env = {
   PORT: parseInt(process.env.PORT || '4000', 10),
   DATABASE_URL: process.env.DATABASE_URL || '',
   REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
-  JWT_SECRET: process.env.JWT_SECRET || 'codigo-zero-secret-change-me',
+  JWT_SECRET: process.env.JWT_SECRET || INSECURE_JWT_SECRET,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
   LOJOU_API_KEY: process.env.LOJOU_API_KEY || '',
   LOJOU_API_URL: process.env.LOJOU_API_URL || 'https://api.lojou.app',

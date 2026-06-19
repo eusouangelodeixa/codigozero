@@ -2,7 +2,11 @@ import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
+import pinoHttp from 'pino-http';
+import { PrismaClient } from '@prisma/client';
 import { env } from './config/env';
+import { logger } from './lib/logger';
+import { initSentry, setupSentryErrorHandler } from './lib/sentry';
 import authRoutes from './routes/auth.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import radarRoutes from './routes/radar.routes';
@@ -22,6 +26,10 @@ import komunikaRoutes from './routes/komunika.routes';
 import { startCronJobs } from './jobs/cron';
 import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
+// Initialize Sentry as early as possible (before routes). No-op unless
+// SENTRY_DSN is set, so behavior is unchanged when it's absent.
+initSentry();
+
 const app = express();
 
 // Behind nginx (one hop): trust the first proxy so req.ip / X-Forwarded-For
@@ -29,14 +37,37 @@ const app = express();
 // and keys limits by the proxy IP.
 app.set('trust proxy', 1);
 
+// ── Request logging (structured) ──
+// Wired early so every request is logged. Logs method/url/status/response time;
+// attaches the authenticated user id when available (auth middleware sets
+// req.user later in the chain, so it's present by the time the response logs).
+app.use(
+  pinoHttp({
+    logger,
+    customProps: (req) => {
+      const userId = (req as any).user?.id;
+      return userId ? { userId } : {};
+    },
+    // Quiet the health check so DB-probe pings don't flood logs.
+    autoLogging: {
+      ignore: (req) => req.url === '/api/health',
+    },
+  })
+);
+
 // ── Security & Parsing ──
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-  // Nginx already sends these headers — disable to prevent duplicates
-  // that cause Safari/iOS "Load failed" network errors
-  hsts: false,
+  // Defense-in-depth: re-enable the safe headers even though nginx may also
+  // send them (duplicate HSTS/X-Content-Type-Options/Referrer-Policy values
+  // are harmless, unlike a duplicated/conflicting CSP). These don't affect
+  // CORS or trigger the Safari/iOS "Load failed" issue.
+  hsts: { maxAge: 15552000, includeSubDomains: true }, // ~180 days
+  xContentTypeOptions: true,
+  referrerPolicy: { policy: 'no-referrer' },
+  frameguard: { action: 'deny' },
+  // CSP stays OFF — nginx owns it; a second/conflicting policy here would break the app.
   contentSecurityPolicy: false,
-  xContentTypeOptions: false,
 }));
 app.use(cors({
   origin: (origin, callback) => {
@@ -79,28 +110,42 @@ app.use('/api/komunika', komunikaRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // ── Health Check ──
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'codigo-zero-api', timestamp: new Date().toISOString() });
+// Probes the DB with a trivial query so load balancers / uptime checks detect
+// DB outages, not just "process is up". Kept fast and dependency-light.
+const healthPrisma = new PrismaClient();
+app.get('/api/health', async (_req, res) => {
+  try {
+    await healthPrisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ok', service: 'codigo-zero-api', timestamp: new Date().toISOString() });
+  } catch (err) {
+    logger.error({ err }, '[HEALTH] DB probe failed');
+    res.status(503).json({ status: 'error', service: 'codigo-zero-api', timestamp: new Date().toISOString() });
+  }
 });
 
+// ── Sentry Error Handler ──
+// Must run AFTER routes and BEFORE the app's own error handler. No-op unless
+// SENTRY_DSN is set, so the app behaves exactly as today when it's absent.
+setupSentryErrorHandler(app);
+
 // ── Global Error Handler ──
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[ERROR]', err.message);
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Prefer the per-request logger if pino-http attached one.
+  (req.log ?? logger).error({ err }, '[ERROR] unhandled request error');
   res.status(500).json({ error: 'Internal server error' });
 });
 
 // ── Start Server ──
 app.listen(env.PORT, () => {
-  console.log(`\n⚡ Código Zero API running on port ${env.PORT}`);
-  console.log(`   Environment: ${env.NODE_ENV}\n`);
+  logger.info(`⚡ Código Zero API running on port ${env.PORT} (env: ${env.NODE_ENV})`);
 
   // Komunika module needs BOTH secrets. Provisioning gates on the HMAC secret,
   // SSO on the JWT secret — warn loudly if only one is set, since the
   // integration would look live but SSO (or provisioning) would silently fail.
   if (env.KOMUNIKA_HMAC_SECRET && !env.KOMUNIKA_SSO_JWT_SECRET) {
-    console.warn('[KOMUNIKA] ⚠️ KOMUNIKA_HMAC_SECRET set but KOMUNIKA_SSO_JWT_SECRET MISSING — users get provisioned but every "Abrir Komunika" SSO click will fail. Set both.');
+    logger.warn('[KOMUNIKA] ⚠️ KOMUNIKA_HMAC_SECRET set but KOMUNIKA_SSO_JWT_SECRET MISSING — users get provisioned but every "Abrir Komunika" SSO click will fail. Set both.');
   } else if (env.KOMUNIKA_SSO_JWT_SECRET && !env.KOMUNIKA_HMAC_SECRET) {
-    console.warn('[KOMUNIKA] ⚠️ KOMUNIKA_SSO_JWT_SECRET set but KOMUNIKA_HMAC_SECRET MISSING — provisioning is disabled, so no tenant ever exists to open. Set both.');
+    logger.warn('[KOMUNIKA] ⚠️ KOMUNIKA_SSO_JWT_SECRET set but KOMUNIKA_HMAC_SECRET MISSING — provisioning is disabled, so no tenant ever exists to open. Set both.');
   }
 
   startCronJobs();

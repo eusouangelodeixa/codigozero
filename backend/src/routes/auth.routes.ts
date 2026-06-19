@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
@@ -13,7 +14,7 @@ import { getActivePrice } from '../lib/pricing';
 import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
 import { sendFirstAccessWelcome } from '../services/onboarding.service';
-import { generateUserPassword, sendCredentialsEmail } from '../services/payment.service';
+import { generateUserPassword, sendCredentialsEmail, sendPasswordResetEmail } from '../services/payment.service';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -51,8 +52,18 @@ const avatarUpload = multer({
   },
 });
 
+// Throttle login: at most 5 attempts / 15 min per IP, to blunt credential
+// stuffing / brute force. Mirrors recoverLimiter / otpLimiter below.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.' },
+});
+
 // POST /api/auth/login
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -458,6 +469,116 @@ router.post('/forgot-password/reset', async (req: Request, res: Response) => {
 
     return res.json({ success: true, message: 'Senha redefinida com sucesso. Faça login com a nova senha.' });
   } catch (error) {
+    return res.status(500).json({ error: 'Erro ao redefinir senha' });
+  }
+});
+
+// ── EMAIL-based password recovery ───────────────────────────────────────────
+// A second, self-service recovery channel ALONGSIDE the WhatsApp/OTP flow above
+// (which is untouched). The user requests a link by e-mail; we mail a single-use,
+// ~1h token and let them set a new password on /recuperar. The raw token lives
+// only in the e-mailed link — we persist sha256(token) so a DB leak is useless.
+const emailRecoverLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
+});
+
+const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
+
+// POST /api/auth/forgot-password/email-request { email }
+// Sends a reset link IF the e-mail belongs to a paid customer. ALWAYS returns a
+// generic success (no user enumeration): the response is identical whether or
+// not an account exists, so callers can't probe which e-mails are registered.
+router.post('/forgot-password/email-request', emailRecoverLimiter, async (req: Request, res: Response) => {
+  const genericOk = () =>
+    res.json({
+      success: true,
+      message: 'Se houver uma conta com esse e-mail, enviamos um link para redefinir a senha.',
+    });
+  try {
+    const email = String(req.body?.email || '').trim();
+    if (!email) return res.status(400).json({ error: 'Informe o e-mail.' });
+
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true, name: true, email: true, isActive: true, role: true, subscriptionStatus: true },
+    });
+
+    // Only mint a token for a real, active customer. Anything else → same
+    // generic response (don't disclose existence/eligibility). Privileged roles
+    // (admin/superadmin/coproducer) are eligible too — they don't hold a member
+    // subscription but must still be able to recover their own login.
+    const eligible =
+      !!user &&
+      user.isActive &&
+      (PRIVILEGED_ROLES.includes(user.role) || isPaidSubscriber(user.subscriptionStatus));
+
+    if (eligible && user) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = sha256(rawToken);
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+      await prisma.passwordResetToken.create({
+        data: { userId: user.id, tokenHash, expiresAt },
+      });
+
+      const base = env.FRONTEND_URL || 'https://app.czero.sbs';
+      const resetUrl = `${base}/recuperar?token=${rawToken}`;
+      // Non-blocking: a delivery hiccup must not change the response shape
+      // (otherwise timing/HTTP differences would leak whether the user exists).
+      sendPasswordResetEmail({ name: user.name, email: user.email, resetUrl }).catch((e) =>
+        console.error('[AUTH] password-reset e-mail failed (non-blocking):', e?.message || e),
+      );
+      console.log(`[AUTH] 🔗 Password reset link issued for user=${user.id}`);
+    }
+
+    return genericOk();
+  } catch (error) {
+    console.error('[AUTH] email-request error:', error);
+    // Even on error, stay generic so failures can't be used to enumerate users.
+    return genericOk();
+  }
+});
+
+// POST /api/auth/forgot-password/email-reset { token, newPassword }
+// Redeems a token from the e-mail link: must exist, not be expired, not be used.
+// On success, sets the new password (bcrypt) and marks the token used. Errors are
+// generic ("inválido ou expirado") so a probed token reveals nothing.
+router.post('/forgot-password/email-reset', emailRecoverLimiter, async (req: Request, res: Response) => {
+  try {
+    const token = String(req.body?.token || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token e nova senha são obrigatórios.' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+
+    const record = await prisma.passwordResetToken.findFirst({
+      where: { tokenHash: sha256(token) },
+    });
+
+    // Single-use + time-boxed. Same generic message for missing/expired/used so
+    // the endpoint can't be used to learn which tokens are valid.
+    if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Link inválido ou expirado. Solicite um novo.' });
+    }
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    console.log(`[AUTH] 🔑 Password reset via e-mail link for user=${record.userId}`);
+    return res.json({ success: true, message: 'Senha redefinida com sucesso. Faça login com a nova senha.' });
+  } catch (error) {
+    console.error('[AUTH] email-reset error:', error);
     return res.status(500).json({ error: 'Erro ao redefinir senha' });
   }
 });

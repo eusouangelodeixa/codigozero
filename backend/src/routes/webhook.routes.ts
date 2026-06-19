@@ -80,20 +80,24 @@ router.post('/resend', async (req: Request, res: Response) => {
 
     const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
     const secret = cfg?.resendWebhookSecret || env.RESEND_WEBHOOK_SECRET;
-    if (secret) {
-      const ok = verifySvixSignature(
-        secret,
-        req.header('svix-id') || '',
-        req.header('svix-timestamp') || '',
-        raw,
-        req.header('svix-signature') || '',
-      );
-      if (!ok) {
-        console.warn('[RESEND-WEBHOOK] invalid signature — rejected');
-        return res.status(401).json({ error: 'invalid signature' });
-      }
-    } else {
-      console.warn('[RESEND-WEBHOOK] no signing secret configured — accepting unverified');
+    if (!secret) {
+      // No signing secret configured anywhere (SystemConfig nor env) — we
+      // cannot verify authenticity, so refuse rather than ingest unverified
+      // events. 503 (not 401) signals a server-side misconfig so Resend can
+      // retry once the secret is set.
+      console.error('[RESEND-WEBHOOK] no signing secret configured — rejecting (set SystemConfig.resendWebhookSecret or RESEND_WEBHOOK_SECRET)');
+      return res.status(503).json({ error: 'webhook secret not configured' });
+    }
+    const ok = verifySvixSignature(
+      secret,
+      req.header('svix-id') || '',
+      req.header('svix-timestamp') || '',
+      raw,
+      req.header('svix-signature') || '',
+    );
+    if (!ok) {
+      console.warn('[RESEND-WEBHOOK] invalid signature — rejected');
+      return res.status(401).json({ error: 'invalid signature' });
     }
 
     const payload = JSON.parse(raw);
@@ -211,6 +215,21 @@ router.post('/lojou', async (req: Request, res: Response) => {
     // vira 'refunded'/'failed' (era por isso que REEMBOLSOS ficava sempre 0).
     if (existingTransaction && existingTransaction.status === 'approved' && event === 'order.approved') {
       console.log(`[WEBHOOK] Order ${orderId} already processed (approved), skipping`);
+      return res.json({ status: 'already_processed' });
+    }
+
+    // Dedup de TRUE duplicates dos eventos pós-aprovação (Lojou re-entrega no
+    // próprio schedule de retry). Mesma ideia do dedup de order.approved acima,
+    // mas checando se ESTE efeito já foi aplicado — não bloqueia o PRIMEIRO
+    // reembolso/cancelamento (aí o status ainda é 'approved', não 'refunded'/
+    // 'pending'), só uma re-entrega idêntica. Isso evita decrementar
+    // currentUsers de novo, recriar lead e re-rodar side effects.
+    if (existingTransaction && existingTransaction.status === 'refunded' && event === 'order.refunded') {
+      console.log(`[WEBHOOK] Order ${orderId} already processed (refunded), skipping`);
+      return res.json({ status: 'already_processed' });
+    }
+    if (existingTransaction && existingTransaction.status === 'pending' && event === 'order.cancelled') {
+      console.log(`[WEBHOOK] Order ${orderId} already processed (checkout pending), skipping`);
       return res.json({ status: 'already_processed' });
     }
 
@@ -955,7 +974,9 @@ router.post('/stripe', async (req: Request, res: Response) => {
         break;
       }
       default:
-        console.log(`[STRIPE-WEBHOOK] Unhandled event type: ${event.type}`);
+        // Ack with 200 (handled below) so Stripe doesn't retry, but surface
+        // the unexpected type at warn level instead of silently swallowing it.
+        console.warn(`[STRIPE-WEBHOOK] ⚠️ Unhandled event type: ${event.type} (${event.id}) — acked, no action taken`);
     }
     return res.json({ received: true });
   } catch (e: any) {

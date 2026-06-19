@@ -28,6 +28,11 @@ export default function LoginPage() {
   const [phoneHint, setPhoneHint] = useState<string | null>(null);
   const [notSubscriber, setNotSubscriber] = useState(false);
 
+  // E-mail recovery (alternative to the WhatsApp flow): we send a reset link to
+  // the account e-mail and confirm on screen. `emailSent` flips to the
+  // confirmation view; the actual reset happens on /recuperar.
+  const [emailSent, setEmailSent] = useState(false);
+
   // Where a non-subscriber is sent to buy a plan.
   const SUBSCRIBE_URL = "https://czero.sbs";
 
@@ -41,6 +46,32 @@ export default function LoginPage() {
     setRecoverError("");
     setPhoneHint(null);
     setNotSubscriber(false);
+    setEmailSent(false);
+  };
+
+  // E-mail recovery — always succeeds generically (the backend never reveals
+  // whether the account exists). We just confirm "check your inbox".
+  const requestEmailReset = async () => {
+    setRecoverError("");
+    setRecoverMsg("");
+    if (!recoverEmail.trim()) {
+      setRecoverError("Informe o e-mail da conta para receber o link.");
+      return;
+    }
+    setRecoverLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/forgot-password/email-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: recoverEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao enviar o e-mail");
+      setEmailSent(true);
+    } catch (err) {
+      setRecoverError(err instanceof Error ? err.message : "Erro ao enviar o e-mail.");
+    }
+    setRecoverLoading(false);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -234,6 +265,21 @@ export default function LoginPage() {
                   ← Tentar com outro e-mail
                 </button>
               </div>
+            ) : emailSent ? (
+              <div className={styles.subscriberBox}>
+                <div className={styles.subscriberTitle}>Verifique seu e-mail</div>
+                <p className={styles.subscriberText}>
+                  Se houver uma conta com esse e-mail, enviamos um link para redefinir a senha.
+                  O link expira em 1 hora. Confira também a caixa de spam.
+                </p>
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  onClick={() => { setEmailSent(false); setRecoverError(""); setRecoverMsg(""); }}
+                >
+                  ← Voltar
+                </button>
+              </div>
             ) : recoverStep === 1 ? (
               <form onSubmit={checkEmail} className={styles.form}>
                 <p className={styles.helpText}>
@@ -251,8 +297,16 @@ export default function LoginPage() {
                 />
                 {recoverError && <div className={styles.error} role="alert">{recoverError}</div>}
                 <Button type="submit" variant="primary" size="lg" loading={recoverLoading} fullWidth>
-                  Continuar
+                  Continuar com WhatsApp
                 </Button>
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  onClick={requestEmailReset}
+                  disabled={recoverLoading}
+                >
+                  Prefiro receber um link por e-mail
+                </button>
               </form>
             ) : recoverStep === 2 ? (
               <form onSubmit={requestCode} className={styles.form}>

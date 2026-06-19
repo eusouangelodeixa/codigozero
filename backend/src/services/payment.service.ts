@@ -182,6 +182,67 @@ export async function sendCredentialsEmail(opts: {
   return sendEmail({ to: opts.email, subject: '🎉 Seu acesso ao Código Zero', html, text });
 }
 
+/** Branded HTML for the password-reset e-mail (same look as the credentials e-mail). */
+function passwordResetEmailHtml(opts: { name: string; resetUrl: string }): string {
+  const first = (opts.name || '').split(' ')[0] || 'membro';
+  return `<!doctype html>
+<html lang="pt"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+</head>
+<body style="margin:0;padding:0;background:#001412;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#001412;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#06130f;border:1px solid #14352f;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:26px 30px 22px;text-align:center;border-bottom:1px solid #11231e;">
+          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="46" height="46" style="display:inline-block;width:46px;height:46px;border-radius:13px;vertical-align:middle;border:0;" />
+          <span style="display:inline-block;vertical-align:middle;margin-left:12px;font-size:19px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Código Zero</span>
+        </td></tr>
+        <tr><td style="padding:30px 30px 6px;">
+          <h1 style="margin:0 0 8px;font-size:23px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Redefinir senha</h1>
+          <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#A1A1AA;">Olá, ${first}. Recebemos um pedido para redefinir a senha da sua conta no <strong style="color:#ffffff;">Código Zero</strong>. Toque no botão abaixo para criar uma nova senha:</p>
+          <a href="${opts.resetUrl}" style="display:block;margin:8px 0 14px;background:#2DD4BF;color:#001412;text-decoration:none;text-align:center;font-weight:700;font-size:16px;padding:15px;border-radius:11px;">Criar nova senha &rarr;</a>
+          <p style="margin:14px 0 6px;font-size:12px;color:#7b8a85;line-height:1.6;">Ou copie e cole este link no navegador:</p>
+          <div style="background:#0c1c17;border:1px solid #213029;border-radius:10px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#cdd6d3;word-break:break-all;">${opts.resetUrl}</div>
+          <p style="margin:18px 0 4px;font-size:13px;line-height:1.6;color:#7b8a85;">Este link expira em <strong style="color:#cdd6d3;">1 hora</strong> e só pode ser usado uma vez. Se você não pediu para redefinir a senha, ignore este e-mail — sua senha atual continua valendo.</p>
+        </td></tr>
+        <tr><td style="padding:24px 30px 28px;text-align:center;border-top:1px solid #11231e;">
+          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="40" height="40" style="display:inline-block;width:40px;height:40px;border-radius:12px;border:0;" />
+          <p style="margin:14px 0 8px;font-size:13px;line-height:1.5;color:#8a9994;">O ecossistema pra criar micronegócios de IA.<br>Sem código, sem barreiras.</p>
+          <p style="margin:0;font-size:12px;color:#52605c;line-height:1.5;">Você recebeu este e-mail porque alguém solicitou a redefinição de senha da sua conta.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+/**
+ * E-mail a single-use password-reset link via Resend. Best-effort: no-ops when
+ * Resend isn't configured (same contract as sendCredentialsEmail). The caller
+ * builds the `resetUrl` with the raw token; we never log or persist it.
+ */
+export async function sendPasswordResetEmail(opts: {
+  name: string;
+  email: string;
+  resetUrl: string;
+}): Promise<EmailSendResult> {
+  const html = passwordResetEmailHtml({ name: opts.name, resetUrl: opts.resetUrl });
+  const text = [
+    `Redefinir senha — Código Zero`,
+    ``,
+    `Recebemos um pedido para redefinir a senha da sua conta.`,
+    `Abra o link abaixo para criar uma nova senha (expira em 1 hora, uso único):`,
+    ``,
+    opts.resetUrl,
+    ``,
+    `Se você não pediu isto, ignore este e-mail — sua senha atual continua valendo.`,
+  ].join('\n');
+  return sendEmail({ to: opts.email, subject: 'Redefinir sua senha — Código Zero', html, text });
+}
+
 /**
  * Push the "new sale" notification to every superadmin.
  * Format mirrors the Lojou webhook for consistency in the admin's feed.

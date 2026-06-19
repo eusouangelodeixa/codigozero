@@ -258,6 +258,11 @@ model SystemConfig {
   communityLink            String?
   mentoriaSchedule         String? // next mentoria ISO datetime
   mentoriaLink             String?
+  // Dedup markers for the live-mentoria push reminders: each stores the
+  // mentoriaSchedule value already notified, so the cron fires once per schedule
+  // (and re-fires when the admin changes the date).
+  mentoria30SentFor        String?
+  mentoriaStartSentFor     String?
   komunikaVisitorAssistantId  String?
   komunikaCheckoutAssistantId String?
   komunikaAdminApiKey      String?

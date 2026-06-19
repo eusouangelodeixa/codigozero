@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
-import { sendPushToSuperAdmins, sendPushToUser } from '../routes/auth.routes';
+import { sendPushToSuperAdmins, sendPushToUser, sendPushToUsers } from '../routes/auth.routes';
 import { lojouService } from '../services/lojou.service';
 import { env } from '../config/env';
 import { processDueDispatches, processDispatch } from '../services/dispatch.service';
@@ -634,6 +634,51 @@ export function startCronJobs() {
   });
 
   console.log('[CRON] ⏰ PWA install reminder scheduled (11:00 daily)');
+
+  // ── Live mentoria reminders (every minute) ──
+  // Push members 30 minutes before the live mentoria and again when it starts,
+  // from SystemConfig.mentoriaSchedule. Dedup via mentoria30SentFor /
+  // mentoriaStartSentFor (each stores the schedule value already notified), so a
+  // reminder fires once per schedule and re-fires if the admin moves the date.
+  // Sent with NO push category → reaches everyone, even members who muted the
+  // community channel (a live mentoria is a high-value, time-sensitive event).
+  cron.schedule('* * * * *', async () => {
+    try {
+      const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+      if (!cfg?.mentoriaSchedule || !cfg.mentoriaLink) return;
+      const schedule = cfg.mentoriaSchedule;
+      const target = new Date(schedule);
+      if (isNaN(target.getTime())) return;
+
+      const diffMs = target.getTime() - Date.now();
+
+      const notifyAll = async (title: string, body: string) => {
+        const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
+        // No category → bypasses notify* preferences (always delivered).
+        await sendPushToUsers(users.map((u) => u.id), { title, body, url: '/qg' });
+      };
+
+      // 30 min before: first minute where 0 < diff <= 30min, once per schedule.
+      if (diffMs > 0 && diffMs <= 30 * 60 * 1000 && cfg.mentoria30SentFor !== schedule) {
+        await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { mentoria30SentFor: schedule } });
+        await notifyAll('🎥 Mentoria ao vivo em ~30 minutos', 'Prepare-se! A mentoria começa em breve. Toque para abrir o QG e entrar.');
+        console.log('[CRON] 🎥 Mentoria 30-min reminder sent');
+      }
+
+      // At start: first minute where the start just passed (0 ≥ diff > -15min),
+      // once per schedule. The -15min floor avoids blasting an old schedule if
+      // the cron was down through the start time.
+      if (diffMs <= 0 && diffMs > -15 * 60 * 1000 && cfg.mentoriaStartSentFor !== schedule) {
+        await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { mentoriaStartSentFor: schedule } });
+        await notifyAll('🔴 A mentoria ao vivo começou!', 'Estamos ao vivo agora. Toque para entrar pelo QG.');
+        console.log('[CRON] 🔴 Mentoria start reminder sent');
+      }
+    } catch (error) {
+      console.error('[CRON] ❌ Mentoria reminder failed:', error);
+    }
+  });
+
+  console.log('[CRON] ⏰ Live mentoria reminders scheduled (every minute)');
 
   // ── Scheduled WhatsApp dispatches (every 30 seconds) ──
   cron.schedule('*/30 * * * * *', async () => {

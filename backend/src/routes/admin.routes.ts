@@ -127,6 +127,58 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/admin/leads/export — CSV of the leads list with the SAME filters as
+// GET /api/admin/leads. MUST be registered before '/leads/:id' below, otherwise
+// Express treats "export" as an :id and 404s. CSV helpers live near the bottom.
+router.get('/leads/export', async (req: AuthRequest, res: Response) => {
+  try {
+    const filter = req.query.filter as string;
+    const search = req.query.search as string;
+    const period = req.query.period as string;
+    const status = req.query.status as string;
+
+    let where: any = {};
+    if (filter === 'paid' || filter === 'subscriber') {
+      where.subscriptionStatus = 'active';
+      where.lojouOrderId = { not: null };
+    } else if (filter === 'unpaid') {
+      where.subscriptionStatus = 'lead';
+    }
+    if (status && status !== 'all') {
+      where.subscriptionStatus = status;
+      delete where.lojouOrderId;
+    }
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
+    if (window) where.createdAt = window;
+
+    const leads = await prisma.user.findMany({
+      where: { ...where, role: 'member' },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        name: true, email: true, phone: true,
+        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, createdAt: true,
+      },
+    });
+
+    const headers = ['Nome', 'Email', 'Telefone', 'Status', 'Pedido Lojou', 'Expira em', 'Cadastro'];
+    const rows = leads.map((l) => [
+      l.name, l.email, l.phone, l.subscriptionStatus, l.lojouOrderId,
+      l.subscriptionEnd, l.createdAt,
+    ]);
+    sendCsv(res, 'leads', buildCsv(headers, rows));
+  } catch (error) {
+    console.error('[ADMIN] Leads export error:', error);
+    res.status(500).json({ error: 'Erro ao exportar leads' });
+  }
+});
+
 // Full profile for one lead/user — powers the detail drawer in /admin/leads.
 // Bundles the user row, their subscription/payment history and a few activity
 // counters so the admin sees the whole picture in one click.
@@ -643,6 +695,54 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[ADMIN] Users error:', error);
     res.status(500).json({ error: 'Erro ao carregar usuários' });
+  }
+});
+
+// GET /api/admin/users/export — CSV of the users list with the SAME filters as
+// GET /api/admin/users (no pagination; exports the whole filtered set). MUST be
+// registered before '/users/:id' below so "export" isn't matched as an :id.
+router.get('/users/export', async (req: AuthRequest, res: Response) => {
+  try {
+    const search = req.query.search as string;
+    const status = req.query.status as string;
+    const role = req.query.role as string;
+    const period = req.query.period as string;
+
+    let where: any = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (status && status !== 'all') where.subscriptionStatus = status;
+    if (role && role !== 'all') where.role = role;
+    const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
+    if (window) where.createdAt = window;
+
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        name: true, email: true, phone: true, role: true,
+        isActive: true, subscriptionStatus: true, subscriptionEnd: true,
+        lojouOrderId: true, dailySearchCount: true, firstAccessAt: true, createdAt: true,
+      },
+    });
+
+    const headers = [
+      'Nome', 'Email', 'Telefone', 'Papel', 'Status assinatura', 'Ativo',
+      'Pedido Lojou', 'Expira em', 'Primeiro acesso', 'Buscas hoje', 'Criado em',
+    ];
+    const rows = users.map((u) => [
+      u.name, u.email, u.phone, u.role, u.subscriptionStatus, u.isActive,
+      u.lojouOrderId, u.subscriptionEnd, u.firstAccessAt, u.dailySearchCount, u.createdAt,
+    ]);
+    sendCsv(res, 'usuarios', buildCsv(headers, rows));
+  } catch (error) {
+    console.error('[ADMIN] Users export error:', error);
+    res.status(500).json({ error: 'Erro ao exportar usuários' });
   }
 });
 
@@ -2892,6 +2992,174 @@ router.post('/push-test/sale-with-bump', async (req: AuthRequest, res: Response)
   } catch (e: any) {
     console.error('[ADMIN] push-test/sale-with-bump error:', e);
     return res.status(500).json({ error: e?.message || 'Falha ao enviar push de teste' });
+  }
+});
+
+// ═══════════════════════════════════════
+// CSV EXPORTS (leads / users / finance)
+// ═══════════════════════════════════════
+//
+// Each export reuses the SAME filters the matching list endpoint accepts so
+// the downloaded file mirrors exactly what the admin sees on screen. Auth is
+// already enforced by the router-level authMiddleware + adminMiddleware above.
+
+// RFC-4180-ish CSV escaping: wrap a field in quotes and double any embedded
+// quote. Values containing commas, quotes or newlines MUST be quoted so Excel
+// keeps them in a single cell. We quote everything for simplicity/safety.
+function csvCell(value: unknown): string {
+  if (value === null || value === undefined) return '""';
+  let s: string;
+  if (value instanceof Date) {
+    s = Number.isNaN(value.getTime()) ? '' : value.toISOString();
+  } else if (typeof value === 'boolean') {
+    s = value ? 'Sim' : 'Não';
+  } else {
+    s = String(value);
+  }
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+// Build a CSV body from a header row + data rows. Prepends a UTF-8 BOM so
+// Excel renders acentos (ã, ç, …) correctly instead of mojibake.
+function buildCsv(headers: string[], rows: unknown[][]): string {
+  const lines = [headers.map(csvCell).join(',')];
+  for (const row of rows) lines.push(row.map(csvCell).join(','));
+  // \r\n line endings are the safest for Excel across platforms.
+  return '﻿' + lines.join('\r\n');
+}
+
+// Sends a string as a downloadable .csv attachment with a dated filename.
+function sendCsv(res: Response, baseName: string, csv: string): void {
+  const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${baseName}-${stamp}.csv"`);
+  res.send(csv);
+}
+
+// NOTE: /leads/export and /users/export are registered EARLIER in this file —
+// they must be declared BEFORE the '/leads/:id' and '/users/:id' routes, or
+// Express would match those and treat "export" as an :id (404). Only the
+// finance export lives here because there's no '/finance/:id' to shadow it.
+
+// GET /api/admin/finance/export — exports the transaction list using the SAME
+// window + search + source + txType + txStatus filters as GET /api/admin/finance.
+router.get('/finance/export', async (req: AuthRequest, res: Response) => {
+  try {
+    const period = (req.query.period as string) || '30d';
+    const search = ((req.query.search as string) || '').trim();
+    const source = ((req.query.source as string) || 'all').trim();
+    const txType = ((req.query.txType as string) || 'all').trim();
+    const txStatus = ((req.query.txStatus as string) || 'all').trim();
+
+    const now = new Date();
+    let startDate = new Date(now);
+    let endDate = new Date(now);
+
+    if (period === 'today') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (period === '7d') {
+      startDate.setDate(now.getDate() - 7);
+    } else if (period === '30d') {
+      startDate.setDate(now.getDate() - 30);
+    } else if (period === '12m') {
+      startDate.setMonth(now.getMonth() - 12);
+    } else if (period === 'custom') {
+      const from = req.query.from as string;
+      const to = req.query.to as string;
+      if (!from || !to) {
+        return res.status(400).json({ error: 'period=custom requer from e to em ISO' });
+      }
+      startDate = new Date(from);
+      endDate = new Date(to);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        return res.status(400).json({ error: 'datas inválidas (ISO esperado)' });
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) endDate.setHours(23, 59, 59, 999);
+    } else {
+      startDate.setDate(now.getDate() - 30);
+    }
+
+    const searchClause = search
+      ? {
+          OR: [
+            { userName: { contains: search, mode: 'insensitive' as const } },
+            { userEmail: { contains: search, mode: 'insensitive' as const } },
+            { userPhone: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+    const sourceClause =
+      source === 'principal'
+        ? { coproducerId: null }
+        : source && source !== 'all'
+          ? { coproducerId: source }
+          : {};
+    const typeClause =
+      txType === 'new'
+        ? { isRenewal: false }
+        : txType === 'renewal'
+          ? { isRenewal: true }
+          : txType === 'closeFriends'
+            ? { isCloseFriends: true }
+            : {};
+    const statusClause = txStatus && txStatus !== 'all' ? { status: txStatus } : {};
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        createdAt: { gte: startDate, lte: endDate },
+        ...searchClause,
+        ...sourceClause,
+        ...typeClause,
+        ...statusClause,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        createdAt: true,
+        userName: true,
+        userEmail: true,
+        userPhone: true,
+        isRenewal: true,
+        isCloseFriends: true,
+        paymentMethod: true,
+        gateway: true,
+        grossAmount: true,
+        amount: true,
+        lojouFee: true,
+        coproducerFee: true,
+        orderBumpAmount: true,
+        status: true,
+        orderId: true,
+        coproducer: { select: { displayName: true, user: { select: { name: true } } } },
+      },
+    });
+
+    const headers = [
+      'Data', 'Cliente', 'Email', 'Telefone', 'Tipo', 'Close Friends', 'Origem',
+      'Método', 'Gateway', 'Bruto', 'Bump', 'Taxa Lojou', 'Split coprodutor',
+      'Líquido', 'Status', 'Order ID',
+    ];
+    const rows = transactions.map((t) => [
+      t.createdAt,
+      t.userName,
+      t.userEmail,
+      t.userPhone,
+      t.isRenewal ? 'Renovação' : 'Nova',
+      t.isCloseFriends,
+      t.coproducer ? (t.coproducer.displayName || t.coproducer.user?.name || 'Coprodutor') : 'Principal',
+      t.paymentMethod,
+      t.gateway,
+      t.grossAmount ?? t.amount,
+      t.orderBumpAmount,
+      t.lojouFee,
+      t.coproducerFee,
+      t.amount,
+      t.status,
+      t.orderId,
+    ]);
+    sendCsv(res, 'financeiro', buildCsv(headers, rows));
+  } catch (error) {
+    console.error('[ADMIN] Finance export error:', error);
+    res.status(500).json({ error: 'Erro ao exportar transações' });
   }
 });
 

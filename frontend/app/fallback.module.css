@@ -1,0 +1,124 @@
+/* ═══════════════════════════════════════════════════════════
+   FALLBACK SCREENS — error / loading / offline
+   Shared full-screen, centered layout for the route-level
+   error boundary, global error, and the offline page.
+   Mirrors the visual language of app/blocked.
+   ═══════════════════════════════════════════════════════════ */
+
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+.container {
+  max-width: 460px;
+  width: 100%;
+  text-align: center;
+  animation: fadeIn 0.3s var(--ease-out, ease) both;
+}
+
+.logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-8);
+}
+
+/* ── Status icon bubble ── */
+.icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto var(--space-6);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.iconError {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.iconError svg { stroke: var(--color-error, #EF4444); }
+
+.iconOffline {
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+}
+.iconOffline svg { stroke: var(--text-secondary); }
+
+.title {
+  font-size: var(--type-h1);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+  line-height: 1.2;
+}
+
+.message {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--space-8);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.help {
+  margin-top: var(--space-6);
+  font-size: var(--type-label);
+  color: var(--text-tertiary);
+}
+
+.helpLink {
+  color: var(--accent);
+  font-weight: 500;
+  transition: opacity 0.15s ease;
+}
+.helpLink:hover { opacity: 0.8; }
+
+.digest {
+  margin-top: var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--type-label);
+  color: var(--text-tertiary);
+  word-break: break-all;
+}
+
+/* ── Loading: centered spinner + label ── */
+.loadingPage {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+}
+
+.loadingLabel {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

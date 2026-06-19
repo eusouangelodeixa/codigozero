@@ -184,6 +184,132 @@ router.get('/community', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ═══════════════════════════════════════
+// LIVE STREAM (Server-Sent Events)
+// ═══════════════════════════════════════
+
+/**
+ * GET /api/chat/stream?channel=community|support[&userId=]&token=
+ *
+ * Pushes chat updates in real-time to replace the old 4s client poll. There is
+ * no message-bus/worker publishing chat events (unlike Radar's Redis Pub/Sub),
+ * so the simplest robust approach for this codebase is a server-side interval
+ * that re-reads the recent window for the channel and pushes a `SYNC` only when
+ * something actually changed.
+ *
+ * Why a windowed SYNC instead of a pure createdAt delta: reactions, poll votes,
+ * pins/unpins and deletes mutate *existing* messages without bumping
+ * `createdAt`. A createdAt-only delta would miss them; the old full-replace poll
+ * caught them. So each tick we read the same data the GET endpoint returns
+ * (recent messages + pins), hash it, and emit only on change — same query cost
+ * as the old poll but driven server-side and pushed, not pulled.
+ *
+ * Events emitted: `CONNECTED`, then `SYNC` { messages, pinned } (first one is
+ * the initial snapshot, like Radar's initial state), plus `: ping` heartbeats.
+ * Auth + subscription run via the router-level middleware; the token rides in
+ * the query string because EventSource can't send Authorization headers.
+ */
+router.get('/stream', async (req: AuthRequest, res: Response) => {
+  const isAdmin = isAdminRole(req.user!.role);
+  const tab = req.query.channel === 'support' ? 'support' : 'community';
+
+  // Resolve the real DB channel. Support is 1:1 (`support_<userId>`); admins may
+  // target a member via ?userId=, members always get their own conversation.
+  let channel = 'community';
+  if (tab === 'support') {
+    const targetUserId = isAdmin ? (req.query.userId as string) : req.user!.id;
+    if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
+    channel = `support_${targetUserId}`;
+  }
+
+  // SSE headers. `X-Accel-Buffering: no` is the load-bearing one — without it
+  // nginx buffers the stream and clients drop the seemingly-idle connection
+  // before any data arrives.
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+
+  res.write(`data: ${JSON.stringify({ event: 'CONNECTED', channel: tab })}\n\n`);
+
+  const viewerId = req.user!.id;
+  const limit = 50; // matches the GET endpoints' default page size
+
+  // Reads the same window the GET endpoint returns, so reactions/votes/pins/
+  // deletes all propagate exactly like the old full-replace poll did.
+  const readWindow = async () => {
+    const [messages, pinned] = await Promise.all([
+      prisma.chatMessage.findMany({ where: { channel }, orderBy: { createdAt: 'desc' }, take: limit, include: MESSAGE_INCLUDE }),
+      tab === 'community'
+        ? prisma.chatMessage.findMany({
+            where: { channel: 'community', pinnedUntil: { gt: new Date() } },
+            orderBy: { pinnedAt: 'desc' },
+            take: 5,
+            include: MESSAGE_INCLUDE,
+          })
+        : Promise.resolve([] as FullMessage[]),
+    ]);
+    return {
+      messages: messages.reverse().map((m) => serialize(m, viewerId)),
+      pinned: pinned.map((m) => serialize(m, viewerId)),
+    };
+  };
+
+  // Cheap change signature: id + updatedAt-ish fields per message + pin set.
+  // Avoids re-serializing/pushing identical state every tick. We include
+  // reaction/vote/pin markers so in-place mutations are detected.
+  const signature = (snap: Awaited<ReturnType<typeof readWindow>>) => {
+    const msgSig = snap.messages
+      .map((m: any) => {
+        const reacts = (m.reactions || []).length;
+        const votes = m.poll ? m.poll.options.reduce((s: number, o: any) => s + o.count, 0) : 0;
+        return `${m.id}:${m.pinnedUntil || ''}:${reacts}:${votes}`;
+      })
+      .join('|');
+    const pinSig = snap.pinned.map((m: any) => `${m.id}:${m.pinnedUntil || ''}`).join('|');
+    return `${msgSig}#${pinSig}`;
+  };
+
+  let lastSig = '';
+  let closed = false;
+
+  const tick = async () => {
+    if (closed) return;
+    try {
+      const snap = await readWindow();
+      const sig = signature(snap);
+      if (sig !== lastSig) {
+        lastSig = sig;
+        res.write(`data: ${JSON.stringify({ event: 'SYNC', messages: snap.messages, pinned: snap.pinned })}\n\n`);
+      }
+    } catch (err) {
+      console.error('[CHAT] SSE tick error:', err);
+    }
+  };
+
+  // Initial snapshot right away (like Radar emitting current state on connect),
+  // then poll-and-push on a short interval.
+  await tick();
+  const poll = setInterval(tick, 2500);
+
+  // Heartbeat: comment lines (':') are ignored by EventSource but keep mobile
+  // carrier NAT / iOS from killing the idle connection (~30s).
+  const heartbeat = setInterval(() => {
+    res.write(`: ping\n\n`);
+  }, 15000);
+
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(poll);
+    clearInterval(heartbeat);
+  };
+  req.on('close', cleanup);
+});
+
 /**
  * POST /api/chat/community
  * Body: { content?, replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec?,

@@ -61,6 +61,43 @@ export default function AdminLeads() {
 
   useEffect(() => { load(); }, [load]);
 
+  const [exporting, setExporting] = useState(false);
+
+  // Export the current view as CSV. The route needs the Bearer token, so we
+  // fetch with auth → blob → trigger a download instead of navigating to a raw
+  // URL. Mirrors the on-screen filters by passing the same query params as load().
+  const exportCsv = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (filter !== "all") params.set("filter", filter);
+    if (search) params.set("search", search);
+    if (range.period !== "all") {
+      params.set("period", range.period);
+      if (range.period === "custom") {
+        if (range.from) params.set("from", range.from);
+        if (range.to) params.set("to", range.to);
+      }
+    }
+    setExporting(true);
+    try {
+      const res = await fetch(`${API}/api/admin/leads/export?${params}`, { headers: hdr() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      toast.error("Não foi possível exportar o CSV");
+    } finally {
+      setExporting(false);
+    }
+  }, [filter, search, range, toast]);
+
   const openLead = useCallback((id: string) => {
     setSelectedId(id);
     setDetail(null);
@@ -131,6 +168,15 @@ export default function AdminLeads() {
         </div>
         <div className={styles.tableToolbar}>
           <DateRangeFilter value={range} onChange={setRange} />
+          <button
+            type="button"
+            className={styles.filterBtn}
+            style={{ marginLeft: "auto" }}
+            onClick={exportCsv}
+            disabled={exporting}
+          >
+            {exporting ? "Exportando…" : "Exportar CSV"}
+          </button>
         </div>
 
         <table className={styles.table}>

@@ -79,6 +79,44 @@ export default function AdminUsers() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
+  const [exporting, setExporting] = useState(false);
+
+  // Export the current view as CSV. The route is auth-gated, so we fetch with
+  // the Bearer header → blob → trigger download (no raw URL navigation). Passes
+  // the same filters as load() so the file matches what's on screen.
+  const exportCsv = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (status !== "all") params.set("status", status);
+    if (role !== "all") params.set("role", role);
+    if (range.period !== "all") {
+      params.set("period", range.period);
+      if (range.period === "custom") {
+        if (range.from) params.set("from", range.from);
+        if (range.to) params.set("to", range.to);
+      }
+    }
+    setExporting(true);
+    try {
+      const res = await fetch(`${API}/api/admin/users/export?${params}`, { headers: hdr() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `usuarios-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      showToast("Falha ao exportar CSV");
+    } finally {
+      setExporting(false);
+    }
+  }, [search, status, role, range]);
+
   const handleSave = async () => {
     if (!editing) return;
     await fetch(`${API}/api/admin/users/${editing.id}`, {
@@ -137,6 +175,15 @@ export default function AdminUsers() {
         </div>
         <div className={styles.tableToolbar}>
           <DateRangeFilter value={range} onChange={setRange} />
+          <button
+            type="button"
+            className={styles.filterBtn}
+            style={{ marginLeft: "auto" }}
+            onClick={exportCsv}
+            disabled={exporting}
+          >
+            {exporting ? "Exportando…" : "Exportar CSV"}
+          </button>
         </div>
 
         <table className={styles.table}>

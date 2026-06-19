@@ -156,6 +156,8 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nearBottomRef = useRef(true);
 
   // audio recording
@@ -181,22 +183,99 @@ export default function ChatPage() {
 
   const viewerIsAdmin = userRole === "admin" || userRole === "superadmin";
 
+  // Apply an authoritative snapshot (from SSE SYNC or the GET fallback) while
+  // preserving any local optimistic message the server window hasn't caught up
+  // to yet. The server copy wins for anything it knows about (reactions, votes,
+  // pins, deletes all ride along), so this matches the old full-replace poll but
+  // never drops a just-sent message during the commit→next-tick gap.
+  const applySync = useCallback((incoming: Message[], nextPinned: Message[]) => {
+    setMessages((prev) => {
+      const serverIds = new Set(incoming.map((m) => m.id));
+      const oldest = incoming.length ? new Date(incoming[0].createdAt).getTime() : 0;
+      // Keep only local-only messages newer than the server window's start, so
+      // we don't resurrect messages the server dropped (deleted/paged out).
+      const localExtras = prev.filter(
+        (m) => !serverIds.has(m.id) && new Date(m.createdAt).getTime() >= oldest,
+      );
+      const merged = [...incoming, ...localExtras];
+      merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      return merged;
+    });
+    setPinned(nextPinned);
+  }, []);
+
   const fetchMessages = useCallback(async () => {
     try {
       const endpoint = tab === "community" ? "/api/chat/community" : "/api/chat/support";
       const res = await fetch(`${API}${endpoint}`, { headers: hdr() });
       if (!res.ok) return;
       const data = await res.json();
-      setMessages(data.messages || []);
-      setPinned(tab === "community" ? data.pinned || [] : []);
+      applySync(data.messages || [], tab === "community" ? data.pinned || [] : []);
     } catch {}
-  }, [tab]);
+  }, [tab, applySync]);
 
+  // ── Live updates via SSE, with a polling fallback ──
+  // Replaces the old 4s poll. We subscribe to the server stream for the active
+  // tab; if EventSource errors/closes (common on mobile carrier NAT), we fall
+  // back to the existing GET poll and keep trying to reconnect the stream.
   useEffect(() => {
+    // Fast initial paint (also primes support read-receipts via GET /support).
     fetchMessages();
-    pollRef.current = setInterval(fetchMessages, 4000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [fetchMessages]);
+
+    let cancelled = false;
+
+    const stopPoll = () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+    const startPoll = () => {
+      if (pollRef.current) return;
+      pollRef.current = setInterval(fetchMessages, 4000);
+    };
+    const closeStream = () => {
+      if (esRef.current) { esRef.current.close(); esRef.current = null; }
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+      closeStream();
+      const params = new URLSearchParams({ channel: tab, token: token() || "" });
+      const es = new EventSource(`${API}/api/chat/stream?${params.toString()}`);
+      esRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === "SYNC") {
+            // Stream is healthy → drop the fallback poll while it stays up.
+            stopPoll();
+            applySync(data.messages || [], tab === "community" ? data.pinned || [] : []);
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        // Connection dropped. Fall back to polling immediately so the user keeps
+        // getting updates, then retry the stream after a short backoff.
+        closeStream();
+        startPoll();
+        if (!cancelled && !reconnectRef.current) {
+          reconnectRef.current = setTimeout(() => {
+            reconnectRef.current = null;
+            connect();
+          }, 5000);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      closeStream();
+      stopPoll();
+      if (reconnectRef.current) { clearTimeout(reconnectRef.current); reconnectRef.current = null; }
+    };
+  }, [fetchMessages, applySync, tab]);
 
   useEffect(() => {
     if (nearBottomRef.current) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

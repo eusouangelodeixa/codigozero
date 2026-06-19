@@ -1,4 +1,6 @@
-const CACHE_NAME = 'cz-aluno-v5';
+const CACHE_NAME = 'cz-aluno-v6';
+// Path served as the offline fallback for failed navigations (precached below).
+const OFFLINE_URL = '/offline';
 
 // Install — activate immediately, cache in background
 self.addEventListener('install', (event) => {
@@ -8,7 +10,7 @@ self.addEventListener('install', (event) => {
   // Cache app shell in background (don't block install if any URL fails)
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const urls = ['/dashboard'];
+      const urls = ['/dashboard', OFFLINE_URL];
       for (const url of urls) {
         try {
           await cache.add(url);
@@ -65,6 +67,10 @@ self.addEventListener('fetch', (event) => {
         if (event.request.mode === 'navigate') {
           const shell = await caches.match('/dashboard');
           if (shell) return shell;
+          // No shell either → serve the precached branded offline page so the
+          // user sees "Você está offline" instead of Response.error()/blank.
+          const offline = await caches.match(OFFLINE_URL);
+          if (offline) return offline;
         }
         // Last resort: a real (error) Response. NEVER resolve to undefined —
         // respondWith(undefined) makes the request fail hard, which is the old

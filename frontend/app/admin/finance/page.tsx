@@ -262,6 +262,48 @@ export default function AdminFinance() {
     fetchData();
   }, [fetchData, period, from, to]);
 
+  const [exporting, setExporting] = useState(false);
+
+  // Export the transactions matching the current filters as CSV. The route is
+  // auth-gated, so we fetch with the Bearer header → blob → trigger download
+  // (no raw URL navigation). Passes the same window/source/type/status/search
+  // params as fetchData() so the file matches what's on screen.
+  const exportCsv = useCallback(async () => {
+    const token = localStorage.getItem("cz_token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    const params = new URLSearchParams({ period, source });
+    if (txType !== "all") params.set("txType", txType);
+    if (txStatus !== "all") params.set("txStatus", txStatus);
+    if (search) params.set("search", search);
+    if (period === "custom" && from && to) {
+      params.set("from", from);
+      params.set("to", to);
+    }
+    setExporting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/admin/finance/export?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `financeiro-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setExporting(false);
+    }
+  }, [period, source, txType, txStatus, search, from, to, router]);
+
   const chartWithCount = useMemo(
     () =>
       (data?.chartData || []).map((d) => ({
@@ -577,6 +619,14 @@ export default function AdminFinance() {
             <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
               {data ? `${data.transactions.items.length} de ${data.transactions.total}` : "—"}
             </span>
+            <button
+              type="button"
+              className={styles.pageBtn}
+              onClick={exportCsv}
+              disabled={exporting}
+            >
+              {exporting ? "Exportando…" : "Exportar CSV"}
+            </button>
           </div>
         </div>
 

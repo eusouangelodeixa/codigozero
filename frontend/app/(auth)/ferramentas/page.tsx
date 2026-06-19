@@ -59,30 +59,41 @@ export default function FerramentasPage() {
   }, []);
 
   // Open the embedded Komunika via SSO. The backend mints a short-lived
-  // magic-link; the JWT secret never reaches the browser. Open the tab
-  // synchronously on click so popup blockers don't swallow it, then navigate.
-  // NOTE: do NOT pass "noopener" here — it makes window.open() return null per
-  // spec, so we'd lose the handle and could never navigate the blank tab to the
-  // SSO url (which is exactly the bug we're fixing). Komunika is first-party, so
-  // the lost opener-severing is an acceptable trade for a tab that actually opens.
+  // magic-link; the JWT secret never reaches the browser.
+  //
+  // The hard part is opening it reliably from a MOBILE INSTALLED PWA (most of
+  // our users). In standalone display-mode, window.open is unreliable: iOS
+  // returns a "live" handle that silently ignores `win.location.href` (so the
+  // user just stares at a blank tab that never navigates), and Android often
+  // swallows the popup entirely. So branch on the context:
+  //   • Standalone PWA → navigate the CURRENT context to the SSO url. Always
+  //     works; the OS back gesture returns to the app.
+  //   • Regular browser → pre-open a blank tab synchronously inside the click
+  //     gesture (so the popup blocker allows it), then point it at the SSO url.
   const openKomunika = async () => {
-    const win = window.open("about:blank", "_blank");
+    const standalone =
+      typeof window !== "undefined" &&
+      (window.matchMedia?.("(display-mode: standalone)").matches ||
+        (window.navigator as { standalone?: boolean }).standalone === true);
+
+    const win = standalone ? null : window.open("about:blank", "_blank");
     setOpening(true);
     try {
       const res = await fetch(`${API}/api/komunika/sso-link`, { headers: hdr() });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.url) {
-        if (win) win.location.href = data.url;
-        else window.location.href = data.url; // popup blocked → same tab
+        if (win && !win.closed) win.location.href = data.url;
+        else window.location.href = data.url; // standalone PWA or popup blocked → same context
       } else {
-        if (win) win.close();
+        if (win && !win.closed) win.close();
         toast.error("Não foi possível abrir o Komunika", data.error);
       }
     } catch {
-      if (win) win.close();
+      if (win && !win.closed) win.close();
       toast.error("Erro de conexão");
+    } finally {
+      setOpening(false);
     }
-    setOpening(false);
   };
 
   return (

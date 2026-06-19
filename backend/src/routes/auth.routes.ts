@@ -7,6 +7,8 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import { optimizeImage } from '../lib/image';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { lojouService } from '../services/lojou.service';
@@ -24,6 +26,20 @@ import {
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// "Parse or 400" — run a Zod schema against the request body and, on failure,
+// reply 400 with the first issue's message (already in PT, matching the manual
+// checks these schemas replace). Returns the typed data on success, or null
+// after sending the response (the caller must `return` when it gets null).
+function parseOr400<S extends z.ZodTypeAny>(req: Request, res: Response, schema: S): z.infer<S> | null {
+  const result = schema.safeParse(req.body ?? {});
+  if (!result.success) {
+    const msg = result.error.issues[0]?.message || 'Dados inválidos';
+    res.status(400).json({ error: msg });
+    return null;
+  }
+  return result.data;
+}
 
 // Subscription statuses that count as "has/had a paid plan". Anything else —
 // notably 'lead' (a never-paid signup or a refunded account) or an empty/unknown
@@ -62,14 +78,23 @@ const loginLimiter = rateLimit({
   message: { error: 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.' },
 });
 
+// Login: email + password both required (non-empty). Email is kept as a free
+// string — NOT format-validated — so we don't start rejecting logins that the
+// current `!email || !password` check accepts. The PT message is reused for both
+// the type and the empty-string case so the response never changes shape.
+const loginCredential = (label: string) =>
+  z.string({ required_error: label, invalid_type_error: label }).min(1, label);
+const loginSchema = z.object({
+  email: loginCredential('Email e senha são obrigatórios'),
+  password: loginCredential('Email e senha são obrigatórios'),
+});
+
 // POST /api/auth/login
 router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email e senha são obrigatórios' });
-    }
+    const body = parseOr400(req, res, loginSchema);
+    if (!body) return;
+    const { email, password } = body;
 
     const user = await prisma.user.findUnique({ where: { email } });
 
@@ -191,12 +216,17 @@ const recoverLimiter = rateLimit({
   message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
 });
 
+const recoverAccessSchema = z.object({
+  identifier: z
+    .preprocess((v) => String(v ?? '').trim(), z.string())
+    .refine((s) => s.length > 0, { message: 'Informe o telefone ou e-mail usado na compra.' }),
+});
+
 router.post('/recover-access', recoverLimiter, async (req: Request, res: Response) => {
   try {
-    const identifier = String(req.body?.identifier || '').trim();
-    if (!identifier) {
-      return res.status(400).json({ error: 'Informe o telefone ou e-mail usado na compra.' });
-    }
+    const body = parseOr400(req, res, recoverAccessSchema);
+    if (!body) return;
+    const identifier = body.identifier;
 
     let user = null;
     if (identifier.includes('@')) {
@@ -384,10 +414,17 @@ router.patch('/password', authMiddleware, async (req: AuthRequest, res: Response
 // Returns { subscriber:true, phoneHint } so the front-end can reveal the
 // WhatsApp field, or { subscriber:false } so it shows the "tornar-se assinante"
 // CTA. NEVER sends a code (that only happens in /request, after the phone match).
+const checkEmailSchema = z.object({
+  email: z
+    .preprocess((v) => String(v ?? '').trim(), z.string())
+    .refine((s) => s.length > 0, { message: 'Informe o e-mail.' }),
+});
+
 router.post('/forgot-password/check-email', otpLimiter, async (req: Request, res: Response) => {
   try {
-    const email = String(req.body?.email || '').trim();
-    if (!email) return res.status(400).json({ error: 'Informe o e-mail.' });
+    const body = parseOr400(req, res, checkEmailSchema);
+    if (!body) return;
+    const email = body.email;
 
     const user = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -411,12 +448,23 @@ router.post('/forgot-password/check-email', otpLimiter, async (req: Request, res
 // POST /api/auth/forgot-password/request — STEP 2: send the WhatsApp code.
 // Requires { email, phone }. The account must be a paid subscriber AND the
 // number must match the one registered on it. Any other case → no code is sent.
+// email + phone both required. Keys are declared email-first so the first
+// reported issue matches the original sequential checks (email before phone).
+const forgotRequestSchema = z.object({
+  email: z
+    .preprocess((v) => String(v ?? '').trim(), z.string())
+    .refine((s) => s.length > 0, { message: 'Informe o e-mail.' }),
+  phone: z
+    .preprocess((v) => String(v ?? '').trim(), z.string())
+    .refine((s) => s.length > 0, { message: 'Informe o número de WhatsApp.' }),
+});
+
 router.post('/forgot-password/request', otpLimiter, async (req: Request, res: Response) => {
   try {
-    const email = String(req.body?.email || '').trim();
-    const phoneRaw = String(req.body?.phone || '').trim();
-    if (!email) return res.status(400).json({ error: 'Informe o e-mail.' });
-    if (!phoneRaw) return res.status(400).json({ error: 'Informe o número de WhatsApp.' });
+    const body = parseOr400(req, res, forgotRequestSchema);
+    if (!body) return;
+    const email = body.email;
+    const phoneRaw = body.phone;
 
     const user = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -445,11 +493,31 @@ router.post('/forgot-password/request', otpLimiter, async (req: Request, res: Re
 
 // POST /api/auth/forgot-password/reset — STEP 3: confirm code + set new password.
 // Re-checks the subscriber gate so a code can never be redeemed on a non-paid account.
+// Mirrors the original two-step check: (1) email/code/newPassword must all be
+// present (truthy) → one combined message; (2) newPassword (stringified) must be
+// ≥6 chars. Coercion via String(...) matches the legacy handler so e.g. a numeric
+// `code` is still accepted. The shape stays loose on purpose.
+const forgotResetSchema = z
+  .object({
+    email: z.any(),
+    code: z.any(),
+    newPassword: z.any(),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.email || !v.code || !v.newPassword) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Preencha e-mail, código e nova senha.' });
+      return; // don't also fire the length message when something is missing
+    }
+    if (String(v.newPassword).length < 6) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    }
+  });
+
 router.post('/forgot-password/reset', async (req: Request, res: Response) => {
   try {
-    const { email, code, newPassword } = req.body || {};
-    if (!email || !code || !newPassword) return res.status(400).json({ error: 'Preencha e-mail, código e nova senha.' });
-    if (String(newPassword).length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    const body = parseOr400(req, res, forgotResetSchema);
+    if (!body) return;
+    const { email, code, newPassword } = body;
 
     const user = await prisma.user.findFirst({
       where: { email: { equals: String(email).trim(), mode: 'insensitive' } },
@@ -488,6 +556,31 @@ const emailRecoverLimiter = rateLimit({
 
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 
+// email-request: just a non-empty (trimmed) e-mail. Format intentionally NOT
+// enforced so the generic anti-enumeration response keeps working as today.
+const emailRequestSchema = z.object({
+  email: z
+    .preprocess((v) => String(v ?? '').trim(), z.string())
+    .refine((s) => s.length > 0, { message: 'Informe o e-mail.' }),
+});
+
+// email-reset: token (trimmed, non-empty) + newPassword (≥6 chars). Coercion
+// matches the legacy String(...) handling so the de-facto contract is preserved.
+const emailResetSchema = z
+  .object({
+    token: z.preprocess((v) => String(v ?? '').trim(), z.string()),
+    newPassword: z.preprocess((v) => String(v ?? ''), z.string()),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.token || !v.newPassword) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Token e nova senha são obrigatórios.' });
+      return;
+    }
+    if (v.newPassword.length < 6) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    }
+  });
+
 // POST /api/auth/forgot-password/email-request { email }
 // Sends a reset link IF the e-mail belongs to a paid customer. ALWAYS returns a
 // generic success (no user enumeration): the response is identical whether or
@@ -499,8 +592,11 @@ router.post('/forgot-password/email-request', emailRecoverLimiter, async (req: R
       message: 'Se houver uma conta com esse e-mail, enviamos um link para redefinir a senha.',
     });
   try {
-    const email = String(req.body?.email || '').trim();
-    if (!email) return res.status(400).json({ error: 'Informe o e-mail.' });
+    const parsed = emailRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Informe o e-mail.' });
+    }
+    const email = parsed.data.email;
 
     const user = await prisma.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
@@ -549,10 +645,10 @@ router.post('/forgot-password/email-request', emailRecoverLimiter, async (req: R
 // generic ("inválido ou expirado") so a probed token reveals nothing.
 router.post('/forgot-password/email-reset', emailRecoverLimiter, async (req: Request, res: Response) => {
   try {
-    const token = String(req.body?.token || '').trim();
-    const newPassword = String(req.body?.newPassword || '');
-    if (!token || !newPassword) return res.status(400).json({ error: 'Token e nova senha são obrigatórios.' });
-    if (newPassword.length < 6) return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    const body = parseOr400(req, res, emailResetSchema);
+    if (!body) return;
+    const token = body.token;
+    const newPassword = body.newPassword;
 
     const record = await prisma.passwordResetToken.findFirst({
       where: { tokenHash: sha256(token) },
@@ -820,7 +916,14 @@ router.post('/avatar', authMiddleware, (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    // Optimize the avatar in place: EXIF-rotate, fit within 512px, re-encode to
+    // webp. Failure-tolerant — on any sharp error we keep the original upload
+    // and serve it as-is (optimizeImage returns null, filename stays the same).
+    let filename = req.file.filename;
+    const optimized = await optimizeImage(req.file.path, { maxDim: 512, format: 'webp' });
+    if (optimized) filename = optimized.filename;
+
+    const avatarUrl = `/uploads/avatars/${filename}`;
 
     // Delete old avatar file if it was a local upload
     try {

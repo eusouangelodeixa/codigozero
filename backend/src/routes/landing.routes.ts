@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { env } from '../config/env';
 import crypto from 'crypto';
 import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
@@ -16,6 +17,32 @@ const LOJOU_KEY = env.LOJOU_API_KEY;
 // Código Zero product + plan on Lojou
 const PRODUCT_PID = env.LOJOU_PRODUCT_PID;
 const PLAN_ID = env.LOJOU_PLAN_ID;
+
+// "Parse or 400" — run a Zod schema against the body; on failure reply 400 with
+// the first issue's (PT) message and return null so the caller can bail.
+function parseOr400<T>(req: Request, res: Response, schema: z.ZodSchema<T>): T | null {
+  const result = schema.safeParse(req.body ?? {});
+  if (!result.success) {
+    const msg = result.error.issues[0]?.message || 'Dados inválidos';
+    res.status(400).json({ error: msg });
+    return null;
+  }
+  return result.data;
+}
+
+// Lead capture. Only `name` + `email` are required (matching the legacy
+// `!name || !email` guard) — everything else (phone/whatsapp/surveyAnswers/
+// affiliateCode/coproducerCode/phoneCode) passes through untouched and is still
+// handled loosely downstream. We deliberately do NOT format-check the e-mail or
+// type-narrow the optional fields, so no currently-accepted submission breaks.
+const leadSchema = z
+  .object({})
+  .passthrough()
+  .superRefine((b: any, ctx) => {
+    if (!b.name || !b.email) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nome e e-mail são obrigatórios.' });
+    }
+  });
 
 // Throttle lead capture: at most 5 submissions / 10 min per IP. Curbs bots
 // spamming the funnel form (and the Lojou order calls it triggers) without
@@ -35,11 +62,9 @@ const leadLimiter = rateLimit({
  */
 router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
   try {
-    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode, phoneCode } = req.body;
-
-    if (!name || !email) {
-      return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
-    }
+    const body = parseOr400(req, res, leadSchema);
+    if (!body) return;
+    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode, phoneCode } = body as any;
 
     const contactPhone = whatsapp || phone || `+258${Date.now().toString().slice(-9)}`;
 

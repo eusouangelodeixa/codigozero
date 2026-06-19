@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import { env } from '../config/env';
 import { sendPushToSuperAdmins, sendPushToUser } from './auth.routes';
 import {
@@ -35,6 +36,28 @@ import type Stripe from 'stripe';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// ── Loose, OBSERVABILITY-ONLY shape check for the (already signature-verified,
+// already normalized) Lojou payload. Everything is optional — this NEVER rejects
+// an event; on a mismatch we only log so an unexpected shape is visible without
+// risking a dropped real payment. The handler keeps doing its own field reads.
+const lojouEventShape = z
+  .object({
+    event: z.string().optional(),
+    data: z
+      .object({
+        order_number: z.unknown().optional(),
+        id: z.unknown().optional(),
+        order_id: z.unknown().optional(),
+        transaction_id: z.unknown().optional(),
+        amount: z.unknown().optional(),
+        customer: z.unknown().optional(),
+        product: z.unknown().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
 
 /**
  * Verify a Svix-signed webhook (Resend uses Svix). Recomputes the HMAC over
@@ -170,6 +193,13 @@ router.post('/lojou', async (req: Request, res: Response) => {
 
     if (!event || !data) {
       return res.status(400).json({ error: 'Invalid payload' });
+    }
+
+    // Loose shape sanity check — log-only, never blocks (Lojou shapes drift and
+    // we must not drop a real payment over an unexpected field).
+    const shape = lojouEventShape.safeParse({ event, data });
+    if (!shape.success) {
+      console.warn('[WEBHOOK] ⚠️ Lojou payload shape unexpected (continuing):', shape.error.issues[0]?.message);
     }
 
     const orderId = data.order_number || data.id || data.order_id || data.transaction_id;

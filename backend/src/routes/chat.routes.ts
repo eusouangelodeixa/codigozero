@@ -3,12 +3,26 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
+import { optimizeImage } from '../lib/image';
 import { sendPushToUser, sendPushToUsers } from './auth.routes';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// "Parse or 400" — run a Zod schema against the body; on failure reply 400 with
+// the first issue's (PT) message and return null so the route can bail early.
+function parseOr400<T>(req: AuthRequest, res: Response, schema: z.ZodSchema<T>): T | null {
+  const result = schema.safeParse(req.body ?? {});
+  if (!result.success) {
+    const msg = result.error.issues[0]?.message || 'Dados inválidos';
+    res.status(400).json({ error: msg });
+    return null;
+  }
+  return result.data;
+}
 
 // All chat routes require auth + active subscription
 router.use(authMiddleware);
@@ -112,13 +126,29 @@ const chatUpload = multer({
  * Uploads an image or audio clip, returns the URL to attach to a message.
  */
 router.post('/upload', (req: AuthRequest, res: Response) => {
-  chatUpload.single('file')(req, res, (err: any) => {
+  chatUpload.single('file')(req, res, async (err: any) => {
     if (err) return res.status(400).json({ error: err.message || 'Falha no upload' });
     if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
     const isAudio = req.file.mimetype.startsWith('audio/');
+
+    let filename = req.file.filename;
+    let mime = req.file.mimetype;
+
+    // Optimize images only (never touch audio): EXIF-rotate, fit within 1600px,
+    // re-encode to webp. Failure-tolerant — on any sharp error the original file
+    // and its mime are kept (optimizeImage returns null). The served URL still
+    // points at a real file on disk under /uploads/chat.
+    if (!isAudio) {
+      const optimized = await optimizeImage(req.file.path, { maxDim: 1600, format: 'webp' });
+      if (optimized) {
+        filename = optimized.filename;
+        mime = optimized.mime;
+      }
+    }
+
     res.json({
-      url: `/uploads/chat/${req.file.filename}`,
-      mime: req.file.mimetype,
+      url: `/uploads/chat/${filename}`,
+      mime,
       type: isAudio ? 'audio' : 'image',
     });
   });
@@ -310,6 +340,44 @@ router.get('/stream', async (req: AuthRequest, res: Response) => {
   req.on('close', cleanup);
 });
 
+// Community message validation. This encodes EXACTLY the same reject rules the
+// handler used to apply inline (content ≤2000; media needs a /uploads/chat/ URL;
+// polls need a question + 2–12 options; text needs non-empty content). `type` is
+// coerced — an unknown/missing type becomes 'text' (never rejected), matching
+// today. The schema is a passthrough so the handler's downstream normalization
+// (trim/slice/clamp + mention/reply handling) is preserved verbatim.
+const communityMessageSchema = z
+  .object({})
+  .passthrough()
+  .superRefine((b: any, ctx) => {
+    const type: 'text' | 'image' | 'audio' | 'poll' =
+      ['image', 'audio', 'poll'].includes(b.type) ? b.type : 'text';
+    const content = typeof b.content === 'string' ? b.content.trim() : '';
+
+    if (content.length > 2000) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mensagem muito longa (máx 2000 caracteres)' });
+      return;
+    }
+
+    if (type === 'image' || type === 'audio') {
+      if (typeof b.mediaUrl !== 'string' || !b.mediaUrl.startsWith('/uploads/chat/')) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mídia inválida' });
+      }
+    } else if (type === 'poll') {
+      const q = typeof b.poll?.question === 'string' ? b.poll.question.trim() : '';
+      const opts = Array.isArray(b.poll?.options)
+        ? b.poll.options.map((o: any) => String(o ?? '').trim()).filter(Boolean)
+        : [];
+      if (!q || opts.length < 2) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enquete precisa de pergunta e ao menos 2 opções' });
+      } else if (opts.length > 12) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Máximo de 12 opções' });
+      }
+    } else if (!content) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mensagem vazia' });
+    }
+  });
+
 /**
  * POST /api/chat/community
  * Body: { content?, replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec?,
@@ -318,6 +386,7 @@ router.get('/stream', async (req: AuthRequest, res: Response) => {
  */
 router.post('/community', async (req: AuthRequest, res: Response) => {
   try {
+    if (!parseOr400(req, res, communityMessageSchema)) return;
     const b = req.body || {};
     const type: 'text' | 'image' | 'audio' | 'poll' =
       ['image', 'audio', 'poll'].includes(b.type) ? b.type : 'text';
@@ -437,14 +506,23 @@ router.post('/community', async (req: AuthRequest, res: Response) => {
 // PIN / UNPIN  (admin only, community only)
 // ═══════════════════════════════════════
 
+// duration must map to a known window. Mirrors the original String(...||'')
+// coercion + PIN_DURATIONS lookup so the exact same values are accepted and the
+// same PT error is returned. Runs after the admin-role check (precedence kept).
+const pinSchema = z.object({}).passthrough().superRefine((b: any, ctx) => {
+  if (!PIN_DURATIONS[String(b.duration || '')]) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Duração inválida (use 1h, 1d, 7d ou 30d)' });
+  }
+});
+
 /**
  * POST /api/chat/messages/:id/pin  { duration: "1h" | "1d" | "7d" | "30d" }
  */
 router.post('/messages/:id/pin', async (req: AuthRequest, res: Response) => {
   try {
     if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Apenas administradores podem fixar mensagens' });
+    if (!parseOr400(req, res, pinSchema)) return;
     const hours = PIN_DURATIONS[String(req.body?.duration || '')];
-    if (!hours) return res.status(400).json({ error: 'Duração inválida (use 1h, 1d, 7d ou 30d)' });
 
     const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true, channel: true } });
     if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
@@ -487,8 +565,16 @@ router.delete('/messages/:id/pin', async (req: AuthRequest, res: Response) => {
  * Single-choice polls keep one vote (prior votes are replaced); multi-select
  * keeps the full set. An empty array clears the viewer's vote.
  */
+// optionIds documented as string[]. Kept non-rejecting on purpose: a missing or
+// non-array value normalizes to undefined → handled as "clear vote" exactly like
+// before (no new 400s). The handler still filters non-string elements.
+const voteSchema = z.object({
+  optionIds: z.array(z.any()).optional().catch(undefined),
+});
 router.post('/polls/:id/vote', async (req: AuthRequest, res: Response) => {
   try {
+    const voteBody = parseOr400(req, res, voteSchema);
+    if (!voteBody) return;
     const poll = await prisma.poll.findUnique({
       where: { id: req.params.id },
       include: { options: { select: { id: true } } },
@@ -498,8 +584,8 @@ router.post('/polls/:id/vote', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Esta enquete já encerrou' });
     }
 
-    const optionIds: string[] = Array.isArray(req.body?.optionIds)
-      ? req.body.optionIds.filter((x: any) => typeof x === 'string')
+    const optionIds: string[] = Array.isArray(voteBody.optionIds)
+      ? voteBody.optionIds.filter((x: any) => typeof x === 'string')
       : [];
     const valid = new Set(poll.options.map((o) => o.id));
     const chosen = [...new Set(optionIds)].filter((id) => valid.has(id));
@@ -634,6 +720,31 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Support message validation. Same content/media rules as community, minus
+// polls (support is text + image/audio only). `type` coerces unknown→'text'.
+// The role-dependent `userId` check stays in the handler (it depends on req.user,
+// not just the body) and runs first, preserving the original 400 precedence.
+const supportMessageSchema = z
+  .object({})
+  .passthrough()
+  .superRefine((b: any, ctx) => {
+    const type: 'text' | 'image' | 'audio' = ['image', 'audio'].includes(b.type) ? b.type : 'text';
+    const content = typeof b.content === 'string' ? b.content.trim() : '';
+
+    if (content.length > 2000) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mensagem muito longa (máx 2000 caracteres)' });
+      return;
+    }
+
+    if (type === 'image' || type === 'audio') {
+      if (typeof b.mediaUrl !== 'string' || !b.mediaUrl.startsWith('/uploads/chat/')) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mídia inválida' });
+      }
+    } else if (!content) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mensagem vazia' });
+    }
+  });
+
 /**
  * POST /api/chat/support
  * Body: { content?, userId?(admin), replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec? }
@@ -645,6 +756,7 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
     const isAdmin = isAdminRole(req.user!.role);
     const targetUserId = isAdmin ? b.userId : req.user!.id;
     if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
+    if (!parseOr400(req, res, supportMessageSchema)) return;
 
     const channel = `support_${targetUserId}`;
     const type: 'text' | 'image' | 'audio' = ['image', 'audio'].includes(b.type) ? b.type : 'text';

@@ -290,10 +290,12 @@ router.post('/community', async (req: AuthRequest, res: Response) => {
       const others = await prisma.user.findMany({ where: { id: { not: req.user!.id }, isActive: true }, select: { id: true } });
       const otherIds = others.map((u) => u.id);
       if (mentionsAll) {
-        await sendPushToUsers(otherIds, { title: `📣 ${senderName} marcou @todos`, body: preview, url: '/chat' }, 'community');
+        // @todos bypasses the community mute → category 'mention' (always delivered).
+        await sendPushToUsers(otherIds, { title: `📣 ${senderName} marcou @todos`, body: preview, url: '/chat' }, 'mention');
       } else if (mentionIds.length) {
         const mentionSet = new Set(mentionIds);
-        await sendPushToUsers(mentionIds, { title: `💬 ${senderName} mencionou você`, body: preview, url: '/chat' }, 'community');
+        // Mentioned members get a higher-signal push that bypasses the community mute.
+        await sendPushToUsers(mentionIds, { title: `💬 ${senderName} mencionou você`, body: preview, url: '/chat' }, 'mention');
         await sendPushToUsers(otherIds.filter((id) => !mentionSet.has(id)), { title: `💬 ${senderName} na Comunidade`, body: preview, url: '/chat' }, 'community');
       } else {
         await sendPushToUsers(otherIds, { title: `💬 ${senderName} na Comunidade`, body: preview, url: '/chat' }, 'community');

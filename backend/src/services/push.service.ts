@@ -119,9 +119,13 @@ async function sendToSubscriptions(
  * Pass one to sendPushToUser to honour the user's preferences; omit it for
  * mandatory/system-internal pushes (e.g. superadmin alerts).
  */
-export type NotificationCategory = 'community' | 'promotions' | 'system' | 'expiration';
+export type NotificationCategory = 'community' | 'promotions' | 'system' | 'expiration' | 'mention';
 
-const CATEGORY_FIELD: Record<NotificationCategory, 'notifyCommunity' | 'notifyPromotions' | 'notifySystem' | 'notifyExpiration'> = {
+// Categories the member can opt out of (each maps to a User flag). Categories
+// NOT listed here are ALWAYS delivered, ignoring preferences — e.g. 'mention',
+// so a direct @mention or @todos reaches the member even if they muted the
+// community channel.
+const CATEGORY_FIELD: Partial<Record<NotificationCategory, 'notifyCommunity' | 'notifyPromotions' | 'notifySystem' | 'notifyExpiration'>> = {
   community: 'notifyCommunity',
   promotions: 'notifyPromotions',
   system: 'notifySystem',
@@ -129,13 +133,14 @@ const CATEGORY_FIELD: Record<NotificationCategory, 'notifyCommunity' | 'notifyPr
 };
 
 async function categoryAllowed(userId: string, category?: NotificationCategory): Promise<boolean> {
-  if (!category) return true;
+  const field = category ? CATEGORY_FIELD[category] : undefined;
+  if (!field) return true; // no category, or an always-on category like 'mention'
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { [CATEGORY_FIELD[category]]: true } as any,
+    select: { [field]: true } as any,
   });
   // Default to allowed when the row/flag can't be read.
-  return user ? (user as any)[CATEGORY_FIELD[category]] !== false : true;
+  return user ? (user as any)[field] !== false : true;
 }
 
 export async function sendPushToUser(
@@ -159,9 +164,10 @@ export async function sendPushToUsers(
     return { attempted: 0, delivered: 0, removed: 0, failed: 0, errors: [] };
   }
   let ids = userIds;
-  if (category) {
+  const field = category ? CATEGORY_FIELD[category] : undefined;
+  if (field) {
     const opted = await prisma.user.findMany({
-      where: { id: { in: userIds }, [CATEGORY_FIELD[category]]: true } as any,
+      where: { id: { in: userIds }, [field]: true } as any,
       select: { id: true },
     });
     ids = opted.map((u) => u.id);
@@ -175,9 +181,10 @@ export async function sendPushBroadcast(
   payload: PushPayload,
   category?: NotificationCategory,
 ): Promise<PushResult> {
+  const field = category ? CATEGORY_FIELD[category] : undefined;
   const subs = await prisma.pushSubscription.findMany(
-    category
-      ? { where: { user: { [CATEGORY_FIELD[category]]: true } as any } }
+    field
+      ? { where: { user: { [field]: true } as any } }
       : undefined,
   );
   return sendToSubscriptions(subs, payload, 'broadcast');

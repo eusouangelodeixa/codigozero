@@ -137,11 +137,22 @@ export interface AppShellUser {
   isPartner?: boolean;
   // True when the embedded Komunika tenant is provisioned + active for the user.
   komunikaActive?: boolean;
+  // Offboarded partner: may ONLY access the withdrawal screen (/socios).
+  withdrawOnly?: boolean;
 }
 
 const SociosNavItem: NavItem = {
   href: "/socios",
   label: "Sócios",
+  icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+    <Percent size={size} strokeWidth={1.6} className={className} />
+  ),
+};
+
+// Sole nav for offboarded partners (withdrawOnly): only the saque screen.
+const SaqueNavItem: NavItem = {
+  href: "/socios",
+  label: "Meu saque",
   icon: ({ size = 18, className }: { size?: number; className?: string }) => (
     <Percent size={size} strokeWidth={1.6} className={className} />
   ),
@@ -192,11 +203,17 @@ export function AppShell({
     return PAGE_TITLES[pathname] || "Código Zero";
   }, [pathname]);
 
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  // Offboarded partner: lock the whole app down to the withdrawal screen.
+  const withdrawOnly = !!user?.withdrawOnly;
+  const isAdmin = !withdrawOnly && (user?.role === "admin" || user?.role === "superadmin");
 
   // Inject conditional nav: "Sócios" for revenue-share partners, plus the
   // "Ferramentas" hub (Komunika + future tools), shown to every member.
+  // For withdrawOnly users we collapse everything to a single "Meu saque" link.
   const navGroups = useMemo(() => {
+    if (withdrawOnly) {
+      return [{ label: "Conta", items: [SaqueNavItem] }];
+    }
     let groups: NavGroup[] = NAV_GROUPS;
     if (user?.isPartner) {
       groups = groups.map((g) =>
@@ -210,7 +227,7 @@ export function AppShell({
         ? [...groups, ferramentas]
         : [...groups.slice(0, contaIdx), ferramentas, ...groups.slice(contaIdx)];
     return groups;
-  }, [user?.isPartner]);
+  }, [user?.isPartner, withdrawOnly]);
 
   const firstName = user?.name?.split(" ")[0] || "Membro";
   const initial = (user?.name?.charAt(0) || "?").toUpperCase();
@@ -334,6 +351,7 @@ export function AppShell({
       </div>
 
       {/* ───────── Mobile bottom-nav ───────── */}
+      {!withdrawOnly && (
       <nav className={styles.bottomNav} aria-label="Navegação rápida">
         <div className={styles.bottomNavInner}>
           {BOTTOM_NAV.map((item) => {
@@ -364,6 +382,7 @@ export function AppShell({
           </button>
         </div>
       </nav>
+      )}
 
       {/* ───────── Mobile drawer (full nav) ───────── */}
       {menuOpen && (

@@ -196,7 +196,14 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
     // user — gates the "Abrir Komunika" SSO button on the frontend.
     const komunikaActive = !!user.komunikaCompanyId && !user.komunikaDeprovisionedAt;
 
-    return res.json({ user: { ...user, komunikaActive } });
+    // Offboarded sócio (withdraw-only): the frontend uses this to confine the
+    // user to the saque screen. Cheap indexed lookup; null for ~all users.
+    const pa = await prisma.partnerAccount.findUnique({
+      where: { userId: user.id },
+      select: { withdrawOnly: true },
+    });
+
+    return res.json({ user: { ...user, komunikaActive, withdrawOnly: !!pa?.withdrawOnly } });
   } catch (error) {
     console.error('[AUTH] Get me error:', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });

@@ -10,6 +10,8 @@ interface SocioUser {
   email: string;
   role: string;
   avatarUrl?: string;
+  // Offboarded partner: AppShell collapses nav to the withdrawal screen only.
+  withdrawOnly?: boolean;
 }
 
 export default function SociosLayout({ children }: { children: React.ReactNode }) {
@@ -46,7 +48,10 @@ export default function SociosLayout({ children }: { children: React.ReactNode }
   if (loading || !user) return <AppShellLoading />;
 
   return (
-    <AppShell user={{ ...user, isPartner: true }} onLogout={() => { localStorage.clear(); router.replace("/login"); }}>
+    <AppShell
+      user={{ ...user, isPartner: true, withdrawOnly: !!user.withdrawOnly }}
+      onLogout={() => { localStorage.clear(); router.replace("/login"); }}
+    >
       {children}
     </AppShell>
   );

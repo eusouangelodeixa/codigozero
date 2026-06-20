@@ -771,6 +771,11 @@ model PartnerAccount {
   // partners should be 100; the admin UI surfaces the running total.
   sharePct      Float
   enabled       Boolean  @default(true)
+  // Offboarded sócio: set enabled=false (leaves the commission pool, stops new
+  // commissions, keeps the 100% sum across the remaining partners) + set
+  // withdrawOnly=true (the partner middleware still lets them reach ONLY their
+  // saque screen to cash out the remaining balance; everything else is blocked).
+  withdrawOnly  Boolean  @default(false)
   payoutMethod  String?              // "mpesa" | "emola"
   payoutTarget  String?              // phone number to receive funds
   notifySale    Boolean  @default(true)

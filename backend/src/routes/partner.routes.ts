@@ -35,12 +35,14 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
         roleLabel: account.roleLabel,
         sharePct: account.sharePct,
         enabled: account.enabled,
+        withdrawOnly: account.withdrawOnly,
         payoutMethod: account.payoutMethod,
         payoutTarget: account.payoutTarget,
         createdAt: account.createdAt,
       },
       balance,
       rules: PARTNER_RULES,
+      withdrawOnly: account.withdrawOnly,
     });
   } catch (error) {
     console.error('[PARTNER] me error:', error);

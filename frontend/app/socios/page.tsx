@@ -73,6 +73,8 @@ export default function SociosPage() {
   const [rules, setRules] = useState<Rules | null>(null);
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  // Offboarded partner: only the balance + saque form, no ledger/history.
+  const [withdrawOnly, setWithdrawOnly] = useState(false);
 
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [amountInput, setAmountInput] = useState("");
@@ -96,12 +98,17 @@ export default function SociosPage() {
       setRules(me.rules);
       setMethod(me.account?.payoutMethod || "mpesa");
       setTarget(me.account?.payoutTarget || "");
-      const [c, w] = await Promise.all([
-        fetch(`${API}/api/partner/commissions`, { headers: hdr() }).then((r) => r.json()),
-        fetch(`${API}/api/partner/withdrawals`, { headers: hdr() }).then((r) => r.json()),
-      ]);
-      setCommissions(c.commissions || []);
-      setWithdrawals(w.withdrawals || []);
+      const isWithdrawOnly = !!me.withdrawOnly;
+      setWithdrawOnly(isWithdrawOnly);
+      // Offboarded partners don't see the ledger/history, so skip those fetches.
+      if (!isWithdrawOnly) {
+        const [c, w] = await Promise.all([
+          fetch(`${API}/api/partner/commissions`, { headers: hdr() }).then((r) => r.json()),
+          fetch(`${API}/api/partner/withdrawals`, { headers: hdr() }).then((r) => r.json()),
+        ]);
+        setCommissions(c.commissions || []);
+        setWithdrawals(w.withdrawals || []);
+      }
     } catch {
       toast.error("Erro ao carregar painel de sócio");
     }
@@ -292,6 +299,7 @@ export default function SociosPage() {
       )}
 
       {/* ── Commissions ledger (real-time) ── */}
+      {!withdrawOnly && (
       <Card padding="lg">
         <h3 className={styles.sectionTitle}>Comissões ({commissions.length})</h3>
         {commissions.length === 0 ? (
@@ -327,9 +335,10 @@ export default function SociosPage() {
           </table>
         )}
       </Card>
+      )}
 
       {/* ── Withdrawal history ── */}
-      {withdrawals.length > 0 && (
+      {!withdrawOnly && withdrawals.length > 0 && (
         <Card padding="lg">
           <h3 className={styles.sectionTitle}>Histórico de saques</h3>
           <table className={styles.table}>

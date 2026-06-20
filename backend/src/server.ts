@@ -23,6 +23,8 @@ import coproducerRoutes from './routes/coproducer.routes';
 import partnerRoutes from './routes/partner.routes';
 import partnerAdminRoutes from './routes/partner.admin.routes';
 import komunikaRoutes from './routes/komunika.routes';
+import { authMiddleware } from './middlewares/auth.middleware';
+import { blockWithdrawOnly } from './middlewares/withdrawOnly.guard';
 import { startCronJobs } from './jobs/cron';
 import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
 
@@ -92,21 +94,25 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ── Routes ──
+// Member-only feature routes: prepend authMiddleware + blockWithdrawOnly so an
+// offboarded "withdraw-only" sócio (role demoted to member) is 403'd here and
+// can ONLY reach /api/partner/* (their saque) + /api/auth. (The routers also run
+// authMiddleware internally — harmless; the guard just needs req.user first.)
 app.use('/api/auth', authRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/radar', radarRoutes);
-app.use('/api/cofre', cofreRoutes);
-app.use('/api/forja', forjaRoutes);
-app.use('/api/qg', qgRoutes);
+app.use('/api/dashboard', authMiddleware, blockWithdrawOnly, dashboardRoutes);
+app.use('/api/radar', authMiddleware, blockWithdrawOnly, radarRoutes);
+app.use('/api/cofre', authMiddleware, blockWithdrawOnly, cofreRoutes);
+app.use('/api/forja', authMiddleware, blockWithdrawOnly, forjaRoutes);
+app.use('/api/qg', authMiddleware, blockWithdrawOnly, qgRoutes);
 app.use('/api/landing', landingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/coproducers', coproducerAdminRoutes);
 app.use('/api/coproducer', coproducerRoutes);
 app.use('/api/partner', partnerRoutes);
 app.use('/api/admin', partnerAdminRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/affiliate', affiliateRoutes);
-app.use('/api/komunika', komunikaRoutes);
+app.use('/api/chat', authMiddleware, blockWithdrawOnly, chatRoutes);
+app.use('/api/affiliate', authMiddleware, blockWithdrawOnly, affiliateRoutes);
+app.use('/api/komunika', authMiddleware, blockWithdrawOnly, komunikaRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // ── Health Check ──

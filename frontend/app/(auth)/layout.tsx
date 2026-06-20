@@ -7,6 +7,7 @@ import { subscribeToPush } from "@/lib/pushNotifications";
 interface User extends AppShellUser {
   subscriptionStatus?: string;
   hasCompletedOnboarding?: boolean;
+  withdrawOnly?: boolean;
 }
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -24,7 +25,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     }
 
     if (cached) {
-      try { setUser(JSON.parse(cached)); } catch {}
+      try {
+        const parsed = JSON.parse(cached) as User;
+        setUser(parsed);
+        // Offboarded partner: bounce off any member page immediately, even
+        // before /api/auth/me resolves (avoids a flash of restricted UI).
+        if (parsed?.withdrawOnly) {
+          router.replace("/socios");
+        }
+      } catch {}
     }
     setReady(true);
 
@@ -45,6 +54,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         if (data?.user) {
           setUser(data.user);
           localStorage.setItem("cz_user", JSON.stringify(data.user));
+          // Source of truth: GET /api/auth/me → user.withdrawOnly. An
+          // offboarded partner may only use the withdrawal screen (/socios).
+          if (data.user.withdrawOnly) {
+            router.replace("/socios");
+            return;
+          }
           subscribeToPush().catch(() => {});
           // Non-blocking: reveal the "Sócios" link for revenue-share partners.
           fetch(`${API_URL}/api/partner/me`, { headers: { Authorization: `Bearer ${token}` } })

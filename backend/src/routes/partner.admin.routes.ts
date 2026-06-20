@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import {
   getActivePartnerShareTotal,
   markWithdrawalPaid,
+  autoOffboardIfFullyPaid,
   rejectWithdrawal,
   sendPartnerWelcome,
 } from '../services/partner.service';
@@ -275,7 +276,10 @@ router.post('/partner-withdrawals/:id/approve', async (req: AuthRequest, res: Re
       return res.status(400).json({ error: `Saque já está ${wd.status}` });
     }
     const updated = await markWithdrawalPaid(wd.id, req.user!.id, req.body?.notes);
-    res.json({ success: true, withdrawal: updated });
+    // Auto-offboard: if this was a withdraw-only sócio cashing out their last
+    // balance, deactivate + anonymize the account now (non-blocking).
+    const off = await autoOffboardIfFullyPaid(wd.partnerId).catch(() => ({ anonymized: false }));
+    res.json({ success: true, withdrawal: updated, offboarded: off.anonymized });
   } catch (error) {
     console.error('[ADMIN/PARTNERS] withdrawal approve error:', error);
     res.status(500).json({ error: 'Erro ao aprovar saque' });

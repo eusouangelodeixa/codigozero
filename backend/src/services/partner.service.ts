@@ -280,6 +280,65 @@ export async function markWithdrawalPaid(id: string, processedBy: string, notes?
   });
 }
 
+/**
+ * Auto-offboard a withdraw-only sócio once they've fully cashed out. Called
+ * right after a withdrawal is marked paid. Anonymizes + deactivates ONLY when:
+ *   • the partner is in withdrawOnly mode (an offboarded sócio), AND
+ *   • nothing is left to pay (available + pending ≈ 0), AND
+ *   • there are no other pending payouts queued.
+ * The financial records (PartnerCommission / PartnerWithdrawal, incl. the
+ * payoutTarget) are PRESERVED for accounting — only the User's login identity
+ * (name/email/phone/avatar) is scrubbed and isActive flipped off.
+ *
+ * Reversible: reactivate isActive to re-enable; the original name/email/phone
+ * are logged once here at scrub time. Fully non-blocking — any error is
+ * swallowed so it can never break the payout approval.
+ */
+export async function autoOffboardIfFullyPaid(
+  partnerId: string,
+): Promise<{ anonymized: boolean; reason?: string }> {
+  try {
+    const account = await prisma.partnerAccount.findUnique({
+      where: { id: partnerId },
+      include: { user: { select: { id: true, name: true, email: true, phone: true, isActive: true } } },
+    });
+    if (!account || !account.withdrawOnly) return { anonymized: false, reason: 'not-withdraw-only' };
+    if (!account.user || !account.user.isActive) return { anonymized: false, reason: 'already-inactive' };
+
+    const bal = await getPartnerBalance(partnerId);
+    if (bal.available > 0.01 || bal.pending > 0.01) return { anonymized: false, reason: 'balance-remaining' };
+
+    const otherPending = await prisma.partnerWithdrawal.count({ where: { partnerId, status: 'pending' } });
+    if (otherPending > 0) return { anonymized: false, reason: 'pending-withdrawals' };
+
+    const u = account.user;
+    // Audit trail: log the originals once before scrubbing (recovery path).
+    console.warn(
+      `[OFFBOARD] Anonimizando sócio cashed-out partnerId=${partnerId} userId=${u.id} | original name="${u.name}" email="${u.email}" phone="${u.phone}"`,
+    );
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: u.id },
+        data: {
+          isActive: false,
+          name: 'Sócio removido',
+          email: `removed-${u.id}@czero.invalid`,
+          phone: `removed-${u.id}`,
+          avatarUrl: null,
+        },
+      }),
+      prisma.affiliateAccount.updateMany({ where: { userId: u.id }, data: { enabled: false } }),
+    ]);
+
+    console.warn(`[OFFBOARD] ✅ Sócio anonimizado e desativado userId=${u.id}`);
+    return { anonymized: true };
+  } catch (e: any) {
+    console.error('[OFFBOARD] auto-offboard error (non-blocking):', e?.message || e);
+    return { anonymized: false, reason: 'error' };
+  }
+}
+
 /** Admin rejects a withdrawal — releases the consumed commissions back. */
 export async function rejectWithdrawal(id: string, processedBy: string, notes?: string) {
   return prisma.$transaction(async (tx) => {

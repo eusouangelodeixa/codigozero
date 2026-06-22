@@ -16,6 +16,7 @@ interface TooltipPayloadItem {
   dataKey?: string | number;
   value?: number | string;
   name?: string;
+  payload?: RevenueDatum; // the full data row for this point
 }
 
 interface ChartTooltipProps {
@@ -37,7 +38,9 @@ const PERIOD_LABELS: Record<Period, string> = {
 export interface RevenueDatum {
   date: string;
   amount: number;
-  count?: number;
+  count?: number;        // bars (renewal revenue)
+  newCount?: number;     // # of new sales that day (tooltip)
+  renewalCount?: number; // # of renewals that day (tooltip)
 }
 
 interface RevenueChartProps {
@@ -79,15 +82,22 @@ function ChartTooltip({
 }: ChartTooltipProps & { fmt: (n: number) => string }) {
   if (!active || !payload?.length) return null;
   const amountEntry = payload.find((p) => p.dataKey === "amount");
-  const countEntry  = payload.find((p) => p.dataKey === "count");
   const amount = typeof amountEntry?.value === "number" ? amountEntry.value : undefined;
-  const count  = typeof countEntry?.value  === "number" ? countEntry.value  : undefined;
+  // Real transaction counts ride on the full datum (not rendered as series).
+  const row = payload[0]?.payload;
+  const newCount = typeof row?.newCount === "number" ? row.newCount : undefined;
+  const renewalCount = typeof row?.renewalCount === "number" ? row.renewalCount : undefined;
+  const hasCounts = newCount !== undefined || renewalCount !== undefined;
   return (
     <div className={styles.tooltip}>
       <span className={styles.tooltipLabel}>{label}</span>
       <span className={styles.tooltipValue}>{typeof amount === "number" ? fmt(amount) : "—"}</span>
-      {typeof count === "number" && (
-        <span className={styles.tooltipSub}>{count} venda{count === 1 ? "" : "s"}</span>
+      {hasCounts && (
+        <span className={styles.tooltipSub}>
+          {newCount ?? 0} nova{(newCount ?? 0) === 1 ? "" : "s"}
+          {" · "}
+          {renewalCount ?? 0} renovaç{(renewalCount ?? 0) === 1 ? "ão" : "ões"}
+        </span>
       )}
     </div>
   );

@@ -78,7 +78,7 @@ interface CoproducerOpt {
 interface FinanceData {
   window: { period: string; from: string; to: string };
   metrics: Metrics;
-  chartData: { date: string; amount: number; new: number; renewal: number }[];
+  chartData: { date: string; amount: number; new: number; renewal: number; newCount: number; renewalCount: number }[];
   transactions: { total: number; page: number; limit: number; items: Tx[] };
 }
 
@@ -311,6 +311,9 @@ export default function AdminFinance() {
         amount: d.amount,
         // RevenueChart treats `count` as bars — repurpose for renewals split
         count: d.renewal,
+        // Real transaction counts for the tooltip (new vs renewal).
+        newCount: d.newCount,
+        renewalCount: d.renewalCount,
       })),
     [data],
   );

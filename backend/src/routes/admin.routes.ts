@@ -438,7 +438,7 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     // ── Chart data ─────────────────────────────────────────────────────
     const days = Math.ceil(windowMs / (24 * 60 * 60 * 1000));
     const groupByMonth = period === '12m' || days > 90;
-    const chartDataMap = new Map<string, { new: number; renewal: number }>();
+    const chartDataMap = new Map<string, { new: number; renewal: number; newCount: number; renewalCount: number }>();
 
     if (groupByMonth) {
       const monthsBack = Math.min(24, Math.max(2, Math.ceil(days / 30)));
@@ -446,15 +446,15 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         chartDataMap.set(
           d.toLocaleString('pt-MZ', { month: 'short', year: '2-digit' }),
-          { new: 0, renewal: 0 },
+          { new: 0, renewal: 0, newCount: 0, renewalCount: 0 },
         );
       }
       currentTransactions.forEach((t) => {
         const key = new Date(t.createdAt).toLocaleString('pt-MZ', { month: 'short', year: '2-digit' });
         if (chartDataMap.has(key)) {
           const slot = chartDataMap.get(key)!;
-          if (t.isRenewal) slot.renewal += t.amount;
-          else slot.new += t.amount;
+          if (t.isRenewal) { slot.renewal += t.amount; slot.renewalCount += 1; }
+          else { slot.new += t.amount; slot.newCount += 1; }
         }
       });
     } else {
@@ -463,14 +463,14 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
         const d = new Date(endDate);
         d.setDate(d.getDate() - i);
         const key = d.toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        chartDataMap.set(key, { new: 0, renewal: 0 });
+        chartDataMap.set(key, { new: 0, renewal: 0, newCount: 0, renewalCount: 0 });
       }
       currentTransactions.forEach((t) => {
         const key = new Date(t.createdAt).toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
         if (chartDataMap.has(key)) {
           const slot = chartDataMap.get(key)!;
-          if (t.isRenewal) slot.renewal += t.amount;
-          else slot.new += t.amount;
+          if (t.isRenewal) { slot.renewal += t.amount; slot.renewalCount += 1; }
+          else { slot.new += t.amount; slot.newCount += 1; }
         }
       });
     }
@@ -479,6 +479,8 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       amount: v.new + v.renewal,
       new: v.new,
       renewal: v.renewal,
+      newCount: v.newCount,
+      renewalCount: v.renewalCount,
     }));
 
     // ── Paginated transactions list (windowed + searched + source) ─────

@@ -652,13 +652,18 @@ export function startCronJobs() {
 
       const diffMs = target.getTime() - Date.now();
 
+      // PAID members the mentoria reminder may reach. isActive alone is NOT a
+      // subscriber gate — leads (never-paid form signups) are created with
+      // role=member + isActive=true + subscriptionStatus='lead' (see
+      // auth.routes.ts), so without this status gate the reminder blasts the
+      // entire cold lead base. Includes grace_period/overdue (paid but late) so
+      // a lapsing member still gets the live-event nudge; excludes 'lead' and
+      // 'canceled' (PAID_STATUSES minus canceled).
+      const MENTORIA_STATUSES = ['active', 'grace_period', 'overdue'];
+
       const notifyAll = async (title: string, body: string) => {
-        // PAID members only. isActive alone is NOT a subscriber gate — leads
-        // (never-paid form signups) are created with role=member + isActive=true
-        // (see auth.routes.ts), so without subscriptionStatus/role this blasts the
-        // entire cold lead base. Mirror the inactivity/PWA crons' filter.
         const users = await prisma.user.findMany({
-          where: { subscriptionStatus: 'active', isActive: true, role: 'member' },
+          where: { subscriptionStatus: { in: MENTORIA_STATUSES }, isActive: true, role: 'member' },
           select: { id: true },
         });
         // No category → bypasses notify* preferences (always delivered).
@@ -678,11 +683,11 @@ export function startCronJobs() {
       const gapFillWhatsApp = async (phase: '30min' | 'start') => {
         if (!cfg.mentoriaLink) return; // already guarded above, but be defensive
         try {
-          // PAID members only (subscriptionStatus + role): isActive=true alone
-          // includes never-paid leads (see auth.routes.ts), which is exactly how
-          // the cold lead base got messaged. Same gate as recipients + count.
+          // Same paid-member gate as the push (MENTORIA_STATUSES + role): without
+          // it, isActive=true pulls in never-paid leads — exactly how the cold
+          // lead base got messaged. Shared by recipients + count below.
           const memberFilter = {
-            subscriptionStatus: 'active' as const,
+            subscriptionStatus: { in: MENTORIA_STATUSES },
             isActive: true,
             role: 'member' as const,
             pushSubscriptions: { none: {} }, // no push → would miss the reminder

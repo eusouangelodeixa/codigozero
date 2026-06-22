@@ -653,7 +653,14 @@ export function startCronJobs() {
       const diffMs = target.getTime() - Date.now();
 
       const notifyAll = async (title: string, body: string) => {
-        const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
+        // PAID members only. isActive alone is NOT a subscriber gate — leads
+        // (never-paid form signups) are created with role=member + isActive=true
+        // (see auth.routes.ts), so without subscriptionStatus/role this blasts the
+        // entire cold lead base. Mirror the inactivity/PWA crons' filter.
+        const users = await prisma.user.findMany({
+          where: { subscriptionStatus: 'active', isActive: true, role: 'member' },
+          select: { id: true },
+        });
         // No category → bypasses notify* preferences (always delivered).
         await sendPushToUsers(users.map((u) => u.id), { title, body, url: '/qg' });
       };
@@ -671,21 +678,25 @@ export function startCronJobs() {
       const gapFillWhatsApp = async (phase: '30min' | 'start') => {
         if (!cfg.mentoriaLink) return; // already guarded above, but be defensive
         try {
+          // PAID members only (subscriptionStatus + role): isActive=true alone
+          // includes never-paid leads (see auth.routes.ts), which is exactly how
+          // the cold lead base got messaged. Same gate as recipients + count.
+          const memberFilter = {
+            subscriptionStatus: 'active' as const,
+            isActive: true,
+            role: 'member' as const,
+            pushSubscriptions: { none: {} }, // no push → would miss the reminder
+            phone: { not: '' },
+          };
           const recipients = await prisma.user.findMany({
-            where: {
-              isActive: true,
-              pushSubscriptions: { none: {} }, // no push → would miss the reminder
-              phone: { not: '' },
-            },
+            where: memberFilter,
             select: { id: true, name: true, phone: true },
             take: WHATSAPP_CAP,
           });
 
           // Surface (don't silently drop) when the audience exceeds the cap, so
           // we know if it ever starts to spiral.
-          const total = await prisma.user.count({
-            where: { isActive: true, pushSubscriptions: { none: {} }, phone: { not: '' } },
-          });
+          const total = await prisma.user.count({ where: memberFilter });
           if (total > WHATSAPP_CAP) {
             console.warn(`[CRON] 🎥 Mentoria WhatsApp gap-fill (${phase}): audience ${total} exceeds cap ${WHATSAPP_CAP}; sending first ${WHATSAPP_CAP} this run.`);
           }

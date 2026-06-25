@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
 import { sendPushToSuperAdmins, sendPushToUser, sendPushToUsers } from '../routes/auth.routes';
-import { lojouService } from '../services/lojou.service';
 import { env } from '../config/env';
 import { processDueDispatches, processDispatch } from '../services/dispatch.service';
 import { transitionDuePending } from '../services/affiliate.service';
@@ -159,51 +158,26 @@ export function startCronJobs() {
         let message = '';
         const name = user.name.split(' ')[0];
 
-        // Resolve which product to send the renewal for: if the user was
-        // referred by a coproducer, use *their* product/plan so the
-        // renewal sale gets attributed (and paid out) correctly. Falls
-        // back to the principal pid when no coproducer attribution.
-        let renewalPid = env.LOJOU_PRODUCT_PID;
-        let renewalPlanId: string | null = env.LOJOU_PLAN_ID;
-        let renewalFallbackPublic = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}`;
+        // Renewal link = the STANDARD public checkout (/p/{pid}). When the
+        // member was referred by a coproducer, use that coproducer's public
+        // checkout so the renewal stays attributed (and paid out) to them.
+        //
+        // We deliberately do NOT mint a per-order Lojou token link here
+        // (lojouService.createOrder → pay.lojou.app/token/…): those expire in
+        // ~4h, so a "expira em 3 dias" reminder would point at a dead link by
+        // the time the member taps it. The public product checkout never
+        // expires and still attributes by pid. (Same reason we ignore any
+        // previously-stored user.renewalUrl / checkoutUrl, which are tokens.)
+        let finalLink = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}`;
         if (user.referredByCoproducer) {
           const cop = await prisma.coproducerAccount.findUnique({
             where: { code: user.referredByCoproducer },
-            select: { productPid: true, planId: true, publicCheckoutUrl: true, enabled: true },
+            select: { productPid: true, publicCheckoutUrl: true, enabled: true },
           });
           if (cop && cop.enabled) {
-            renewalPid = cop.productPid;
-            renewalPlanId = cop.planId;
-            renewalFallbackPublic = cop.publicCheckoutUrl || `https://pay.lojou.app/p/${cop.productPid}`;
+            finalLink = cop.publicCheckoutUrl || `https://pay.lojou.app/p/${cop.productPid}`;
           }
         }
-
-        // Generate dynamic renewal URL via Lojou if we don't have one
-        let currentRenewalUrl = user.renewalUrl;
-        if (!currentRenewalUrl && env.LOJOU_API_KEY) {
-          try {
-            const orderData = await lojouService.createOrder({
-              amount: await getActivePrice(),
-              product_pid: renewalPid,
-              ...(renewalPlanId ? { plan_id: renewalPlanId } : {}),
-              customer: {
-                name: user.name,
-                email: user.email,
-                mobile_number: user.phone,
-              }
-            });
-            if (orderData?.checkout_url) {
-              currentRenewalUrl = orderData.checkout_url;
-              await prisma.user.update({
-                where: { id: user.id },
-                data: { renewalUrl: currentRenewalUrl }
-              });
-            }
-          } catch (e) {
-            console.error(`[CRON] Lojou API error for ${user.email}:`, e);
-          }
-        }
-        const finalLink = currentRenewalUrl || user.checkoutUrl || renewalFallbackPublic;
 
         if (alertTier === '3days') {
           message = `Olá ${name}! 👋\n\nSua assinatura do *Código Zero* expira em *${daysLeft} dia${daysLeft > 1 ? 's' : ''}*.\n\nRenove agora para não perder acesso às aulas, scripts e ferramentas:\n🔗 ${finalLink}\n\nQualquer dúvida, estamos aqui! 💪`;

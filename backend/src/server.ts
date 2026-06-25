@@ -111,7 +111,11 @@ app.use('/api/coproducer', coproducerRoutes);
 app.use('/api/partner', partnerRoutes);
 app.use('/api/admin', partnerAdminRoutes);
 app.use('/api/chat', authMiddleware, blockWithdrawOnly, chatRoutes);
-app.use('/api/affiliate', authMiddleware, blockWithdrawOnly, affiliateRoutes);
+// NÃO prepend authMiddleware aqui: o affiliate router tem a rota PÚBLICA
+// /resolve/:code (usada por /r/[code]) e roda auth + blockWithdrawOnly
+// internamente nas rotas de membro. Prepender no mount quebra os links de
+// afiliado (visitante anônimo → 401 "Token não fornecido").
+app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/komunika', authMiddleware, blockWithdrawOnly, komunikaRoutes);
 app.use('/api/webhooks', webhookRoutes);
 

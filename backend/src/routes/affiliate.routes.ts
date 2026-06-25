@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
+import { blockWithdrawOnly } from '../middlewares/withdrawOnly.guard';
 import {
   AFFILIATE_RULES,
   AFFILIATE_PRODUCT,
@@ -50,6 +51,9 @@ router.get('/resolve/:code', async (req: Request, res: Response) => {
 // MEMBER — all routes below need auth + active subscription
 // ─────────────────────────────────────────────────────────────────────────
 router.use(authMiddleware);
+// withdraw-only sócio guard runs here (after auth, so req.user is set) instead
+// of at the mount — the mount must stay open for the PUBLIC /resolve route above.
+router.use(blockWithdrawOnly);
 router.use(subscriptionMiddleware);
 
 const PUBLIC_LINK_BASE = (process.env.FRONTEND_URL || 'https://app.czero.sbs').replace(/\/$/, '');

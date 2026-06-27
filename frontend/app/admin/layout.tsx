@@ -138,9 +138,10 @@ const NAV: NavGroup[] = [
   {
     label: "Conteúdo",
     items: [
-      { href: "/admin/aulas",   label: "Aulas",       icon: I.Lessons },
-      { href: "/admin/scripts", label: "Scripts",     icon: I.Scripts },
-      { href: "/admin/landing", label: "Landing page", icon: I.Landing },
+      { href: "/admin/aulas",    label: "Aulas",        icon: I.Lessons },
+      { href: "/admin/scripts",  label: "Scripts",      icon: I.Scripts },
+      { href: "/admin/landing",  label: "Landing page", icon: I.Landing },
+      { href: "/admin/conteudo", label: "Páginas/Iscas", icon: I.Landing },
     ],
   },
   {

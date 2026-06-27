@@ -23,6 +23,8 @@ import coproducerRoutes from './routes/coproducer.routes';
 import partnerRoutes from './routes/partner.routes';
 import partnerAdminRoutes from './routes/partner.admin.routes';
 import komunikaRoutes from './routes/komunika.routes';
+import contentPageAdminRoutes from './routes/contentPage.admin.routes';
+import contentPublicRoutes from './routes/contentPage.routes';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { blockWithdrawOnly } from './middlewares/withdrawOnly.guard';
 import { startCronJobs } from './jobs/cron';
@@ -105,6 +107,10 @@ app.use('/api/cofre', authMiddleware, blockWithdrawOnly, cofreRoutes);
 app.use('/api/forja', authMiddleware, blockWithdrawOnly, forjaRoutes);
 app.use('/api/qg', authMiddleware, blockWithdrawOnly, qgRoutes);
 app.use('/api/landing', landingRoutes);
+// Content / lead-magnet pages: public read+capture (/api/content) and admin
+// CRUD (/api/admin/content-pages). The admin router runs auth+admin internally.
+app.use('/api/content', contentPublicRoutes);
+app.use('/api/admin/content-pages', contentPageAdminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/coproducers', coproducerAdminRoutes);
 app.use('/api/coproducer', coproducerRoutes);

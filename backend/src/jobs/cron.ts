@@ -246,6 +246,59 @@ export function startCronJobs() {
     }
   });
 
+  // ── Newsletter welcome for content-page leads (delayed, low-rate, daytime) ──
+  // Tick every 3 min but send AT MOST ONE welcome per tick, and only during
+  // daytime CAT. That guarantees distant, one-at-a-time sends (anti-ban on the
+  // shared Komunika number — see [[cron-whatsapp-send-safety]]). The 10–20 min
+  // delay itself is set at capture time (newsletterWelcomeDueAt); night signups
+  // naturally wait for the morning window.
+  cron.schedule('*/3 * * * *', async () => {
+    try {
+      const now = new Date();
+      const hourUtc = now.getUTCHours();
+      // Moçambique = UTC+2: 08:00–20:00 CAT = 06:00–18:00 UTC.
+      if (hourUtc < 6 || hourUtc >= 18) return;
+
+      const lead = await prisma.user.findFirst({
+        where: { newsletterWelcomeDueAt: { lte: now }, newsletterWelcomeSentAt: null },
+        orderBy: { newsletterWelcomeDueAt: 'asc' },
+      });
+      if (!lead) return;
+      if (!lead.phone) {
+        // No phone to message — stamp as done so it doesn't block the queue.
+        await prisma.user.update({ where: { id: lead.id }, data: { newsletterWelcomeSentAt: now } });
+        return;
+      }
+
+      const firstName = lead.name?.split(' ')[0] || 'tudo bem';
+      const message = [
+        `Olá ${firstName}! 👋 Aqui é do *Código Zero*.`,
+        ``,
+        `Obrigado por pegar o conteúdo! 🎉 Você entrou na nossa lista — de vez`,
+        `em quando mando dicas práticas de como ganhar dinheiro com IA, mesmo`,
+        `começando do zero.`,
+        ``,
+        `Fica de olho aqui no WhatsApp. 💪`,
+      ].join('\n');
+
+      const r = await sendWhatsAppMessage({ phone: lead.phone, content: message });
+      if (r.ok) {
+        await prisma.user.update({ where: { id: lead.id }, data: { newsletterWelcomeSentAt: now } });
+        console.log(`[CRON] 📬 Newsletter welcome sent to ${lead.email}`);
+      } else {
+        // Komunika down/misconfigured → defer 30 min instead of dropping it,
+        // and don't hot-loop a failing send.
+        await prisma.user.update({
+          where: { id: lead.id },
+          data: { newsletterWelcomeDueAt: new Date(now.getTime() + 30 * 60 * 1000) },
+        });
+        console.warn(`[CRON] 📬 Newsletter welcome deferred for ${lead.email} (komunika ${r.status})`);
+      }
+    } catch (error) {
+      console.error('[CRON] ❌ Newsletter welcome failed:', error);
+    }
+  });
+
   // ── Landing Page Visitor Remarketing (Every 15 minutes) ──
   cron.schedule('*/15 * * * *', async () => {
     console.log('[CRON] 🔄 Running Landing Page Remarketing Check...');

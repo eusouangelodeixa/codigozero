@@ -107,6 +107,19 @@ model User {
   referredByCoproducer String?
   coproducerAccount    CoproducerAccount?
 
+  // Lead-capture source — stamped when this person was FIRST captured via a
+  // content/lead-magnet page (Instagram organic funnel). Format
+  // "content:{slug}". Null for landing/affiliate/coproducer/manual origins.
+  // Lets /admin/leads filter "leads desta isca" and measure per-page funnels.
+  leadSource           String?
+
+  // Delayed newsletter welcome for content-page leads. On capture we schedule
+  // a ONE-TIME welcome WhatsApp for ~10–20 min later; a low-rate cron then
+  // sends them one at a time, well spaced, daytime CAT (anti-ban — see the
+  // shared Komunika number). dueAt = becomes eligible; sentAt = delivered.
+  newsletterWelcomeDueAt  DateTime?
+  newsletterWelcomeSentAt DateTime?
+
   // Revenue-share partner (sócio). A user who takes a fixed % of the
   // main product's net revenue, paid out internally by Código Zero.
   // Independent of CoproducerAccount (which is per-product / Lojou-split).
@@ -886,4 +899,58 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+// ── Content / lead-magnet pages ─────────────────────────────────────────
+// Standalone public pages used as Instagram organic-funnel lead magnets:
+// the lead comments on a video, gets the page link, fills a gate form
+// (name/WhatsApp/email) to unlock the content, then sees a CTA back to the
+// Código Zero offer plus a "veja também" pointing at a related page.
+// Reachable at /conteudo/{slug}. Content is a typed block array (see below).
+model ContentPage {
+  id        String   @id @default(uuid())
+  slug      String   @unique // the unique public link: /conteudo/{slug}
+  title     String
+  theme     String?  // topic/tag, surfaced as "veja também sobre {theme}"
+  status    String   @default("draft") // draft | published
+
+  // Ordered list of typed blocks. Each: { id, type, ...props }. Types:
+  //  heading   { level: 1|2|3, text }
+  //  text      { md }                      (markdown: bold, links, lists)
+  //  copyblock { label?, text }            (boxed text + copy button)
+  //  image     { url, alt?, href? }
+  //  button    { label, url }              (inline link/button)
+  //  video     { embedHtml }               (raw iframe, same as VSL)
+  //  divider   {}
+  blocks    Json     @default("[]")
+
+  // Gate copy (the lead-capture form shown before the content).
+  gateHeadline String?
+  gateSubtext  String?
+
+  // Closing CTA → the Código Zero offer.
+  ctaText   String?
+  ctaUrl    String?
+
+  // "Veja também" — ordered ContentPage ids shown as related recommendations.
+  relatedPageIds Json @default("[]")
+
+  // Link-preview / SEO metadata (matters a lot for IG bio/DM/comment shares).
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+
+  // Optional per-page tracking pixels (retargeting), same shape as the
+  // landing's headScripts. Injected into the public page <head>.
+  headScripts String?
+
+  // Funnel counters. viewCount = page opened; leadCount = gate passed
+  // (form submitted or returning lead confirmed WhatsApp).
+  viewCount Int @default(0)
+  leadCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }

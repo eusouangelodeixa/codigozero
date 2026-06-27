@@ -109,8 +109,12 @@ export function startCronJobs() {
     }
   });
 
-  // ── Expiration Alerts via WhatsApp (every 6 hours) ──
-  cron.schedule('0 */6 * * *', async () => {
+  // ── Expiration Alerts via WhatsApp (twice a day, DAYTIME in Mozambique) ──
+  // Server runs in UTC; Moçambique is UTC+2 (CAT). 06:00 e 14:00 UTC = 08:00 e
+  // 16:00 CAT — evita disparar renovação de madrugada (o antigo '0 */6 * * *'
+  // mandava às 02:00 CAT). O dedup de 20h (lastExpirationAlert) garante no
+  // máximo 1 alerta/dia por usuário mesmo com duas rodadas.
+  cron.schedule('0 6,14 * * *', async () => {
     console.log('[CRON] 🔔 Running expiration alert check...');
     try {
       const now = new Date();
@@ -228,10 +232,12 @@ export function startCronJobs() {
           console.error(`[CRON] Failed to send alert to ${user.email}:`, e);
         }
 
-        // Randomized gap between sends (≈20–50s) to avoid a robotic burst
-        // pattern that risks WhatsApp bans. Volume here is small (only users
-        // within the 3-day expiry window), so this stays prompt enough.
-        await new Promise((r) => setTimeout(r, 20_000 + Math.floor(Math.random() * 30_000)));
+        // Randomized HUMAN-LIKE gap between sends (≈90–210s) to avoid a robotic
+        // burst pattern that risks a WhatsApp ban on the shared Komunika number.
+        // The old 20–50s gap meant ~5 members got messaged inside ~2 min — a
+        // clear automated-burst signal. Volume here is small (only users within
+        // the 3-day expiry window), so even a few minutes apart stays prompt.
+        await new Promise((r) => setTimeout(r, 90_000 + Math.floor(Math.random() * 120_000)));
       }
 
       console.log(`[CRON] 🔔 Expiration alerts complete: ${alertsSent} sent.`);

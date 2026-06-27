@@ -386,10 +386,14 @@ export default function LandingPage({
     } catch {}
   };
 
-  // Renders the CTA correctly: real link when we have a checkout URL, scroll button otherwise
+  // Renders the CTA correctly: real link when we have a checkout URL, scroll button otherwise.
+  // NÃO usar target="_blank": navegadores in-app (Instagram/WhatsApp/Facebook) — de onde vem
+  // a maior parte do tráfego mobile — frequentemente ignoram a abertura de nova aba, e o clique
+  // "não faz nada". Navegar na mesma aba funciona em todos (incluindo webviews in-app) e mantém
+  // o histórico (botão voltar) intacto.
   const CtaLink = ({ className, children }: { className: string; children: React.ReactNode }) =>
     hasCheckout ? (
-      <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className={className}
+      <a href={checkoutUrl} className={className}
          onClick={trackAndOpen} style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
         {children}
       </a>

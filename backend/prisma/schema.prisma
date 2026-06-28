@@ -287,6 +287,11 @@ model SystemConfig {
   resendFrom               String?
   // Svix signing secret for the Resend webhook (whsec_…) — verifies inbound events.
   resendWebhookSecret      String?
+  // Newsletter welcome for content-page leads — editable from /admin/config.
+  // When disabled, the welcome cron drains the queue WITHOUT sending. The
+  // message supports a {nome} placeholder (replaced with the lead's first name).
+  newsletterWelcomeEnabled Boolean @default(true)
+  newsletterWelcomeMessage String?
 }
 
 // Delivery events streamed in by the Resend webhook (sent/delivered/bounced/…),

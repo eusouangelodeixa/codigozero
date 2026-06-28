@@ -37,6 +37,7 @@ export default function AdminConteudo() {
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 3000); };
 
@@ -71,6 +72,12 @@ export default function AdminConteudo() {
     showToast("Página excluída ✓"); load();
   };
 
+  const duplicate = async (id: string) => {
+    const r = await fetch(`${API}/api/admin/content-pages/${id}/duplicate`, { method: "POST", headers: hdr() });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); return alert(e.error || "Erro ao duplicar"); }
+    showToast("Página duplicada ✓ (rascunho)"); load();
+  };
+
   // ── Block editor helpers ────────────────────────────────────────────────
   const setBlocks = (blocks: Block[]) => setEditing((p: any) => ({ ...p, blocks }));
   const addBlock = (type: string) => {
@@ -85,6 +92,15 @@ export default function AdminConteudo() {
     const next = [...editing.blocks]; [next[i], next[j]] = [next[j], next[i]]; setBlocks(next);
   };
   const removeBlock = (i: number) => setBlocks(editing.blocks.filter((_: any, k: number) => k !== i));
+  // Drag-and-drop reorder: move the dragged block to the drop target's slot.
+  const dropBlock = (target: number) => {
+    if (dragIdx === null || dragIdx === target) { setDragIdx(null); return; }
+    const next = [...editing.blocks];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(target, 0, moved);
+    setBlocks(next);
+    setDragIdx(null);
+  };
 
   // ── LIST VIEW ───────────────────────────────────────────────────────────
   if (!editing) {
@@ -131,6 +147,7 @@ export default function AdminConteudo() {
                     <td>
                       <div className={styles.actions}>
                         <button className={styles.actionBtn} onClick={() => openEdit(p.id)}>Editar</button>
+                        <button className={styles.actionBtn} onClick={() => duplicate(p.id)}>Duplicar</button>
                         <button className={styles.actionBtnDanger} onClick={() => remove(p.id, p.title)}>Excluir</button>
                       </div>
                     </td>
@@ -216,9 +233,16 @@ export default function AdminConteudo() {
       <div className={styles.card}>
         <div className={styles.cardHeader}><h3 className={styles.cardTitle}>Conteúdo (blocos)</h3></div>
         {(editing.blocks || []).map((b: Block, i: number) => (
-          <div key={b.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <div key={b.id}
+               onDragOver={(e) => e.preventDefault()}
+               onDrop={() => dropBlock(i)}
+               style={{ border: dragIdx === i ? "1px dashed var(--accent)" : "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 10, opacity: dragIdx === i ? 0.5 : 1 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <strong style={{ fontSize: 13 }}>{BLOCK_TYPES.find(t => t.type === b.type)?.label || b.type}</strong>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span draggable onDragStart={() => setDragIdx(i)} onDragEnd={() => setDragIdx(null)}
+                      title="Arraste para reordenar" style={{ cursor: "grab", color: "var(--text-tertiary)", userSelect: "none", fontSize: 16 }}>⠿</span>
+                <strong style={{ fontSize: 13 }}>{BLOCK_TYPES.find(t => t.type === b.type)?.label || b.type}</strong>
+              </span>
               <div className={styles.actions}>
                 <button className={styles.actionBtn} onClick={() => moveBlock(i, -1)} disabled={i === 0}>↑</button>
                 <button className={styles.actionBtn} onClick={() => moveBlock(i, 1)} disabled={i === editing.blocks.length - 1}>↓</button>

@@ -259,6 +259,11 @@ export function startCronJobs() {
       // Moçambique = UTC+2: 08:00–20:00 CAT = 06:00–18:00 UTC.
       if (hourUtc < 6 || hourUtc >= 18) return;
 
+      // Respect the admin on/off toggle. Disabled → skip (the queue just holds;
+      // the 1-per-tick pacing keeps it ban-safe even if re-enabled later).
+      const sysCfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+      if (sysCfg?.newsletterWelcomeEnabled === false) return;
+
       const lead = await prisma.user.findFirst({
         where: { newsletterWelcomeDueAt: { lte: now }, newsletterWelcomeSentAt: null },
         orderBy: { newsletterWelcomeDueAt: 'asc' },
@@ -271,15 +276,19 @@ export function startCronJobs() {
       }
 
       const firstName = lead.name?.split(' ')[0] || 'tudo bem';
-      const message = [
-        `Olá ${firstName}! 👋 Aqui é do *Código Zero*.`,
-        ``,
-        `Obrigado por pegar o conteúdo! 🎉 Você entrou na nossa lista — de vez`,
-        `em quando mando dicas práticas de como ganhar dinheiro com IA, mesmo`,
-        `começando do zero.`,
-        ``,
-        `Fica de olho aqui no WhatsApp. 💪`,
-      ].join('\n');
+      // Custom message from /admin/config ({nome} → first name), else default.
+      const tpl = sysCfg?.newsletterWelcomeMessage?.trim();
+      const message = tpl
+        ? tpl.replace(/\{nome\}/gi, firstName)
+        : [
+            `Olá ${firstName}! 👋 Aqui é do *Código Zero*.`,
+            ``,
+            `Obrigado por pegar o conteúdo! 🎉 Você entrou na nossa lista — de vez`,
+            `em quando mando dicas práticas de como ganhar dinheiro com IA, mesmo`,
+            `começando do zero.`,
+            ``,
+            `Fica de olho aqui no WhatsApp. 💪`,
+          ].join('\n');
 
       const r = await sendWhatsAppMessage({ phone: lead.phone, content: message });
       if (r.ok) {

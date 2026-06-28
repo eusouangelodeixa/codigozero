@@ -126,6 +126,39 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/admin/content-pages/:id/duplicate — clone as a fresh DRAFT with a
+// new unique slug and zeroed counters. Handy for spinning up similar iscas.
+router.post('/:id/duplicate', async (req: AuthRequest, res: Response) => {
+  try {
+    const src = await prisma.contentPage.findUnique({ where: { id: req.params.id } });
+    if (!src) return res.status(404).json({ error: 'Página não encontrada' });
+    const slug = await uniqueSlug(`${src.slug}-copia`);
+    const page = await prisma.contentPage.create({
+      data: {
+        slug,
+        title: `${src.title} (cópia)`,
+        theme: src.theme,
+        status: 'draft', // never publish a copy automatically
+        blocks: src.blocks as any,
+        gateHeadline: src.gateHeadline,
+        gateSubtext: src.gateSubtext,
+        ctaText: src.ctaText,
+        ctaUrl: src.ctaUrl,
+        relatedPageIds: src.relatedPageIds as any,
+        metaTitle: src.metaTitle,
+        metaDescription: src.metaDescription,
+        ogImageUrl: src.ogImageUrl,
+        headScripts: src.headScripts,
+        // viewCount/leadCount fall back to their schema default of 0
+      },
+    });
+    return res.status(201).json({ page });
+  } catch (e: any) {
+    console.error('[CONTENT-ADMIN] duplicate error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao duplicar página' });
+  }
+});
+
 // DELETE /api/admin/content-pages/:id
 router.delete('/:id', async (req: AuthRequest, res: Response) => {
   try {

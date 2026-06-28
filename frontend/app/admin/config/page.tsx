@@ -27,6 +27,8 @@ interface SystemConfig {
   resendApiKey?: string;
   resendFrom?: string;
   resendWebhookSecret?: string;
+  newsletterWelcomeEnabled?: boolean;
+  newsletterWelcomeMessage?: string;
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
@@ -714,6 +716,37 @@ export default function AdminConfig() {
             />
           </div>
         </div>
+      </Section>
+
+      {/* ── Boas-vindas (newsletter) das páginas de conteúdo ── */}
+      <Section
+        title="Boas-vindas (newsletter)"
+        subtitle="Enviada no WhatsApp ao lead que se cadastra numa página de conteúdo, 10–20 min depois (1 por vez, só de dia — anti-ban)."
+        icon={<IconKomunika />}
+        defaultOpen={false}
+        actions={
+          <span className={config.newsletterWelcomeEnabled === false ? styles.statusEmpty : styles.statusOk}>
+            {config.newsletterWelcomeEnabled === false ? "Desligada" : "Ligada"}
+          </span>
+        }
+      >
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={config.newsletterWelcomeEnabled !== false}
+            onChange={(e) => setField("newsletterWelcomeEnabled", e.target.checked)}
+          />
+          <span>Enviar boas-vindas automaticamente aos novos leads</span>
+        </label>
+        <Field label="Mensagem" hint="Use {nome} para o primeiro nome do lead. Deixe vazio para usar a mensagem padrão.">
+          <textarea
+            className={styles.textarea}
+            rows={6}
+            placeholder={"Olá {nome}! 👋 Aqui é do Código Zero.\n\nObrigado por pegar o conteúdo! Você entrou na nossa lista..."}
+            value={config.newsletterWelcomeMessage || ""}
+            onChange={(e) => setField("newsletterWelcomeMessage", e.target.value)}
+          />
+        </Field>
       </Section>
 
       {/* ── Sticky save bar ── */}

@@ -34,6 +34,8 @@ export default function AdminLeads() {
   const [leads, setLeads] = useState<any[]>([]);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [source, setSource] = useState("all");
+  const [pages, setPages] = useState<{ slug: string; title: string }[]>([]);
   const [range, setRange] = useState<DateRange>({ period: "all" });
   const [total, setTotal] = useState(0);
 
@@ -46,6 +48,7 @@ export default function AdminLeads() {
     const params = new URLSearchParams();
     if (filter !== "all") params.set("filter", filter);
     if (search) params.set("search", search);
+    if (source !== "all") params.set("source", source);
     if (range.period !== "all") {
       params.set("period", range.period);
       if (range.period === "custom") {
@@ -57,9 +60,15 @@ export default function AdminLeads() {
       .then((r) => r.json())
       .then((data) => { setLeads(data.leads || []); setTotal(data.total || 0); })
       .catch(console.error);
-  }, [filter, search, range]);
+  }, [filter, search, source, range]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Content pages (iscas) for the source filter dropdown.
+  useEffect(() => {
+    fetch(`${API}/api/admin/content-pages`, { headers: hdr() })
+      .then((r) => r.json()).then((d) => setPages(d.pages || [])).catch(() => {});
+  }, []);
 
   const [exporting, setExporting] = useState(false);
 
@@ -70,6 +79,7 @@ export default function AdminLeads() {
     const params = new URLSearchParams();
     if (filter !== "all") params.set("filter", filter);
     if (search) params.set("search", search);
+    if (source !== "all") params.set("source", source);
     if (range.period !== "all") {
       params.set("period", range.period);
       if (range.period === "custom") {
@@ -96,7 +106,7 @@ export default function AdminLeads() {
     } finally {
       setExporting(false);
     }
-  }, [filter, search, range, toast]);
+  }, [filter, search, source, range, toast]);
 
   const openLead = useCallback((id: string) => {
     setSelectedId(id);
@@ -167,6 +177,19 @@ export default function AdminLeads() {
           ))}
         </div>
         <div className={styles.tableToolbar}>
+          {pages.length > 0 && (
+            <select
+              className={styles.filterBtn}
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              title="Filtrar por isca (página de conteúdo)"
+            >
+              <option value="all">Todas as origens</option>
+              {pages.map((p) => (
+                <option key={p.slug} value={`content:${p.slug}`}>Isca: {p.title}</option>
+              ))}
+            </select>
+          )}
           <DateRangeFilter value={range} onChange={setRange} />
           <button
             type="button"

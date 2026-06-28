@@ -85,6 +85,7 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
     const search = req.query.search as string;
     const period = req.query.period as string; // today | 7d | 30d | custom | all
     const status = req.query.status as string; // optional explicit subscriptionStatus
+    const source = req.query.source as string; // optional leadSource (e.g. content:{slug})
 
     let where: any = {};
 
@@ -99,6 +100,8 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
       where.subscriptionStatus = status;
       delete where.lojouOrderId;
     }
+    // Filter by capture source (which content-page isca brought the lead in).
+    if (source && source !== 'all') where.leadSource = source;
 
     if (search) {
       where.OR = [
@@ -116,7 +119,7 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, name: true, email: true, phone: true,
-        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, createdAt: true,
+        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, leadSource: true, createdAt: true,
       },
     });
 
@@ -136,6 +139,7 @@ router.get('/leads/export', async (req: AuthRequest, res: Response) => {
     const search = req.query.search as string;
     const period = req.query.period as string;
     const status = req.query.status as string;
+    const source = req.query.source as string;
 
     let where: any = {};
     if (filter === 'paid' || filter === 'subscriber') {
@@ -148,6 +152,7 @@ router.get('/leads/export', async (req: AuthRequest, res: Response) => {
       where.subscriptionStatus = status;
       delete where.lojouOrderId;
     }
+    if (source && source !== 'all') where.leadSource = source;
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -163,14 +168,14 @@ router.get('/leads/export', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
       select: {
         name: true, email: true, phone: true,
-        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, createdAt: true,
+        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, leadSource: true, createdAt: true,
       },
     });
 
-    const headers = ['Nome', 'Email', 'Telefone', 'Status', 'Pedido Lojou', 'Expira em', 'Cadastro'];
+    const headers = ['Nome', 'Email', 'Telefone', 'Status', 'Pedido Lojou', 'Origem', 'Expira em', 'Cadastro'];
     const rows = leads.map((l) => [
       l.name, l.email, l.phone, l.subscriptionStatus, l.lojouOrderId,
-      l.subscriptionEnd, l.createdAt,
+      l.leadSource, l.subscriptionEnd, l.createdAt,
     ]);
     sendCsv(res, 'leads', buildCsv(headers, rows));
   } catch (error) {
@@ -1185,11 +1190,11 @@ router.get('/system', async (_req: AuthRequest, res: Response) => {
 
 router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {
-    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret } = req.body;
+    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage } = req.body;
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage },
     });
     res.json({ config });
   } catch (error) {

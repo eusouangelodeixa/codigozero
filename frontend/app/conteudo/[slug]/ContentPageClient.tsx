@@ -229,6 +229,10 @@ function BlockView({ block }: { block: Block }) {
   if (block.type === "button") {
     return <div style={{ margin: "0 0 16px" }}><a href={block.url} style={{ ...ctaStyle, display: "inline-block" }}>{block.label || "Abrir"}</a></div>;
   }
+  if (block.type === "file") {
+    if (!block.url) return null;
+    return <div style={{ margin: "0 0 16px" }}><a href={block.url} target="_blank" rel="noopener noreferrer" style={{ ...ctaStyle, display: "inline-block" }}>{block.label || "Baixar arquivo"}</a></div>;
+  }
   if (block.type === "video") {
     return (
       <div style={{ margin: "0 0 18px", borderRadius: 12, overflow: "hidden" }} dangerouslySetInnerHTML={{ __html: block.embedHtml || "" }} />

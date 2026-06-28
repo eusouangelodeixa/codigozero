@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import styles from "../admin.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -13,6 +13,7 @@ const BLOCK_TYPES: { type: string; label: string; make: () => Block }[] = [
   { type: "text", label: "Texto", make: () => ({ id: uid(), type: "text", md: "" }) },
   { type: "copyblock", label: "Bloco copiável", make: () => ({ id: uid(), type: "copyblock", label: "", text: "" }) },
   { type: "image", label: "Imagem", make: () => ({ id: uid(), type: "image", url: "", alt: "", href: "" }) },
+  { type: "file", label: "Arquivo (PDF)", make: () => ({ id: uid(), type: "file", label: "Baixar o material", url: "", name: "" }) },
   { type: "button", label: "Botão/Link", make: () => ({ id: uid(), type: "button", label: "", url: "" }) },
   { type: "video", label: "Vídeo (embed)", make: () => ({ id: uid(), type: "video", embedHtml: "" }) },
   { type: "divider", label: "Divisor", make: () => ({ id: uid(), type: "divider" }) },
@@ -100,6 +101,20 @@ export default function AdminConteudo() {
     next.splice(target, 0, moved);
     setBlocks(next);
     setDragIdx(null);
+  };
+
+  // Upload an image/PDF to the backend; returns the absolute URL + original name.
+  const uploadFile = async (file: File): Promise<{ url: string; name: string } | null> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch(`${API}/api/admin/content-pages/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${localStorage.getItem("cz_token")}` }, // no Content-Type → browser sets multipart boundary
+      body: fd,
+    });
+    if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || "Falha no upload"); return null; }
+    const d = await r.json();
+    return { url: d.url, name: d.name };
   };
 
   // ── LIST VIEW ───────────────────────────────────────────────────────────
@@ -249,7 +264,7 @@ export default function AdminConteudo() {
                 <button className={styles.actionBtnDanger} onClick={() => removeBlock(i)}>Remover</button>
               </div>
             </div>
-            <BlockEditor block={b} onChange={(patch: any) => updateBlock(i, patch)} />
+            <BlockEditor block={b} onChange={(patch: any) => updateBlock(i, patch)} uploadFile={uploadFile} />
           </div>
         ))}
         <div className={styles.btnRow} style={{ flexWrap: "wrap", marginTop: 8 }}>
@@ -305,9 +320,12 @@ export default function AdminConteudo() {
                    onChange={e => setEditing({ ...editing, metaTitle: e.target.value })} placeholder="(usa o título da página se vazio)" />
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Imagem do preview (URL)</label>
-            <input className={styles.formInput} value={editing.ogImageUrl}
-                   onChange={e => setEditing({ ...editing, ogImageUrl: e.target.value })} placeholder="https://…/imagem.jpg" />
+            <label className={styles.formLabel}>Imagem do preview</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input className={styles.formInput} value={editing.ogImageUrl}
+                     onChange={e => setEditing({ ...editing, ogImageUrl: e.target.value })} placeholder="https://… ou envie →" />
+              <UploadBtn accept="image/*" label="Enviar" uploadFile={uploadFile} onDone={(r) => setEditing((p: any) => ({ ...p, ogImageUrl: r.url }))} />
+            </div>
           </div>
           <div className={styles.formGroupFull}>
             <label className={styles.formLabel}>Descrição do preview</label>
@@ -332,7 +350,7 @@ export default function AdminConteudo() {
 }
 
 // Per-type field editor.
-function BlockEditor({ block, onChange }: { block: Block; onChange: (patch: any) => void }) {
+function BlockEditor({ block, onChange, uploadFile }: { block: Block; onChange: (patch: any) => void; uploadFile: (f: File) => Promise<{ url: string; name: string } | null> }) {
   const s = styles as any;
   if (block.type === "heading") return (
     <div style={{ display: "flex", gap: 8 }}>
@@ -354,9 +372,22 @@ function BlockEditor({ block, onChange }: { block: Block; onChange: (patch: any)
   );
   if (block.type === "image") return (
     <div style={{ display: "grid", gap: 8 }}>
-      <input className={s.formInput} value={block.url} onChange={e => onChange({ url: e.target.value })} placeholder="URL da imagem" />
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className={s.formInput} value={block.url} onChange={e => onChange({ url: e.target.value })} placeholder="URL da imagem ou envie →" />
+        <UploadBtn accept="image/*" label="Enviar" uploadFile={uploadFile} onDone={(r) => onChange({ url: r.url })} />
+      </div>
+      {block.url && <img src={block.url} alt="" style={{ maxWidth: 160, borderRadius: 8 }} />}
       <input className={s.formInput} value={block.alt} onChange={e => onChange({ alt: e.target.value })} placeholder="Texto alternativo (alt) — opcional" />
       <input className={s.formInput} value={block.href} onChange={e => onChange({ href: e.target.value })} placeholder="Link ao clicar — opcional" />
+    </div>
+  );
+  if (block.type === "file") return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <input className={s.formInput} value={block.label} onChange={e => onChange({ label: e.target.value })} placeholder="Texto do botão (ex.: Baixar o PDF)" />
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <UploadBtn accept="application/pdf" label="Enviar PDF" uploadFile={uploadFile} onDone={(r) => onChange({ url: r.url, name: r.name })} />
+        <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{block.url ? `${block.name || "arquivo"} ✓` : "nenhum arquivo"}</span>
+      </div>
     </div>
   );
   if (block.type === "button") return (
@@ -371,4 +402,37 @@ function BlockEditor({ block, onChange }: { block: Block; onChange: (patch: any)
   );
   if (block.type === "divider") return <div style={{ color: "var(--text-tertiary)", fontSize: 12 }}>Linha divisória</div>;
   return null;
+}
+
+// Small button that opens a file picker and uploads via uploadFile().
+function UploadBtn({ accept, label, uploadFile, onDone }: {
+  accept: string;
+  label: string;
+  uploadFile: (f: File) => Promise<{ url: string; name: string } | null>;
+  onDone: (r: { url: string; name: string }) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => ref.current?.click()} style={{ whiteSpace: "nowrap" }}>
+        {busy ? "Enviando…" : label}
+      </button>
+      <input
+        ref={ref}
+        type="file"
+        accept={accept}
+        style={{ display: "none" }}
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          if (!f) return;
+          setBusy(true);
+          const r = await uploadFile(f);
+          setBusy(false);
+          if (r) onDone(r);
+          e.target.value = "";
+        }}
+      />
+    </>
+  );
 }

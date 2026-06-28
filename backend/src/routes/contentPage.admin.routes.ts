@@ -1,10 +1,37 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
+import { optimizeImage } from '../lib/image';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// ── Media upload (images + PDFs) for content blocks ─────────────────────────
+// Same disk pattern as chat/avatars: store under uploads/content (persisted via
+// the ../backend/uploads:/app/uploads volume) and serve through the /uploads
+// static mount. Returns an ABSOLUTE url because content pages render on
+// czero.sbs while /uploads is served by the backend host (app.czero.sbs).
+const contentMediaDir = path.join(__dirname, '..', '..', 'uploads', 'content');
+fs.mkdirSync(contentMediaDir, { recursive: true });
+
+const contentUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, contentMediaDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || '';
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Apenas imagens ou PDF são permitidos'));
+  },
+});
 
 /**
  * Admin CRUD for content / lead-magnet pages. Mounted under
@@ -40,6 +67,32 @@ async function uniqueSlug(base: string, ignoreId?: string): Promise<string> {
     candidate = `${root}-${n}`;
   }
 }
+
+// POST /api/admin/content-pages/upload — image or PDF for a content block.
+// multipart field "file". Images are optimized (webp, ≤1600px); PDFs stored
+// as-is. Returns { url (absolute), name, type }.
+router.post('/upload', (req: AuthRequest, res: Response) => {
+  contentUpload.single('file')(req, res, async (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || 'Falha no upload' });
+    if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
+
+    const isPdf = req.file.mimetype === 'application/pdf';
+    let filename = req.file.filename;
+    if (!isPdf) {
+      const optimized = await optimizeImage(req.file.path, { maxDim: 1600, format: 'webp' });
+      if (optimized) filename = optimized.filename;
+    }
+
+    // Absolute URL — content pages live on czero.sbs but /uploads is served by
+    // this backend host. trust proxy is on, so protocol/host are the real ones.
+    const base = `${req.protocol}://${req.get('host')}`;
+    return res.json({
+      url: `${base}/uploads/content/${filename}`,
+      name: req.file.originalname,
+      type: isPdf ? 'file' : 'image',
+    });
+  });
+});
 
 // GET /api/admin/content-pages — list (lightweight; no full blocks payload)
 router.get('/', async (_req: AuthRequest, res: Response) => {

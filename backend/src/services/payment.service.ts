@@ -21,7 +21,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { env } from '../config/env';
 import { sendPushToSuperAdmins } from './push.service';
-import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { sendWhatsAppMessage, type WhatsAppSendResult } from '../lib/whatsapp';
 import { sendEmail, type EmailSendResult } from '../lib/email';
 
 const prisma = new PrismaClient();
@@ -264,6 +264,32 @@ export async function notifyAdminOfSale(opts: {
       (paymentMethod ? ` via ${paymentMethod}` : ''),
     url: '/admin/finance',
   }).catch(() => {});
+}
+
+/**
+ * Send the customer a WhatsApp "renovação confirmada" message.
+ *
+ * The renewal handlers otherwise only notify the ADMIN (notifyAdminOfSale) —
+ * the buyer got nothing on a successful auto-renewal. Fire-and-forget; never
+ * throws (sendWhatsAppMessage swallows errors and returns a result). Greets by
+ * first name when we have it.
+ */
+export async function sendRenewalConfirmation(opts: {
+  name?: string | null;
+  phone: string;
+  /** Passed through to sendWhatsAppMessage; default true (MZ normalization). */
+  normalize?: boolean;
+}): Promise<WhatsAppSendResult> {
+  const first = (opts.name || '').trim().split(' ')[0];
+  const greeting = first ? `Olá, ${first}! 👋` : 'Olá! 👋';
+  const content = [
+    greeting,
+    ``,
+    `Aqui é da equipe do *Código Zero*. Passando pra confirmar que a *renovação* da sua assinatura foi processada com sucesso ✅ — o seu acesso continua *ativo* por mais um mês.`,
+    ``,
+    `Qualquer dúvida, é só responder por aqui. Bons projetos! 🚀`,
+  ].join('\n');
+  return sendWhatsAppMessage({ phone: opts.phone, content, normalize: opts.normalize });
 }
 
 /**

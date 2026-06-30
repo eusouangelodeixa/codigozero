@@ -26,6 +26,7 @@ import {
   sendCredentialsEmail,
   notifyAdminOfSale,
   reconcileManualStripe,
+  sendRenewalConfirmation,
 } from '../services/payment.service';
 import {
   syncKomunikaOnApprovedOrder,
@@ -1281,6 +1282,15 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     gateway: 'stripe',
     paymentMethod: 'card (renovação)',
   });
+
+  // Confirmação de renovação pro CLIENTE (WhatsApp). Fire-and-forget. Só roda
+  // uma vez por invoice — re-entregas batem no `if (existing) return` acima.
+  // Pula telefones-placeholder (`stripe_<ts>`) de checkouts sem telefone.
+  if (user.phone && /^\d{8,}$/.test(user.phone)) {
+    sendRenewalConfirmation({ name: user.name, phone: user.phone, normalize: false }).catch((e) =>
+      console.error('[STRIPE-WEBHOOK/INVOICE] renewal confirmation failed (non-blocking):', e?.message || e),
+    );
+  }
 }
 
 async function handleInvoiceFailed(invoice: Stripe.Invoice): Promise<void> {

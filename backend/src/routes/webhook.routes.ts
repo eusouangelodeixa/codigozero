@@ -18,7 +18,7 @@ import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder, notifyCoproducer } from '../services/coproducer.service';
 import { computeFees } from '../lib/fees';
-import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer } from '../services/stripe.service';
+import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer, getStripe } from '../services/stripe.service';
 import { sendCancellationMessage } from '../services/lifecycle.service';
 import {
   generateUserPassword,
@@ -977,7 +977,10 @@ router.post('/stripe', async (req: Request, res: Response) => {
   console.log(`[STRIPE-WEBHOOK] ✅ Verified event: ${event.type} (${event.id})`);
 
   try {
-    switch (event.type) {
+    // Cast to string: the endpoint runs a newer Stripe API version than the
+    // pinned SDK types, so event types like `invoice_payment.paid` aren't in
+    // the SDK's literal union. We cast the data.object per-case anyway.
+    switch (event.type as string) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         await handleCheckoutCompleted(session);
@@ -986,6 +989,23 @@ router.post('/stripe', async (req: Request, res: Response) => {
       case 'invoice.paid': {
         const invoice = event.data.object as Stripe.Invoice;
         await handleInvoicePaid(invoice);
+        break;
+      }
+      case 'invoice_payment.paid': {
+        // API version 2025-11-17.clover fires this NEW event for invoice
+        // payments — data.object is an `invoice_payment` (carries the invoice
+        // id, not the invoice). Resolve the parent invoice and run the SAME
+        // renewal logic, so a renewal processes whether Stripe delivers
+        // `invoice.paid` or `invoice_payment.paid`. Idempotent via orderId
+        // (`stripe_inv_<invoiceId>`), so receiving both is a safe no-op.
+        const ip = event.data.object as any;
+        const invoiceId = typeof ip.invoice === 'string' ? ip.invoice : ip.invoice?.id;
+        if (invoiceId) {
+          const invoice = (await getStripe().invoices.retrieve(invoiceId)) as unknown as Stripe.Invoice;
+          await handleInvoicePaid(invoice);
+        } else {
+          console.warn(`[STRIPE-WEBHOOK] invoice_payment.paid without invoice id (${event.id}) — skipped`);
+        }
         break;
       }
       case 'invoice.payment_failed': {
@@ -1194,7 +1214,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
  * processed in checkout.session.completed (same charge).
  */
 async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
-  const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  const subId = extractSubscriptionId(invoice);
   if (!subId) return;
   const user = await prisma.user.findFirst({ where: { stripeSubscriptionId: subId } });
   if (!user) {
@@ -1264,7 +1284,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
 }
 
 async function handleInvoiceFailed(invoice: Stripe.Invoice): Promise<void> {
-  const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+  const subId = extractSubscriptionId(invoice);
   const user = subId ? await prisma.user.findFirst({ where: { stripeSubscriptionId: subId } }) : null;
   console.warn(`[STRIPE-WEBHOOK/INVOICE-FAILED] sub=${subId} user=${user?.email || 'unknown'}`);
 
@@ -1383,6 +1403,29 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     body: `Reembolso no Stripe${user ? ` — ${user.name || user.email}` : ` — ${tx.orderId}`}`,
     url: '/admin/finance',
   }).catch(() => {});
+}
+
+/**
+ * Extract the subscription id from a Stripe Invoice across API versions.
+ *
+ * Pre-2025 invoices carry `invoice.subscription` (top-level). API version
+ * 2025-11-17.clover — the version our `webhook.czero.sbs` endpoint is on —
+ * REMOVED that field and moved the reference to
+ * `invoice.parent.subscription_details.subscription` (and per-line under
+ * `lines.data[].parent.subscription_item_details.subscription`). Reading
+ * `invoice.subscription` alone made `handleInvoicePaid` see `undefined` and
+ * silently drop every renewal. We probe all known locations so renewals
+ * process regardless of the endpoint's API version.
+ */
+function extractSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const inv = invoice as any;
+  const direct = typeof inv?.subscription === 'string' ? inv.subscription : inv?.subscription?.id;
+  if (direct) return direct;
+  const fromParent = inv?.parent?.subscription_details?.subscription;
+  if (fromParent) return typeof fromParent === 'string' ? fromParent : fromParent?.id ?? null;
+  const line = inv?.lines?.data?.find((l: any) => l?.parent?.subscription_item_details?.subscription);
+  const fromLine = line?.parent?.subscription_item_details?.subscription;
+  return fromLine ? (typeof fromLine === 'string' ? fromLine : fromLine?.id ?? null) : null;
 }
 
 export default router;

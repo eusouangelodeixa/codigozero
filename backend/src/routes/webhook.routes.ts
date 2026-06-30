@@ -427,7 +427,10 @@ router.post('/lojou', async (req: Request, res: Response) => {
               subscriptionStart,
               subscriptionEnd,
               lojouOrderId: String(orderId),
-              passwordHash, // Reset password on reactivation
+              // Só reseta a senha numa 1ª compra (ex.: lead que nunca pagou).
+              // RENOVAÇÃO preserva a senha do cliente — antes trocávamos a senha
+              // todo mês e reenviávamos credenciais, o que era ruim de UX.
+              ...(isRenewal ? {} : { passwordHash }),
               remarketingStage: 'none',
               paymentsSinceLastCoupon: { increment: 1 },
               closeFriends: isCloseFriends,
@@ -568,7 +571,11 @@ router.post('/lojou', async (req: Request, res: Response) => {
         }
 
         console.log(`[WEBHOOK] ✅ User created/reactivated: ${user.email}`);
-        console.log(`[WEBHOOK] 🔑 Credentials — Email: ${user.email} | Password: ${rawPassword}`);
+        // Na renovação a senha NÃO é resetada, então `rawPassword` não vale —
+        // não loga pra não confundir um atendente que vá reenviar acesso.
+        if (!isRenewal) {
+          console.log(`[WEBHOOK] 🔑 Credentials — Email: ${user.email} | Password: ${rawPassword}`);
+        }
 
         // ── Komunika embedded module (provision + SSO) ───────────────────
         // Komunika is bundled free with the CZ subscription: provision (or, on
@@ -582,8 +589,17 @@ router.post('/lojou', async (req: Request, res: Response) => {
           );
         }
 
-        // Send credentials via WhatsApp (Komunika)
-        if (customerPhone) {
+        // Renovação de quem já pagou antes: a senha foi preservada acima, então
+        // NÃO reenviamos credenciais — mandamos a confirmação de renovação
+        // (mesma mensagem do fluxo Stripe). Só a 1ª compra (ou reativação de um
+        // lead que nunca pagou) recebe credenciais.
+        if (isRenewal) {
+          if (customerPhone) {
+            sendRenewalConfirmation({ name: user.name, phone: customerPhone, normalize: true }).catch((e) =>
+              console.error('[WEBHOOK] renewal confirmation failed (non-blocking):', e?.message || e),
+            );
+          }
+        } else if (customerPhone) {
           try {
             let cleanPhone = customerPhone.replace(/\D/g, '');
             if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {

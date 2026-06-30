@@ -32,6 +32,13 @@ services:
       - LOJOU_BUMP_197_PID=${LOJOU_BUMP_197_PID:-MWZhQ}
       - LOJOU_BUMP_197_PRICE=${LOJOU_BUMP_197_PRICE:-197}
       - LOJOU_WEBHOOK_SECRET=${LOJOU_WEBHOOK_SECRET}
+      # Stripe (international card payments). MUST be listed here — the backend
+      # uses an explicit env allowlist, so a value in .env alone never reaches
+      # the container (an empty key makes /api/webhooks/stripe 503 every event).
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PRICE_ID=${STRIPE_PRICE_ID:-}
+      - STRIPE_CHECKOUT_URL=${STRIPE_CHECKOUT_URL:-}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - FRONTEND_URL=https://app.czero.sbs

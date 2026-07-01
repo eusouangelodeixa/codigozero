@@ -9,8 +9,8 @@ import { getActivePrice } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
-import { initiateSdrOutbound } from '../services/sdr.service';
-import { buildSurveyContext } from '../services/lifecycle.service';
+import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
+import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 
 const prisma = new PrismaClient();
@@ -325,6 +325,7 @@ export function startCronJobs() {
   const REMKT_WINDOW_MS = 45 * 24 * 60 * 60 * 1000;
   const REMKT_PER_RUN = 3; // máx. de contatos por execução (filas somadas)
   let remarketingRunning = false;
+  let lastSdrDownAlert = 0;
   cron.schedule('*/15 * * * *', async () => {
     if (remarketingRunning) {
       console.log('[CRON] ⏭️ Remarketing ainda rodando — pulando este tick.');
@@ -342,6 +343,25 @@ export function startCronJobs() {
       if (!apiKey) {
         console.warn('[CRON] Remarketing: Komunika API key ausente — pulando.');
         return;
+      }
+
+      // O SDR AI está REALMENTE entregando? Se a OpenAI da Komunika está sem
+      // crédito, a conversa é criada (HTTP 202) mas nenhuma mensagem sai. Nesse
+      // caso o Código Zero cai no FALLBACK: manda a mensagem-modelo DIRETO (sem
+      // IA), personalizada pelas respostas do quiz — e a operação não para.
+      const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+      const sdrHealthy = await sdrIsDelivering(apiUrl, apiKey);
+      if (!sdrHealthy) {
+        const nowMs = Date.now();
+        if (nowMs - lastSdrDownAlert > 12 * 60 * 60 * 1000) {
+          lastSdrDownAlert = nowMs;
+          console.error('[CRON] ⚠️ SDR AI não está entregando (OpenAI sem crédito?) — usando FALLBACK direto.');
+          sendPushToSuperAdmins({
+            title: '⚠️ Remarketing em modo fallback',
+            body: 'O SDR da Komunika não está enviando (provável OpenAI sem crédito). O Código Zero está mandando a mensagem-modelo direto pra operação não parar — mas recarregue a OpenAI.',
+            url: '/admin',
+          }).catch(() => {});
+        }
       }
 
       // Monta a fila elegível priorizando CHECKOUT (lead mais quente: tentou
@@ -393,31 +413,42 @@ export function startCronJobs() {
           checkoutUrl = u.toString();
         }
 
-        const context =
-          kind === 'visitor'
-            ? buildSurveyContext(lead, { scenario: 'visitor', checkoutUrl })
-            : buildSurveyContext(lead, { scenario: 'checkout', checkoutUrl, orderId: lead.lojouOrderId || undefined });
+        let sent = false;
+        if (sdrHealthy) {
+          // Caminho normal: SDR AI da Komunika (conversa gerada por LLM).
+          const context =
+            kind === 'visitor'
+              ? buildSurveyContext(lead, { scenario: 'visitor', checkoutUrl })
+              : buildSurveyContext(lead, { scenario: 'checkout', checkoutUrl, orderId: lead.lojouOrderId || undefined });
+          const result = await initiateSdrOutbound({
+            assistantId,
+            apiKey,
+            phone: lead.phone,
+            name: lead.name,
+            context,
+            source: kind === 'visitor' ? 'landing-abandon' : 'checkout-abandon',
+            instanceId,
+          });
+          sent = result.ok;
+          if (sent) console.log(`[CRON] ${kind === 'visitor' ? '🎯 SDR (Visitante)' : '🛒 SDR (Checkout)'} → ${lead.phone} (${result.status})`);
+          else console.error(`[CRON] Falha ao iniciar SDR (${kind}) para ${lead.phone}: ${result.error}`);
+        } else {
+          // FALLBACK (SDR sem entregar / OpenAI sem crédito): mensagem-modelo
+          // personalizada pelas respostas do quiz, enviada DIRETO (sem IA).
+          const msg = buildFallbackMessage(lead, { scenario: kind, checkoutUrl });
+          const r = await sendWhatsAppMessage({ phone: lead.phone, content: msg });
+          sent = r.ok;
+          if (sent) console.log(`[CRON] 📩 Fallback (${kind}) → ${lead.phone} (status ${r.status})`);
+          else console.error(`[CRON] Falha no fallback (${kind}) para ${lead.phone}: ${r.status}`);
+        }
 
-        const result = await initiateSdrOutbound({
-          assistantId,
-          apiKey,
-          phone: lead.phone,
-          name: lead.name,
-          context,
-          source: kind === 'visitor' ? 'landing-abandon' : 'checkout-abandon',
-          instanceId,
-        });
-
-        if (result.ok) {
+        // Só avança o stage se algo REALMENTE saiu; senão o lead continua
+        // elegível e é re-tentado num próximo tick.
+        if (sent) {
           await prisma.user.update({
             where: { id: lead.id },
             data: { remarketingStage: kind === 'visitor' ? 'visitor_sent' : 'checkout_failed_sent' },
           });
-          console.log(`[CRON] ${kind === 'visitor' ? '🎯 SDR (Visitante)' : '🛒 SDR (Checkout)'} → ${lead.phone} (${result.status})`);
-        } else {
-          // Falha (ex.: Komunika fora) — NÃO avança o stage, então o lead
-          // continua elegível e é re-tentado num próximo tick quando voltar.
-          console.error(`[CRON] Falha ao iniciar SDR (${kind}) para ${lead.phone}: ${result.error}`);
         }
 
         // Intervalo GRANDE e RANDÔMICO entre um envio e o próximo (2–5 min).

@@ -103,6 +103,44 @@ export function buildSurveyContext(
   return out.length > 1800 ? out.slice(0, 1800) : out;
 }
 
+/**
+ * FALLBACK de remarketing (SEM OpenAI). Quando o SDR AI da Komunika não está
+ * entregando (ex.: OpenAI sem crédito → a conversa é criada mas nenhuma
+ * mensagem sai), o Código Zero envia DIRETO esta mensagem-modelo pronta —
+ * personalizada por lead a partir das respostas do quiz — para a operação não
+ * parar. É texto de WhatsApp puro (não passa por LLM): muda de lead para lead
+ * pelo nome + respostas (meta, objeção, situação), sem depender de IA.
+ */
+export function buildFallbackMessage(
+  user: LifecycleUser | null | undefined,
+  opts: { scenario: 'visitor' | 'checkout'; checkoutUrl?: string },
+): string {
+  const sa = (user?.surveyAnswers as Record<string, string> | null) || {};
+  const first = (user?.name || '').trim().split(' ')[0];
+  const goal = (sa.goal || '').trim();
+  const objection = (sa.objection || '').trim();
+  const driver = (sa.driver || '').trim();
+  const situation = (sa.situation || '').trim();
+  const checkoutUrl = (opts.checkoutUrl || '').trim();
+  const hi = first ? `Olá, ${first}! 👋` : 'Olá! 👋';
+  const L: string[] = [hi, ''];
+
+  if (opts.scenario === 'checkout') {
+    L.push('Aqui é da equipe do *Código Zero*. Vi que você começou a assinatura mas o pagamento não foi concluído — quis te dar uma força pra não perder a vaga. 🙌');
+    if (goal) L.push('', `Você marcou como meta *${goal}* — dá pra começar a construir isso agora mesmo.`);
+    else if (driver) L.push('', `Lembrei do que você disse que te move: *${driver}*.`);
+    if (checkoutUrl) L.push('', 'É só finalizar por aqui (leva 1 minuto):', checkoutUrl);
+  } else {
+    L.push('Aqui é da equipe do *Código Zero*. Vi que você fez o diagnóstico na nossa página mas ainda não entrou — quis te chamar pessoalmente. 🙌');
+    if (goal) L.push('', `Você colocou como meta *${goal}*. O Código Zero foi feito exatamente pra te levar até aí, passo a passo.`);
+    else if (situation) L.push('', `Pela sua situação (*${situation}*), acredito que faça muito sentido pra você.`);
+    if (objection) L.push('', `Se o que te segurou foi *${objection.toLowerCase()}*, me responde aqui que eu te ajudo a resolver.`);
+    if (checkoutUrl) L.push('', 'Se quiser começar agora (497 MT/mês):', checkoutUrl);
+  }
+  L.push('', 'Qualquer dúvida, é só responder aqui. 🚀');
+  return L.join('\n');
+}
+
 /** Cancellation confirmation — same text used by the in-app cancel flow. */
 export async function sendCancellationMessage(user: LifecycleUser | null | undefined) {
   if (!user?.phone) return { ok: false, status: 'no-phone' as const };

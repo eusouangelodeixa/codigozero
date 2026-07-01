@@ -98,3 +98,35 @@ export async function initiateSdrOutbound(p: InitiateSdrParams): Promise<Initiat
     return { ok: false, status: 'failed', httpStatus: 0, error };
   }
 }
+
+/**
+ * Heurística: o SDR AI da Komunika está REALMENTE entregando as mensagens?
+ *
+ * Quando a OpenAI está sem crédito, a Komunika CRIA a conversa (HTTP 202) mas o
+ * worker não consegue gerar a abertura (LLM 429) → a conversa fica SEM mensagem.
+ * O `initiate` continua retornando 202, então esse é o ÚNICO jeito de o Código
+ * Zero perceber a falha: olhar as conversas recentes. Se as criadas entre 5min
+ * e 3h atrás (que já deram tempo do SDR responder) existem e NENHUMA tem
+ * mensagem, o SDR não está entregando → o cron cai no fallback direto. Na dúvida
+ * (amostra pequena ou erro de rede), retorna true para NÃO bloquear o SDR.
+ */
+export async function sdrIsDelivering(apiUrl: string, apiKey: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${apiUrl}/api/v1/conversations?limit=25`, {
+      headers: { 'X-API-Key': apiKey },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) return true;
+    const j: any = await res.json().catch(() => null);
+    const convs: any[] = Array.isArray(j?.data) ? j.data : [];
+    const now = Date.now();
+    const judged = convs.filter((c) => {
+      const t = c?.createdAt ? new Date(c.createdAt).getTime() : 0;
+      return t > 0 && now - t > 5 * 60 * 1000 && now - t < 3 * 60 * 60 * 1000;
+    });
+    if (judged.length < 2) return true; // amostra insuficiente → assume ok
+    return judged.some((c) => !!c?.lastMessageAt); // alguma com mensagem = entregando
+  } catch {
+    return true;
+  }
+}

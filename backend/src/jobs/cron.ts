@@ -400,13 +400,17 @@ export function startCronJobs() {
       for (let i = 0; i < batch.length; i++) {
         const { lead, kind, assistantId } = batch[i];
 
-        // Link de checkout pro agente SDR: usa o persistido, senão monta um
-        // link de checkout normal personalizado.
-        let checkoutUrl = lead.checkoutUrl || '';
+        // Link de checkout pro remarketing: NUNCA reusar link /token/ persistido
+        // — ele EXPIRA em ~4h, então dias depois o lead abre e vê "erro/link com
+        // problema" (foi o que um lead reclamou). Só reaproveita o persistido se
+        // já for /p/{pid} (permanente); senão monta o /p/{pid} permanente
+        // personalizado. Ver [[lojou-checkout-link-types]].
+        let checkoutUrl = lead.checkoutUrl && lead.checkoutUrl.includes('/p/') ? lead.checkoutUrl : '';
         if (!checkoutUrl) {
           let cleanPhone = (lead.phone || '').replace(/\D/g, '');
           if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
-          const u = new URL('https://pay.lojou.app/p/uoEHz');
+          const pid = process.env.LOJOU_PRODUCT_PID || 'uoEHz';
+          const u = new URL(`https://pay.lojou.app/p/${pid}`);
           if (lead.name) u.searchParams.append('name', lead.name);
           if (lead.email) u.searchParams.append('email', lead.email);
           u.searchParams.append('phone', cleanPhone);

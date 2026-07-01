@@ -712,96 +712,16 @@ export function startCronJobs() {
         await sendPushToUsers(users.map((u) => u.id), { title, body, url: '/qg' });
       };
 
-      // WhatsApp GAP-FILL for the push above. Only targets active members who
-      // have NO push subscription (they'd otherwise miss the reminder entirely),
-      // keeping volume on the shared Komunika number low. Sent as a slow,
-      // human-paced drip with LONG RANDOM gaps + a per-run cap — blasting the
-      // shared number (fixed/tiny gaps, big batch) is the pattern that gets it
-      // banned. Each send is personalized (first name) so content varies. This
-      // runs INSIDE the same dedup-guarded block as the push (marker already set
-      // before we get here), so it fires exactly once per schedule and the next
-      // minute's tick won't restart it. Never throws out of the cron.
-      const WHATSAPP_CAP = 200; // per-run safety ceiling; logged if exceeded
-      const gapFillWhatsApp = async (phase: '30min' | 'start') => {
-        if (!cfg.mentoriaLink) return; // already guarded above, but be defensive
-        try {
-          // Same paid-member gate as the push (MENTORIA_STATUSES + role): without
-          // it, isActive=true pulls in never-paid leads — exactly how the cold
-          // lead base got messaged. Shared by recipients + count below.
-          const memberFilter = {
-            subscriptionStatus: { in: MENTORIA_STATUSES },
-            isActive: true,
-            role: 'member' as const,
-            pushSubscriptions: { none: {} }, // no push → would miss the reminder
-            phone: { not: '' },
-          };
-          const recipients = await prisma.user.findMany({
-            where: memberFilter,
-            select: { id: true, name: true, phone: true },
-            take: WHATSAPP_CAP,
-          });
-
-          // Surface (don't silently drop) when the audience exceeds the cap, so
-          // we know if it ever starts to spiral.
-          const total = await prisma.user.count({ where: memberFilter });
-          if (total > WHATSAPP_CAP) {
-            console.warn(`[CRON] 🎥 Mentoria WhatsApp gap-fill (${phase}): audience ${total} exceeds cap ${WHATSAPP_CAP}; sending first ${WHATSAPP_CAP} this run.`);
-          }
-
-          let sent = 0;
-          let failed = 0;
-          for (let i = 0; i < recipients.length; i++) {
-            const user = recipients[i];
-            const firstName = (user.name || 'membro').split(' ')[0];
-            const message =
-              phase === '30min'
-                ? [
-                    `🎥 *${firstName}, a mentoria ao vivo começa em ~30 min!*`,
-                    ``,
-                    `Já deixa tudo pronto. Entre pelo link quando começar:`,
-                    `🔗 ${cfg.mentoriaLink}`,
-                    ``,
-                    `Te espero lá! 💪`,
-                  ].join('\n')
-                : [
-                    `🔴 *${firstName}, a mentoria ao vivo começou agora!*`,
-                    ``,
-                    `Estamos ao vivo. Entre já pelo link:`,
-                    `🔗 ${cfg.mentoriaLink}`,
-                  ].join('\n');
-
-            try {
-              // sendWhatsAppMessage never throws (catches internally) and
-              // returns ok:false when Komunika is down/not configured → no-op.
-              const r = await sendWhatsAppMessage({ phone: user.phone, content: message });
-              if (r.ok) sent++;
-              else failed++;
-            } catch (e) {
-              failed++;
-              console.error(`[CRON] Mentoria WhatsApp gap-fill send failed for user ${user.id}:`, (e as any)?.message || e);
-            }
-
-            // Long, randomized human-like interval (≈6–15s) between sends to
-            // avoid a robotic burst pattern. Skip the wait after the last send.
-            if (i < recipients.length - 1) {
-              const waitMs = 6_000 + Math.floor(Math.random() * 9_000); // 6s–15s
-              await new Promise((res) => setTimeout(res, waitMs));
-            }
-          }
-          console.log(`[CRON] 🎥 Mentoria WhatsApp gap-fill (${phase}) complete: ${sent} sent, ${failed} failed (of ${recipients.length}${total > WHATSAPP_CAP ? `, capped from ${total}` : ''}).`);
-        } catch (e) {
-          // Never let the gap-fill bubble out of the cron tick.
-          console.error(`[CRON] ❌ Mentoria WhatsApp gap-fill (${phase}) failed:`, (e as any)?.message || e);
-        }
-      };
+      // NOTE: the live-mentoria WhatsApp "gap-fill" was REMOVED (2026-07-01) at
+      // the owner's request — the "começou agora" blast to every no-push member
+      // (seconds-apart sends on the shared Komunika number) was a ban risk.
+      // Mentoria reminders are now PUSH-ONLY (notifyAll above).
 
       // 30 min before: first minute where 0 < diff <= 30min, once per schedule.
       if (diffMs > 0 && diffMs <= 30 * 60 * 1000 && cfg.mentoria30SentFor !== schedule) {
         await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { mentoria30SentFor: schedule } });
         await notifyAll('🎥 Mentoria ao vivo em ~30 minutos', 'Prepare-se! A mentoria começa em breve. Toque para abrir o QG e entrar.');
         console.log('[CRON] 🎥 Mentoria 30-min reminder sent');
-        // Gap-fill WhatsApp for members without push (same dedup guard).
-        await gapFillWhatsApp('30min');
       }
 
       // At start: first minute where the start just passed (0 ≥ diff > -15min),
@@ -811,8 +731,6 @@ export function startCronJobs() {
         await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { mentoriaStartSentFor: schedule } });
         await notifyAll('🔴 A mentoria ao vivo começou!', 'Estamos ao vivo agora. Toque para entrar pelo QG.');
         console.log('[CRON] 🔴 Mentoria start reminder sent');
-        // Gap-fill WhatsApp for members without push (same dedup guard).
-        await gapFillWhatsApp('start');
       }
     } catch (error) {
       console.error('[CRON] ❌ Mentoria reminder failed:', error);

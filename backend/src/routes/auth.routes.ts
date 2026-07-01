@@ -210,6 +210,118 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   }
 });
 
+/**
+ * GET /api/auth/subscription-portal — gateway-native subscription management
+ * URL for the current member ("Gerir assinatura" na página /assinatura).
+ *
+ * Fase 1 (Lojou / M-Pesa): a própria Lojou entrega uma página de gestão pronta
+ * no payload do webhook — `plan_subscriber.portal_url` (pausar / cancelar /
+ * recibo) — que fica guardada no Transaction.metadata. Lemos da transação mais
+ * recente do cliente que a carrega. (Fase 2 adiciona o Stripe Billing Portal
+ * para membros com `stripeCustomerId`.)
+ */
+router.get('/subscription-portal', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { email: true, phone: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const orClauses = [
+      ...(user.email ? [{ userEmail: user.email }] : []),
+      ...(user.phone ? [{ userPhone: user.phone }] : []),
+    ];
+    if (orClauses.length === 0) return res.json({ provider: null, url: null });
+
+    // Varre as transações recentes e devolve o primeiro portal_url encontrado.
+    const txs = await prisma.transaction.findMany({
+      where: { OR: orClauses },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { metadata: true },
+    });
+    for (const t of txs) {
+      const sub = (t.metadata as any)?.plan_subscriber;
+      if (sub?.portal_url) {
+        return res.json({
+          provider: 'lojou',
+          url: String(sub.portal_url),
+          subscription: {
+            planName: sub.plan_name ?? null,
+            status: sub.status ?? null,
+            nextRenewal: sub.end_date ?? null,
+            cancelledAt: sub.cancelled_at ?? null,
+          },
+        });
+      }
+    }
+    return res.json({ provider: null, url: null });
+  } catch (error) {
+    console.error('[AUTH] subscription-portal error:', error);
+    return res.status(500).json({ error: 'Erro ao obter portal de assinatura' });
+  }
+});
+
+/**
+ * GET /api/auth/payment-history — pagamentos aprovados do membro, com link de
+ * recibo por pagamento. Cada linha: data, valor, moeda, referência
+ * (order_number), gateway e o `receiptUrl` (aba `receipt` da página do pedido
+ * na Lojou, montado a partir de order_number + transaction_id do metadata do
+ * webhook). Stripe ainda não expõe recibo aqui (receiptUrl = null).
+ */
+router.get('/payment-history', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { email: true, phone: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const orClauses = [
+      ...(user.email ? [{ userEmail: user.email }] : []),
+      ...(user.phone ? [{ userPhone: user.phone }] : []),
+    ];
+    if (orClauses.length === 0) return res.json({ payments: [] });
+
+    const txs = await prisma.transaction.findMany({
+      where: { OR: orClauses, status: 'approved' },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        orderId: true, amount: true, currency: true, gateway: true,
+        isRenewal: true, paymentMethod: true, createdAt: true, metadata: true,
+      },
+    });
+
+    const payments = txs.map((t) => {
+      const meta = (t.metadata as any) || {};
+      const transactionId = meta.transaction_id || meta.data?.transaction_id || null;
+      const orderNumber = t.orderId;
+      const isLojou = !t.gateway || t.gateway === 'lojou';
+      const receiptUrl =
+        isLojou && transactionId
+          ? `https://pay.lojou.app/order/${encodeURIComponent(orderNumber)}?transaction_id=${encodeURIComponent(transactionId)}&tab=receipt`
+          : null;
+      return {
+        date: t.createdAt,
+        amount: t.amount,
+        currency: t.currency || 'MZN',
+        reference: orderNumber,
+        gateway: t.gateway || 'lojou',
+        isRenewal: t.isRenewal,
+        paymentMethod: t.paymentMethod || null,
+        receiptUrl,
+      };
+    });
+
+    return res.json({ payments });
+  } catch (error) {
+    console.error('[AUTH] payment-history error:', error);
+    return res.status(500).json({ error: 'Erro ao obter histórico de pagamentos' });
+  }
+});
+
 // ── Access-recovery fallback (/resgate) ─────────────────────────────────────
 // When WhatsApp delivery fails, a buyer can recover their access on screen by
 // entering the phone/e-mail used in the purchase. The password is stored only

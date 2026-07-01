@@ -23,6 +23,17 @@ interface User {
   createdAt?: string;
 }
 
+interface Payment {
+  date: string;
+  amount: number;
+  currency: string;
+  reference: string;
+  gateway: string;
+  isRenewal: boolean;
+  paymentMethod: string | null;
+  receiptUrl: string | null;
+}
+
 type StatusKind = "active" | "warning" | "danger";
 
 const STATUS_META: Record<string, { label: string; kind: StatusKind; badge: "success" | "warning" | "error" | "neutral" }> = {
@@ -61,6 +72,42 @@ const LockIcon = (p: { size?: number }) => (
   </svg>
 );
 
+// Smart circular progress for days-to-expire: ring fills with the % of the
+// 30-day cycle remaining, colored green → amber → red as it runs down, with the
+// day count in the center. Far richer than a flat "X dias" line.
+function DaysRing({ daysLeft }: { daysLeft: number }) {
+  const total = 30;
+  const remaining = Math.max(0, Math.min(total, daysLeft));
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const dash = (remaining / total) * C;
+  const color =
+    daysLeft <= 3 ? "var(--color-error)" : daysLeft <= 7 ? "var(--color-warning)" : "var(--color-success)";
+  return (
+    <div className={styles.ringWrap}>
+      <svg width="136" height="136" viewBox="0 0 136 136">
+        <circle cx="68" cy="68" r={R} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="10" />
+        <circle
+          cx="68"
+          cy="68"
+          r={R}
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${C}`}
+          transform="rotate(-90 68 68)"
+          style={{ transition: "stroke-dasharray 0.6s ease" }}
+        />
+      </svg>
+      <div className={styles.ringCenter}>
+        <span className={styles.ringDays} style={{ color }}>{Math.max(0, daysLeft)}</span>
+        <span className={styles.ringLabel}>{daysLeft === 1 ? "dia restante" : "dias restantes"}</span>
+      </div>
+    </div>
+  );
+}
+
 const REASONS = [
   "Não estou usando a plataforma",
   "O preço não cabe no meu orçamento",
@@ -83,6 +130,8 @@ export default function AssinaturaPage() {
   const toast = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [price, setPrice] = useState<number | null>(null);
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelStep, setCancelStep] = useState<1 | 2 | 3>(1);
@@ -109,6 +158,19 @@ export default function AssinaturaPage() {
       .then((r) => r.json())
       .then((d) => setPrice(Number(d?.config?.priceAmount) || 497))
       .catch(() => setPrice(497));
+
+    // Gateway-native subscription management link (Lojou portal). Only shown
+    // when the customer actually has one.
+    fetch(`${API}/api/auth/subscription-portal`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((d) => { if (d?.url) setPortalUrl(d.url); })
+      .catch(() => {});
+
+    // Payment history (with per-payment Lojou receipt link).
+    fetch(`${API}/api/auth/payment-history`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d?.payments)) setPayments(d.payments); })
+      .catch(() => {});
   }, []);
 
   const resetCancel = () => {
@@ -178,34 +240,30 @@ export default function AssinaturaPage() {
           meta.kind === "danger" && styles.statusDanger
         )}
       >
-        <span
-          className={cx(
-            styles.statusIcon,
-            meta.kind === "active" && styles.statusIconActive,
-            meta.kind === "warning" && styles.statusIconWarning,
-            meta.kind === "danger" && styles.statusIconDanger
-          )}
-        >
-          <StatusIcon size={26} />
-        </span>
+        {isActive && daysLeft !== null ? (
+          <DaysRing daysLeft={daysLeft} />
+        ) : (
+          <span
+            className={cx(
+              styles.statusIcon,
+              meta.kind === "active" && styles.statusIconActive,
+              meta.kind === "warning" && styles.statusIconWarning,
+              meta.kind === "danger" && styles.statusIconDanger
+            )}
+          >
+            <StatusIcon size={26} />
+          </span>
+        )}
         <Badge variant={meta.badge} size="md">{meta.label}</Badge>
 
         {isActive && daysLeft !== null && (
-          <>
-            <p className={styles.statusMessage}>
-              {daysLeft > 3
-                ? <>Sua assinatura renova em <strong>{daysLeft} dias</strong>.</>
-                : daysLeft > 0
-                ? <>Sua assinatura expira em <strong>{daysLeft} dia{daysLeft > 1 ? "s" : ""}</strong>.</>
-                : <strong>Sua assinatura expirou hoje.</strong>}
-            </p>
-            <div className={styles.validityTrack} aria-hidden>
-              <div
-                className={styles.validityFill}
-                style={{ width: `${Math.max(4, Math.min(100, (daysLeft / 30) * 100))}%` }}
-              />
-            </div>
-          </>
+          <p className={styles.statusMessage}>
+            {daysLeft > 3
+              ? <>Sua assinatura renova em <strong>{daysLeft} dias</strong>.</>
+              : daysLeft > 0
+              ? <>Sua assinatura expira em <strong>{daysLeft} dia{daysLeft > 1 ? "s" : ""}</strong>.</>
+              : <strong>Sua assinatura expirou hoje.</strong>}
+          </p>
         )}
 
         {!isActive && (
@@ -270,6 +328,67 @@ export default function AssinaturaPage() {
           </div>
         </div>
       </Card>
+
+      {/* ── Gerir assinatura (portal do gateway de pagamento) ── */}
+      {portalUrl && (
+        <Card padding="lg">
+          <div className={styles.section}>
+            <div>
+              <h2 className={styles.sectionTitle}>Gerir assinatura</h2>
+              <p className={styles.statusMessage} style={{ textAlign: "left", margin: 0 }}>
+                Pausar, cancelar, ver recibos e atualizar os seus dados na página segura de pagamento.
+              </p>
+            </div>
+            <div>
+              <Button
+                variant="secondary"
+                onClick={() => window.open(portalUrl, "_blank", "noopener,noreferrer")}
+              >
+                Abrir gestão da assinatura →
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ── Histórico de pagamentos ── */}
+      {payments.length > 0 && (
+        <Card padding="lg">
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>Histórico de pagamentos</h2>
+            <div className={styles.payList}>
+              {payments.map((p, i) => (
+                <div key={i} className={styles.payRow}>
+                  <div className={styles.payInfo}>
+                    <span className={styles.payDate}>
+                      {new Date(p.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
+                    </span>
+                    <span className={styles.payMeta}>
+                      {p.isRenewal ? "Renovação" : "Assinatura"}
+                      <span className={styles.payDot}>·</span>
+                      <span className={styles.payRef}>Ref. {p.reference}</span>
+                    </span>
+                  </div>
+                  <div className={styles.payRight}>
+                    <span className={styles.payAmount}>
+                      {Number(p.amount).toLocaleString("pt-BR")} {p.currency}
+                    </span>
+                    {p.receiptUrl && (
+                      <button
+                        type="button"
+                        className={styles.payReceipt}
+                        onClick={() => window.open(p.receiptUrl!, "_blank", "noopener,noreferrer")}
+                      >
+                        Visualizar Recibo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ── Included ── */}
       <Card padding="lg">

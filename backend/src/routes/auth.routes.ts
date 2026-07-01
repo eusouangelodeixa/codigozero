@@ -224,9 +224,14 @@ router.get('/subscription-portal', authMiddleware, async (req: AuthRequest, res:
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.id },
-      select: { email: true, phone: true },
+      select: { email: true, phone: true, subscriptionStatus: true },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    // Um 'lead' nunca concluiu compra (a transação fica 'pending' = venda
+    // cancelada), então não há assinatura pra gerir — não expõe portal mesmo
+    // que exista um portal_url no metadata de um checkout iniciado.
+    if (user.subscriptionStatus === 'lead') return res.json({ provider: null, url: null });
 
     const orClauses = [
       ...(user.email ? [{ userEmail: user.email }] : []),

@@ -7,6 +7,7 @@ import { transitionDuePending } from '../services/affiliate.service';
 import { transitionDuePartnerPending } from '../services/partner.service';
 import { getActivePrice } from '../lib/pricing';
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
@@ -738,6 +739,57 @@ export function startCronJobs() {
   });
 
   console.log('[CRON] ⏰ Live mentoria reminders scheduled (every minute)');
+
+  // ── Lojou API token health-check (a cada 6h) ──
+  // O token da API da Lojou expira de tempos em tempos; quando expira, TODA
+  // chamada de saída pra Lojou dá 401 e cupons/retenção/verificação de pedido
+  // quebram em silêncio (pagamentos ENTRANDO continuam — usam o webhook secret).
+  // Aqui a gente pinga a API e avisa os superadmins ANTES de um cupom falhar.
+  // Dedup em memória (~12h) pra um token expirado lembrar sem spammar. Ver o
+  // runbook "lojou-api-key-expiry".
+  let lastLojouTokenAlert = 0;
+  cron.schedule('7 */6 * * *', async () => {
+    try {
+      if (!env.LOJOU_API_KEY) return;
+      let expired = false;
+      try {
+        // Chamada AUTENTICADA (o /ping pode ser público e passar mesmo expirado).
+        await lojouService.listDiscounts();
+      } catch (e: any) {
+        const msg = e?.message || '';
+        if (msg.includes('401') || /token expired/i.test(msg)) {
+          expired = true;
+        } else {
+          console.warn('[CRON] Lojou health-check: erro não-auth (ignorado):', msg);
+          return;
+        }
+      }
+      if (!expired) return;
+
+      const now = Date.now();
+      if (now - lastLojouTokenAlert < 12 * 60 * 60 * 1000) return; // dedup ~12h
+      lastLojouTokenAlert = now;
+
+      console.error('[CRON] 🚨 Lojou API token EXPIRADO — cupons/recibos/verificação quebrados até renovar LOJOU_API_KEY');
+      await sendPushToSuperAdmins({
+        title: '🚨 Token da Lojou expirou',
+        body: 'A API da Lojou está com token expirado — cupons, recibos e verificação de pedidos pararam. Gere uma chave nova e atualize o LOJOU_API_KEY.',
+        url: '/admin/cupons',
+      }).catch(() => {});
+
+      const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+      if (cfg?.milestoneAlertPhone) {
+        await sendWhatsAppMessage({
+          phone: cfg.milestoneAlertPhone,
+          content:
+            '🚨 *Código Zero* — o token da API da Lojou EXPIROU.\n\nCupons, recibos e verificação de pedidos estão quebrados até gerar uma chave nova e atualizar no servidor.',
+        }).catch(() => {});
+      }
+    } catch (error) {
+      console.error('[CRON] ❌ Lojou health-check failed:', (error as any)?.message || error);
+    }
+  });
+  console.log('[CRON] ⏰ Lojou token health-check scheduled (every 6h)');
 
   // ── Scheduled WhatsApp dispatches (every 30 seconds) ──
   cron.schedule('*/30 * * * * *', async () => {

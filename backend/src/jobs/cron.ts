@@ -309,129 +309,128 @@ export function startCronJobs() {
     }
   });
 
-  // ── Landing Page Visitor Remarketing (Every 15 minutes) ──
+  // ── Landing/checkout remarketing (a cada 15 min, PACED anti-ban) ──
+  // Contata leads via Komunika SDR (visitante = abandonou a landing; checkout =
+  // tentou pagar e não concluiu). SEGURANÇA MÁXIMA: cap pequeno por execução +
+  // gaps GRANDES e RANDÔMICOS (2–5 min) entre envios — nunca em segundos.
+  // Disparar em rajada no número compartilhado da Komunika é o que causa ban.
+  //
+  // Janela de elegibilidade = 45 DIAS (era 48h): antes, um lead não contatado em
+  // 48h (ex.: durante um outage da Komunika) era pulado PARA SEMPRE — sem retry.
+  // Agora ele volta a ser elegível e é recuperado (pausadamente) quando a
+  // Komunika volta. Como o stage só avança em envio bem-sucedido, cada lead é
+  // contatado UMA vez — janela larga não gera re-spam. Guard de reentrância
+  // impede que dois ticks se sobreponham (com os gaps um tick pode passar de
+  // alguns minutos) e enviem em dobro.
+  const REMKT_WINDOW_MS = 45 * 24 * 60 * 60 * 1000;
+  const REMKT_PER_RUN = 3; // máx. de contatos por execução (filas somadas)
+  let remarketingRunning = false;
   cron.schedule('*/15 * * * *', async () => {
-    console.log('[CRON] 🔄 Running Landing Page Remarketing Check...');
+    if (remarketingRunning) {
+      console.log('[CRON] ⏭️ Remarketing ainda rodando — pulando este tick.');
+      return;
+    }
+    remarketingRunning = true;
     try {
       const now = new Date();
-      // Encontrar quem se cadastrou há mais de 30 minutos, ainda é 'lead', e não recebeu remarketing
-      const thirtyMinsAgo = new Date(now.getTime() - 30 * 60 * 1000);
-      
-      const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-      
-      const abandonedLeads = await prisma.user.findMany({
-        where: {
-          subscriptionStatus: { not: 'active' },
-          updatedAt: { lt: thirtyMinsAgo, gt: twoDaysAgo },
-          remarketingStage: 'none'
-        }
-      });
-
-      const systemConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-      const apiKey = systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
-      const instanceId = systemConfig?.komunikaInstanceId || undefined;
-      const visitorAssistantId = systemConfig?.komunikaVisitorAssistantId || process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID;
-
-      if (abandonedLeads.length > 0 && apiKey && visitorAssistantId) {
-        console.log(`[CRON] Encontrados ${abandonedLeads.length} leads abandonados.`);
-
-        for (const lead of abandonedLeads) {
-          // Fallback checkout link for the SDR agent — prefer the persisted
-          // checkout URL, else build a personalized normal-checkout link.
-          let checkoutUrl = lead.checkoutUrl || '';
-          if (!checkoutUrl) {
-            let cleanPhone = lead.phone.replace(/\D/g, '');
-            if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-              cleanPhone = `258${cleanPhone}`;
-            }
-            const normalUrl = new URL('https://pay.lojou.app/p/uoEHz');
-            if (lead.name) normalUrl.searchParams.append('name', lead.name);
-            if (lead.email) normalUrl.searchParams.append('email', lead.email);
-            normalUrl.searchParams.append('phone', cleanPhone);
-            checkoutUrl = normalUrl.toString();
-          }
-
-          const context = buildSurveyContext(lead, { scenario: 'visitor', checkoutUrl });
-          const result = await initiateSdrOutbound({
-            assistantId: visitorAssistantId,
-            apiKey,
-            phone: lead.phone,
-            name: lead.name,
-            context,
-            source: 'landing-abandon',
-            instanceId,
-          });
-
-          if (result.ok) {
-            await prisma.user.update({
-              where: { id: lead.id },
-              data: { remarketingStage: 'visitor_sent' },
-            });
-            console.log(`[CRON] 🎯 SDR (Visitante) iniciado para o lead ${lead.phone} (${result.status})`);
-          } else {
-            console.error(`[CRON] Falha ao iniciar SDR (Visitante) para ${lead.phone}: ${result.error}`);
-          }
-        }
+      const windowStart = new Date(now.getTime() - REMKT_WINDOW_MS);
+      const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+      const apiKey = cfg?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+      const instanceId = cfg?.komunikaInstanceId || undefined;
+      const visitorAssistantId = cfg?.komunikaVisitorAssistantId || process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID;
+      const checkoutAssistantId = cfg?.komunikaCheckoutAssistantId || process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID;
+      if (!apiKey) {
+        console.warn('[CRON] Remarketing: Komunika API key ausente — pulando.');
+        return;
       }
 
-      // --- Checkout Abandonment Remarketing (15 min delay) ---
-      const fifteenMinsAgo = new Date(now.getTime() - 15 * 60 * 1000);
-      const abandonedCheckouts = await prisma.user.findMany({
-        where: {
-          subscriptionStatus: { not: 'active' },
-          updatedAt: { lt: fifteenMinsAgo, gt: twoDaysAgo },
-          remarketingStage: 'checkout_pending'
-        }
-      });
-
-      const checkoutAssistantId = systemConfig?.komunikaCheckoutAssistantId || process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID;
-
-      if (abandonedCheckouts.length > 0 && apiKey && checkoutAssistantId) {
-        console.log(`[CRON] Encontrados ${abandonedCheckouts.length} checkouts pendentes.`);
-
-        for (const lead of abandonedCheckouts) {
-          let checkoutUrl = lead.checkoutUrl || '';
-          if (!checkoutUrl) {
-            let cleanPhone = lead.phone.replace(/\D/g, '');
-            if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-              cleanPhone = `258${cleanPhone}`;
-            }
-            const normalUrl = new URL('https://pay.lojou.app/p/uoEHz');
-            if (lead.name) normalUrl.searchParams.append('name', lead.name);
-            if (lead.email) normalUrl.searchParams.append('email', lead.email);
-            normalUrl.searchParams.append('phone', cleanPhone);
-            checkoutUrl = normalUrl.toString();
-          }
-
-          const context = buildSurveyContext(lead, {
-            scenario: 'checkout',
-            checkoutUrl,
-            orderId: lead.lojouOrderId || undefined,
-          });
-          const result = await initiateSdrOutbound({
-            assistantId: checkoutAssistantId,
-            apiKey,
-            phone: lead.phone,
-            name: lead.name,
-            context,
-            source: 'checkout-abandon',
-            instanceId,
-          });
-
-          if (result.ok) {
-            await prisma.user.update({
-              where: { id: lead.id },
-              data: { remarketingStage: 'checkout_failed_sent' },
-            });
-            console.log(`[CRON] 🛒 SDR (Checkout) iniciado para o lead ${lead.phone} (${result.status})`);
-          } else {
-            console.error(`[CRON] Falha ao iniciar SDR (Checkout) para ${lead.phone}: ${result.error}`);
-          }
-        }
+      // Monta a fila elegível priorizando CHECKOUT (lead mais quente: tentou
+      // pagar) e depois VISITANTE. Cap total por execução — o resto fica pro
+      // próximo tick (15 min depois), o que já espalha os envios no tempo.
+      const tasks: Array<{ lead: any; kind: 'visitor' | 'checkout'; assistantId: string }> = [];
+      if (checkoutAssistantId) {
+        const checkouts = await prisma.user.findMany({
+          where: {
+            subscriptionStatus: { not: 'active' },
+            updatedAt: { lt: new Date(now.getTime() - 15 * 60 * 1000), gt: windowStart },
+            remarketingStage: 'checkout_pending',
+          },
+          orderBy: { createdAt: 'desc' },
+          take: REMKT_PER_RUN,
+        });
+        for (const lead of checkouts) tasks.push({ lead, kind: 'checkout', assistantId: checkoutAssistantId });
+      }
+      if (visitorAssistantId && tasks.length < REMKT_PER_RUN) {
+        const visitors = await prisma.user.findMany({
+          where: {
+            subscriptionStatus: { not: 'active' },
+            updatedAt: { lt: new Date(now.getTime() - 30 * 60 * 1000), gt: windowStart },
+            remarketingStage: 'none',
+          },
+          orderBy: { createdAt: 'desc' },
+          take: REMKT_PER_RUN - tasks.length,
+        });
+        for (const lead of visitors) tasks.push({ lead, kind: 'visitor', assistantId: visitorAssistantId });
       }
 
+      const batch = tasks.slice(0, REMKT_PER_RUN);
+      if (batch.length === 0) return;
+      console.log(`[CRON] 🔄 Remarketing: ${batch.length} contato(s) neste tick (paced, gaps 2–5 min).`);
+
+      for (let i = 0; i < batch.length; i++) {
+        const { lead, kind, assistantId } = batch[i];
+
+        // Link de checkout pro agente SDR: usa o persistido, senão monta um
+        // link de checkout normal personalizado.
+        let checkoutUrl = lead.checkoutUrl || '';
+        if (!checkoutUrl) {
+          let cleanPhone = (lead.phone || '').replace(/\D/g, '');
+          if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
+          const u = new URL('https://pay.lojou.app/p/uoEHz');
+          if (lead.name) u.searchParams.append('name', lead.name);
+          if (lead.email) u.searchParams.append('email', lead.email);
+          u.searchParams.append('phone', cleanPhone);
+          checkoutUrl = u.toString();
+        }
+
+        const context =
+          kind === 'visitor'
+            ? buildSurveyContext(lead, { scenario: 'visitor', checkoutUrl })
+            : buildSurveyContext(lead, { scenario: 'checkout', checkoutUrl, orderId: lead.lojouOrderId || undefined });
+
+        const result = await initiateSdrOutbound({
+          assistantId,
+          apiKey,
+          phone: lead.phone,
+          name: lead.name,
+          context,
+          source: kind === 'visitor' ? 'landing-abandon' : 'checkout-abandon',
+          instanceId,
+        });
+
+        if (result.ok) {
+          await prisma.user.update({
+            where: { id: lead.id },
+            data: { remarketingStage: kind === 'visitor' ? 'visitor_sent' : 'checkout_failed_sent' },
+          });
+          console.log(`[CRON] ${kind === 'visitor' ? '🎯 SDR (Visitante)' : '🛒 SDR (Checkout)'} → ${lead.phone} (${result.status})`);
+        } else {
+          // Falha (ex.: Komunika fora) — NÃO avança o stage, então o lead
+          // continua elegível e é re-tentado num próximo tick quando voltar.
+          console.error(`[CRON] Falha ao iniciar SDR (${kind}) para ${lead.phone}: ${result.error}`);
+        }
+
+        // Intervalo GRANDE e RANDÔMICO entre um envio e o próximo (2–5 min).
+        // Nunca em segundos. Pula a espera após o último do lote.
+        if (i < batch.length - 1) {
+          const waitMs = 120_000 + Math.floor(Math.random() * 180_000); // 120s–300s
+          await new Promise((r) => setTimeout(r, waitMs));
+        }
+      }
     } catch (error) {
       console.error('[CRON] ❌ Remarketing check failed:', error);
+    } finally {
+      remarketingRunning = false;
     }
   });
 
@@ -790,6 +789,47 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Lojou token health-check scheduled (every 6h)');
+
+  // ── Komunika health-check (a cada 6h) ──
+  // O remarketing E todos os envios de WhatsApp dependem do box self-hosted da
+  // Komunika (api.komunika.site), que já caiu por VPS não paga. Quando cai, os
+  // envios falham em SILÊNCIO e leads se perdem. Avisa os superadmins por PUSH
+  // (o WhatsApp NÃO serve aqui — a Komunika é justamente o que está fora). Dedup
+  // ~12h. Detecta queda (sem resposta) e token inválido (401).
+  let lastKomunikaAlert = 0;
+  cron.schedule('11 */6 * * *', async () => {
+    try {
+      const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+      const apiKey = cfg?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
+      const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
+      if (!apiKey) return;
+      let down = false;
+      let reason = '';
+      try {
+        const r = await fetch(`${apiUrl}/api/v1/sdr-bot/assistants`, {
+          headers: { 'X-API-Key': apiKey },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!r.ok) { down = true; reason = `HTTP ${r.status}`; }
+      } catch (e) {
+        down = true;
+        reason = (e as any)?.message || 'sem resposta';
+      }
+      if (!down) return;
+      const nowMs = Date.now();
+      if (nowMs - lastKomunikaAlert < 12 * 60 * 60 * 1000) return; // dedup ~12h
+      lastKomunikaAlert = nowMs;
+      console.error(`[CRON] 🚨 Komunika INDISPONÍVEL (${reason}) — remarketing + envios de WhatsApp parados`);
+      await sendPushToSuperAdmins({
+        title: '🚨 Komunika fora do ar',
+        body: `A Komunika não respondeu (${reason}). Remarketing e todos os envios de WhatsApp estão parados até ela voltar.`,
+        url: '/admin',
+      }).catch(() => {});
+    } catch (error) {
+      console.error('[CRON] ❌ Komunika health-check failed:', (error as any)?.message || error);
+    }
+  });
+  console.log('[CRON] ⏰ Komunika health-check scheduled (every 6h)');
 
   // ── Scheduled WhatsApp dispatches (every 30 seconds) ──
   cron.schedule('*/30 * * * * *', async () => {

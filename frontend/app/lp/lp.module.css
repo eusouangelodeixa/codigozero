@@ -1,26 +1,28 @@
 /* ═══════════════════════════════════════════════════════════════════════
    LP — "Resgate o material dos Reels" (lp.czero.sbs)
-   A self-contained sub-brand: warm charcoal + terracotta + cream serif
-   editorial look. Fully scoped — does NOT touch the global teal design
-   system. Fonts (--lp-display / --lp-body) are set on the wrapper by
+   Editorial layout (serif display + multi-step card) in the Código Zero
+   brand palette: teal accent (#2DD4BF) on dark-teal (#001412). Scoped to
+   this route; the token block below is the single place to retune colors.
+   Fonts (--lp-display / --lp-body) are set on the wrapper by
    app/lp/layout.tsx via next/font.
    ═══════════════════════════════════════════════════════════════════════ */
 
 .page {
-  /* ── palette ── */
-  --lp-bg:            #1a1512;
-  --lp-bg-card:       #221c17;
-  --lp-bg-input:      #2b241d;
-  --lp-bg-input-focus:#332a21;
-  --lp-border:        rgba(240, 230, 214, 0.09);
-  --lp-border-strong: rgba(240, 230, 214, 0.18);
-  --lp-cream:         #efe7d6;
-  --lp-text:          #cabfab;
-  --lp-muted:         #8c8271;
-  --lp-faint:         #5f5648;
-  --lp-accent:        #c1613a;
-  --lp-accent-soft:   #d0805a;
-  --lp-accent-deep:   #a84f2c;
+  /* ── palette — Código Zero brand (teal on dark-teal) ── */
+  --lp-bg:            #001412;
+  --lp-bg-card:       #08201d;
+  --lp-bg-input:      #0c2825;
+  --lp-bg-input-focus:#10312c;
+  --lp-border:        rgba(45, 212, 191, 0.12);
+  --lp-border-strong: rgba(45, 212, 191, 0.30);
+  --lp-cream:         #eafcf8;
+  --lp-text:          #a6c6c0;
+  --lp-muted:         #6d8a85;
+  --lp-faint:         #3d5651;
+  --lp-accent:        #2dd4bf;
+  --lp-accent-soft:   #5fe3d2;
+  --lp-accent-deep:   #1fae9c;
+  --lp-accent-fg:     #001412;   /* dark text on the teal accent */
   --lp-wa:            #4fd06e;
   --lp-wa-fg:         #06210f;
 
@@ -31,9 +33,9 @@
   -webkit-font-smoothing: antialiased;
   display: flex;
   justify-content: center;
-  /* soft warm vignette from the top, like the reference */
+  /* soft brand vignette from the top */
   background-image:
-    radial-gradient(120% 60% at 50% -10%, rgba(193, 97, 58, 0.10), transparent 60%);
+    radial-gradient(120% 60% at 50% -10%, rgba(45, 212, 191, 0.10), transparent 60%);
 }
 
 .shell {
@@ -168,7 +170,7 @@
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #1a1512;
+  color: var(--lp-accent-fg);
   background: var(--lp-accent);
   border-radius: 12px;
   transition: filter 0.15s, transform 0.05s;
@@ -234,7 +236,7 @@
   height: 64px;
   border-radius: 14px;
   background: var(--lp-accent);
-  color: #1a1512;
+  color: var(--lp-accent-fg);
   font-size: 34px;
   font-weight: 700;
   display: flex;
@@ -276,7 +278,7 @@
   height: 40px;
   border-radius: 10px;
   background: var(--lp-accent);
-  color: #1a1512;
+  color: var(--lp-accent-fg);
   font-family: var(--lp-display), Georgia, serif;
   font-style: italic;
   font-weight: 700;
@@ -334,7 +336,7 @@
   border-radius: 12px;
   transition: border-color 0.15s, background 0.15s;
 }
-.centralCta:hover { border-color: var(--lp-accent); background: rgba(193, 97, 58, 0.08); }
+.centralCta:hover { border-color: var(--lp-accent); background: rgba(45, 212, 191, 0.08); }
 
 /* ── Footer ──────────────────────────────────────────────────────────── */
 .footer {

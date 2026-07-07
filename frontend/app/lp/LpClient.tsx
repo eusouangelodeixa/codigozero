@@ -52,7 +52,7 @@ export default function LpClient() {
     } catch {}
 
     const prev = document.body.style.background;
-    document.body.style.background = "#1a1512";
+    document.body.style.background = "#001412";
     return () => { document.body.style.background = prev; };
   }, []);
 

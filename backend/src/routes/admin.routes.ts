@@ -814,10 +814,13 @@ router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
     }
 
     // Deliver credentials on BOTH channels — same helpers the purchase flow uses.
-    const emailRes = await sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw })
-      .catch((e) => { console.error('[ADMIN] grant-trial email failed:', e?.message || e); return { success: false } as any; });
-    const waRes = await sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
-      .catch((e) => { console.error('[ADMIN] grant-trial whatsapp failed:', e?.message || e); return { success: false } as any; });
+    // Fire-and-forget: NEVER block the admin response on Komunika/Resend (Komunika
+    // can be slow or offline). Failures are logged; the WhatsApp helper also pushes
+    // superadmins on hard failure. The user is already created + granted above.
+    void sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw })
+      .catch((e) => console.error('[ADMIN] grant-trial email failed:', e?.message || e));
+    void sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
+      .catch((e) => console.error('[ADMIN] grant-trial whatsapp failed:', e?.message || e));
 
     return res.json({
       user: {
@@ -826,10 +829,6 @@ router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
       },
       created: !existing,
       durationDays: days,
-      delivery: {
-        email: (emailRes as any)?.success !== false,
-        whatsapp: (waRes as any)?.success !== false,
-      },
     });
   } catch (e: any) {
     console.error('[ADMIN] grant-trial error:', e?.message || e);

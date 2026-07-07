@@ -161,8 +161,7 @@ export default function AdminUsers() {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { showToast(d.error || "Erro ao conceder acesso"); return; }
-      const ch = [d.delivery?.whatsapp ? "WhatsApp" : null, d.delivery?.email ? "e-mail" : null].filter(Boolean).join(" + ");
-      showToast(`${d.created ? "Usuário criado" : "Acesso atualizado"} · ${d.durationDays}d · credenciais por ${ch || "—"}`);
+      showToast(`${d.created ? "Usuário criado" : "Acesso atualizado"} · ${d.durationDays} dias · credenciais enviadas por WhatsApp + e-mail`);
       setGranting(false);
       setGrantForm({ name: "", email: "", whatsapp: "", duration: "7d" });
       load();

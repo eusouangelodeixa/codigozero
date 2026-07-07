@@ -1,0 +1,346 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   LP — "Resgate o material dos Reels" (lp.czero.sbs)
+   A self-contained sub-brand: warm charcoal + terracotta + cream serif
+   editorial look. Fully scoped — does NOT touch the global teal design
+   system. Fonts (--lp-display / --lp-body) are set on the wrapper by
+   app/lp/layout.tsx via next/font.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.page {
+  /* ── palette ── */
+  --lp-bg:            #1a1512;
+  --lp-bg-card:       #221c17;
+  --lp-bg-input:      #2b241d;
+  --lp-bg-input-focus:#332a21;
+  --lp-border:        rgba(240, 230, 214, 0.09);
+  --lp-border-strong: rgba(240, 230, 214, 0.18);
+  --lp-cream:         #efe7d6;
+  --lp-text:          #cabfab;
+  --lp-muted:         #8c8271;
+  --lp-faint:         #5f5648;
+  --lp-accent:        #c1613a;
+  --lp-accent-soft:   #d0805a;
+  --lp-accent-deep:   #a84f2c;
+  --lp-wa:            #4fd06e;
+  --lp-wa-fg:         #06210f;
+
+  min-height: 100dvh;
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: var(--lp-body), -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  justify-content: center;
+  /* soft warm vignette from the top, like the reference */
+  background-image:
+    radial-gradient(120% 60% at 50% -10%, rgba(193, 97, 58, 0.10), transparent 60%);
+}
+
+.shell {
+  width: 100%;
+  max-width: 480px;
+  padding: 40px 22px 56px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────── */
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--lp-accent-soft);
+  margin-bottom: 18px;
+}
+
+.heroTitle {
+  font-family: var(--lp-display), Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  color: var(--lp-cream);
+  font-size: clamp(2.5rem, 12vw, 3.4rem);
+  margin: 0;
+}
+.heroTitle .hl { color: var(--lp-accent); }
+
+.rule {
+  width: 68px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--lp-accent);
+  margin: 22px 0 26px;
+}
+
+.heroDesc {
+  font-size: 1.18rem;
+  line-height: 1.55;
+  color: var(--lp-text);
+  margin: 0 0 30px;
+}
+.heroDesc strong { color: var(--lp-cream); font-weight: 700; }
+
+/* ── Card (form / survey / success live here) ────────────────────────── */
+.card {
+  background: var(--lp-bg-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 18px;
+  padding: 26px 22px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.cardTitle {
+  font-family: var(--lp-display), Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 1.6rem;
+  line-height: 1.12;
+  color: var(--lp-cream);
+  margin: 0;
+}
+.cardSub {
+  font-size: 0.95rem;
+  color: var(--lp-muted);
+  margin: 8px 0 0;
+}
+
+/* progress segments (survey steps) */
+.progress {
+  display: flex;
+  gap: 7px;
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+.seg {
+  width: 26px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--lp-border-strong);
+}
+.segOn { background: var(--lp-accent); }
+
+/* ── Form fields ─────────────────────────────────────────────────────── */
+.form { display: flex; flex-direction: column; gap: 0; margin-top: 22px; }
+
+.field { margin-bottom: 20px; }
+.label {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--lp-cream);
+  margin-bottom: 10px;
+}
+.input {
+  width: 100%;
+  padding: 16px 16px;
+  font-size: 1.05rem;
+  color: var(--lp-cream);
+  background: var(--lp-bg-input);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.input::placeholder { color: var(--lp-faint); }
+.input:focus {
+  border-color: var(--lp-accent);
+  background: var(--lp-bg-input-focus);
+}
+.hint {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--lp-muted);
+  margin: 10px 2px 0;
+}
+
+/* ── Primary CTA ─────────────────────────────────────────────────────── */
+.cta {
+  width: 100%;
+  padding: 18px 20px;
+  font-family: var(--lp-body), system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #1a1512;
+  background: var(--lp-accent);
+  border-radius: 12px;
+  transition: filter 0.15s, transform 0.05s;
+}
+.cta:hover { filter: brightness(1.06); }
+.cta:active { transform: translateY(1px); }
+.cta:disabled { opacity: 0.6; cursor: default; }
+
+.footnote {
+  text-align: center;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--lp-muted);
+  margin: 16px 6px 0;
+}
+
+.error {
+  color: #e88b6a;
+  font-size: 0.9rem;
+  margin: 12px 2px 0;
+}
+
+/* ── Survey options ──────────────────────────────────────────────────── */
+.question {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--lp-cream);
+  margin: 24px 0 14px;
+}
+.optGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.optStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.opt {
+  padding: 18px 16px;
+  font-size: 1.02rem;
+  font-weight: 500;
+  text-align: left;
+  color: var(--lp-text);
+  background: var(--lp-bg-input);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.optGrid .opt { text-align: center; }
+.opt:hover {
+  border-color: var(--lp-accent);
+  color: var(--lp-cream);
+  background: var(--lp-bg-input-focus);
+}
+.opt:disabled { opacity: 0.5; }
+
+/* ── Success screen ──────────────────────────────────────────────────── */
+.success { text-align: center; }
+.checkBadge {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: var(--lp-accent);
+  color: #1a1512;
+  font-size: 34px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px auto 22px;
+}
+.successTitle {
+  font-family: var(--lp-display), Georgia, serif;
+  font-style: italic;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: clamp(2.2rem, 10vw, 2.9rem);
+  line-height: 1.04;
+  color: var(--lp-cream);
+  margin: 0;
+}
+.successTitle .hl { color: var(--lp-accent); }
+.successDesc {
+  font-size: 1.08rem;
+  line-height: 1.55;
+  color: var(--lp-text);
+  margin: 16px auto 30px;
+  max-width: 400px;
+}
+
+.stepCard {
+  background: var(--lp-bg-card);
+  border: 1px solid var(--lp-border);
+  border-radius: 16px;
+  padding: 22px 20px;
+  text-align: left;
+  margin-bottom: 16px;
+}
+.stepRow { display: flex; gap: 14px; align-items: flex-start; }
+.stepNum {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--lp-accent);
+  color: #1a1512;
+  font-family: var(--lp-display), Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stepTitle {
+  font-family: var(--lp-display), Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  color: var(--lp-cream);
+  margin: 0;
+}
+.stepDesc {
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: var(--lp-muted);
+  margin: 8px 0 0;
+}
+.stepDesc strong { color: var(--lp-text); font-weight: 700; }
+
+.waCta {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 17px 20px;
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: var(--lp-wa-fg);
+  background: var(--lp-wa);
+  border-radius: 12px;
+  transition: filter 0.15s, transform 0.05s;
+}
+.waCta:hover { filter: brightness(1.05); }
+.waCta:active { transform: translateY(1px); }
+
+.centralCta {
+  display: block;
+  width: 100%;
+  margin-top: 18px;
+  padding: 16px 20px;
+  font-size: 1.0rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: var(--lp-cream);
+  background: transparent;
+  border: 1px solid var(--lp-border-strong);
+  border-radius: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.centralCta:hover { border-color: var(--lp-accent); background: rgba(193, 97, 58, 0.08); }
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.footer {
+  text-align: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: var(--lp-faint);
+  margin-top: 40px;
+}

@@ -177,19 +177,18 @@ export default function AdminLeads() {
           ))}
         </div>
         <div className={styles.tableToolbar}>
-          {pages.length > 0 && (
-            <select
-              className={styles.filterBtn}
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              title="Filtrar por isca (página de conteúdo)"
-            >
-              <option value="all">Todas as origens</option>
-              {pages.map((p) => (
-                <option key={p.slug} value={`content:${p.slug}`}>Isca: {p.title}</option>
-              ))}
-            </select>
-          )}
+          <select
+            className={styles.filterBtn}
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            title="Filtrar por origem (LP dos Reels ou isca de conteúdo)"
+          >
+            <option value="all">Todas as origens</option>
+            <option value="lp:reels">LP — Reels</option>
+            {pages.map((p) => (
+              <option key={p.slug} value={`content:${p.slug}`}>Isca: {p.title}</option>
+            ))}
+          </select>
           <DateRangeFilter value={range} onChange={setRange} />
           <button
             type="button"

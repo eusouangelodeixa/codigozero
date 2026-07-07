@@ -91,6 +91,35 @@ router.get('/resolve/:slug', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/content/list — published pages for the Central de Material hub
+// (central.czero.sbs). Public, lightweight card fields only, NO view tracking
+// (listing ≠ opening a page). Optional ?q= filters over title/theme/description.
+router.get('/list', async (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const where: any = { status: 'published' };
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { theme: { contains: q, mode: 'insensitive' } },
+        { metaDescription: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    const pages = await prisma.contentPage.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        slug: true, title: true, theme: true, ogImageUrl: true,
+        metaDescription: true, createdAt: true,
+      },
+    });
+    return res.json({ pages });
+  } catch (e: any) {
+    console.error('[CONTENT] list error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao listar materiais' });
+  }
+});
+
 // POST /api/content/lead — first-time lead capture from a content page gate.
 // Body: { slug, name, whatsapp (or phone), email }.
 router.post('/lead', captureLimiter, async (req: Request, res: Response) => {

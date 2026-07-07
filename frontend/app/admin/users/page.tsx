@@ -57,6 +57,10 @@ export default function AdminUsers() {
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<any>(null);
   const [toast, setToast] = useState("");
+  // "Conceder acesso" (trial grant) modal
+  const [granting, setGranting] = useState(false);
+  const [grantForm, setGrantForm] = useState({ name: "", email: "", whatsapp: "", duration: "7d" });
+  const [grantBusy, setGrantBusy] = useState(false);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -142,6 +146,33 @@ export default function AdminUsers() {
     load();
   };
 
+  // Conceder acesso de teste (7 dias / 1 mês): cria/atualiza o usuário, libera o
+  // plano e envia as credenciais por WhatsApp + e-mail (igual à compra real).
+  const handleGrant = async () => {
+    const { name, email, whatsapp } = grantForm;
+    if (!name.trim() || !email.trim() || !whatsapp.trim()) {
+      showToast("Preencha nome, e-mail e WhatsApp");
+      return;
+    }
+    setGrantBusy(true);
+    try {
+      const r = await fetch(`${API}/api/admin/users/grant-trial`, {
+        method: "POST", headers: hdr(), body: JSON.stringify(grantForm),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { showToast(d.error || "Erro ao conceder acesso"); return; }
+      const ch = [d.delivery?.whatsapp ? "WhatsApp" : null, d.delivery?.email ? "e-mail" : null].filter(Boolean).join(" + ");
+      showToast(`${d.created ? "Usuário criado" : "Acesso atualizado"} · ${d.durationDays}d · credenciais por ${ch || "—"}`);
+      setGranting(false);
+      setGrantForm({ name: "", email: "", whatsapp: "", duration: "7d" });
+      load();
+    } catch {
+      showToast("Erro de conexão");
+    } finally {
+      setGrantBusy(false);
+    }
+  };
+
   const statusBadge = (s: string) => (
     <span className={`${styles.badge} ${statusBadgeClass(s)}`}>{STATUS_LABEL[s] || s}</span>
   );
@@ -174,6 +205,9 @@ export default function AdminUsers() {
           </select>
         </div>
         <div className={styles.tableToolbar}>
+          <button type="button" className={styles.btnPrimary} onClick={() => setGranting(true)}>
+            ＋ Conceder acesso
+          </button>
           <DateRangeFilter value={range} onChange={setRange} />
           <button
             type="button"
@@ -286,6 +320,45 @@ export default function AdminUsers() {
             <div className={styles.btnRow}>
               <button className={styles.btnPrimary} onClick={handleSave}>Salvar</button>
               <button className={styles.btnSecondary} onClick={() => setEditing(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {granting && (
+        <div className={styles.modalOverlay} onClick={() => !grantBusy && setGranting(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Conceder acesso (teste)</h2>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "-6px 0 14px" }}>
+              Cria o usuário, libera o plano pelo período e envia as credenciais por WhatsApp e e-mail.
+              Depois do período, o usuário entra no fluxo normal de pagamento.
+            </p>
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Nome</label>
+                <input className={styles.formInput} value={grantForm.name} onChange={(e) => setGrantForm({ ...grantForm, name: e.target.value })} placeholder="Nome do usuário" />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Email</label>
+                <input className={styles.formInput} type="email" value={grantForm.email} onChange={(e) => setGrantForm({ ...grantForm, email: e.target.value })} placeholder="email@exemplo.com" />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>WhatsApp</label>
+                <input className={styles.formInput} value={grantForm.whatsapp} onChange={(e) => setGrantForm({ ...grantForm, whatsapp: e.target.value })} placeholder="84 123 4567 (fora de MZ: +55 …)" />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Duração do teste</label>
+                <select className={styles.formSelect} value={grantForm.duration} onChange={(e) => setGrantForm({ ...grantForm, duration: e.target.value })}>
+                  <option value="7d">7 dias</option>
+                  <option value="1m">1 mês</option>
+                </select>
+              </div>
+            </div>
+            <div className={styles.btnRow}>
+              <button className={styles.btnPrimary} onClick={handleGrant} disabled={grantBusy}>
+                {grantBusy ? "Concedendo…" : "Conceder e enviar acesso"}
+              </button>
+              <button className={styles.btnSecondary} onClick={() => setGranting(false)} disabled={grantBusy}>Cancelar</button>
             </div>
           </div>
         </div>

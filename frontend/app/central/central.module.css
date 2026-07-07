@@ -1,0 +1,158 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Central de Material — hub (central.czero.sbs)
+   Same Código Zero brand palette + Playfair/Inter contract as app/lp.
+   Token block below is the single place to retune colors; fonts come from
+   app/central/layout.tsx (--lp-display / --lp-body).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.page {
+  --lp-bg:            #001412;
+  --lp-bg-card:       #08201d;
+  --lp-bg-input:      #0c2825;
+  --lp-bg-input-focus:#10312c;
+  --lp-border:        rgba(45, 212, 191, 0.12);
+  --lp-border-strong: rgba(45, 212, 191, 0.30);
+  --lp-cream:         #eafcf8;
+  --lp-text:          #a6c6c0;
+  --lp-muted:         #6d8a85;
+  --lp-faint:         #3d5651;
+  --lp-accent:        #2dd4bf;
+  --lp-accent-soft:   #5fe3d2;
+  --lp-accent-fg:     #001412;
+
+  min-height: 100dvh;
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: var(--lp-body), -apple-system, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-image: radial-gradient(120% 45% at 50% -6%, rgba(45, 212, 191, 0.10), transparent 60%);
+}
+
+.shell {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 48px 22px 64px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+.header { text-align: center; max-width: 640px; margin: 0 auto; }
+.eyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--lp-accent-soft); margin-bottom: 16px;
+}
+.title {
+  font-family: var(--lp-display), Georgia, serif; font-style: italic; font-weight: 800;
+  text-transform: uppercase; line-height: 1.02; letter-spacing: -0.01em; color: var(--lp-cream);
+  font-size: clamp(2.4rem, 10vw, 3.4rem); margin: 0;
+}
+.title .hl { color: var(--lp-accent); }
+.subtitle { font-size: 1.12rem; line-height: 1.5; color: var(--lp-text); margin: 16px auto 0; max-width: 460px; }
+.rule { width: 68px; height: 4px; border-radius: 3px; background: var(--lp-accent); margin: 24px auto 0; }
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+.search {
+  display: flex; gap: 12px; max-width: 620px; margin: 30px auto 0;
+}
+.searchInput {
+  flex: 1; min-width: 0; padding: 16px 18px; font-size: 1.02rem; color: var(--lp-cream);
+  background: var(--lp-bg-input); border: 1px solid var(--lp-border); border-radius: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.searchInput::placeholder { color: var(--lp-faint); }
+.searchInput:focus { border-color: var(--lp-accent); background: var(--lp-bg-input-focus); }
+.searchBtn {
+  flex-shrink: 0; padding: 0 26px; font-size: 1rem; font-weight: 800; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--lp-accent-fg); background: var(--lp-accent); border-radius: 10px;
+  transition: filter 0.15s;
+}
+.searchBtn:hover { filter: brightness(1.06); }
+.clearBtn {
+  display: block; margin: 14px auto 0; font-size: 0.85rem; color: var(--lp-muted);
+  background: none; border: none; text-decoration: underline; cursor: pointer;
+}
+
+/* ── Grid ─────────────────────────────────────────────────────────────── */
+.grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 16px; margin-top: 40px;
+}
+@media (min-width: 720px)  { .grid { grid-template-columns: repeat(3, 1fr); gap: 34px 22px; } }
+@media (min-width: 1040px) { .grid { grid-template-columns: repeat(4, 1fr); gap: 40px 24px; } }
+
+.card { display: block; text-align: left; background: none; border: none; cursor: pointer; padding: 0; }
+.thumb {
+  position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden;
+  background: var(--lp-bg-card);
+}
+.thumbImg { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s, filter 0.2s; }
+.card:hover .thumbImg { transform: scale(1.03); filter: brightness(1.05); }
+.thumbFallback {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(150deg, #10403a 0%, #041a17 72%);
+}
+.thumbMark { font-size: 2.4rem; color: rgba(45, 212, 191, 0.26); line-height: 1; }
+.thumbOverlay {
+  position: absolute; left: 12px; bottom: 12px; right: 12px;
+  font-size: 0.92rem; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase;
+  color: var(--lp-accent-soft); text-shadow: 0 1px 8px rgba(0, 20, 18, 0.9);
+}
+.thumb::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, rgba(0, 20, 18, 0.62) 0%, rgba(0, 20, 18, 0) 42%);
+}
+.cardTitle {
+  font-family: var(--lp-display), Georgia, serif; font-style: italic; font-weight: 700;
+  font-size: 1.28rem; line-height: 1.16; color: var(--lp-cream); margin: 12px 0 0;
+}
+.cardDesc { font-size: 0.95rem; line-height: 1.45; color: var(--lp-muted); margin: 8px 0 0; }
+
+.state { text-align: center; color: var(--lp-muted); padding: 60px 0; font-size: 1.05rem; }
+.footer { text-align: center; font-size: 0.85rem; letter-spacing: 0.04em; color: var(--lp-faint); margin-top: 56px; }
+
+/* ── Guide modal ──────────────────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; z-index: 100; background: rgba(0, 8, 7, 0.82);
+  display: flex; justify-content: center; align-items: flex-start;
+  overflow-y: auto; overscroll-behavior: contain; padding: 24px 14px 48px;
+  -webkit-overflow-scrolling: touch;
+}
+.panel {
+  position: relative; width: 100%; max-width: 680px; background: var(--lp-bg-card);
+  border: 1px solid var(--lp-border); border-radius: 18px; padding: 26px 22px 34px;
+  margin: 20px auto;
+}
+.close {
+  position: sticky; top: 0; float: right; margin: -8px -6px 0 0; z-index: 2;
+  padding: 8px 14px; font-size: 0.9rem; font-weight: 600; color: var(--lp-cream);
+  background: rgba(0, 20, 18, 0.7); border: 1px solid var(--lp-border-strong); border-radius: 999px;
+  cursor: pointer;
+}
+.guideEyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--lp-accent-soft); margin: 4px 0 12px;
+}
+.guideTitle {
+  font-family: var(--lp-display), Georgia, serif; font-style: italic; font-weight: 800;
+  font-size: clamp(1.7rem, 6vw, 2.2rem); line-height: 1.08; color: var(--lp-cream); margin: 0;
+}
+.guideRule { width: 56px; height: 4px; border-radius: 3px; background: var(--lp-accent); margin: 18px 0 24px; }
+.guideBody { color: var(--lp-text); }
+
+.ctaCard {
+  margin-top: 30px; padding-top: 26px; border-top: 1px solid var(--lp-border); text-align: center;
+}
+.ctaEyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--lp-accent-soft); margin-bottom: 10px;
+}
+.ctaTitle {
+  font-family: var(--lp-display), Georgia, serif; font-style: italic; font-weight: 700;
+  font-size: 1.5rem; line-height: 1.14; color: var(--lp-cream); margin: 0 0 8px;
+}
+.ctaDesc { font-size: 1rem; line-height: 1.5; color: var(--lp-muted); margin: 0 auto 18px; max-width: 420px; }
+.ctaBtn {
+  display: inline-block; width: 100%; max-width: 460px; padding: 17px 22px;
+  font-size: 1.02rem; font-weight: 800; letter-spacing: 0.02em; text-align: center;
+  color: var(--lp-accent-fg); background: var(--lp-accent); border-radius: 12px;
+  transition: filter 0.15s;
+}
+.ctaBtn:hover { filter: brightness(1.06); }

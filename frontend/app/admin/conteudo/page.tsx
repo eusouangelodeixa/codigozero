@@ -17,6 +17,11 @@ const BLOCK_TYPES: { type: string; label: string; make: () => Block }[] = [
   { type: "button", label: "Botão/Link", make: () => ({ id: uid(), type: "button", label: "", url: "" }) },
   { type: "video", label: "Vídeo (embed)", make: () => ({ id: uid(), type: "video", embedHtml: "" }) },
   { type: "divider", label: "Divisor", make: () => ({ id: uid(), type: "divider" }) },
+  // ── Blocos do passo a passo (Central de Material) ──
+  { type: "eyebrow", label: "Sobrelinha", make: () => ({ id: uid(), type: "eyebrow", text: "" }) },
+  { type: "step", label: "Passo numerado", make: () => ({ id: uid(), type: "step", title: "", subtitle: "" }) },
+  { type: "callout", label: "Callout / Atenção", make: () => ({ id: uid(), type: "callout", variant: "info", lead: "", text: "" }) },
+  { type: "linkcard", label: "Card de link", make: () => ({ id: uid(), type: "linkcard", title: "", url: "", badge: "" }) },
 ];
 
 function uid() {
@@ -401,6 +406,40 @@ function BlockEditor({ block, onChange, uploadFile }: { block: Block; onChange: 
               placeholder="Cole aqui o código de embed do vídeo (iframe Kilax/YouTube), igual à VSL" />
   );
   if (block.type === "divider") return <div style={{ color: "var(--text-tertiary)", fontSize: 12 }}>Linha divisória</div>;
+  if (block.type === "eyebrow") return (
+    <input className={s.formInput} value={block.text} onChange={e => onChange({ text: e.target.value })}
+           placeholder="Sobrelinha (ex.: COPIA E MANDA PRO CLAUDE CODE · PASSO 3)" />
+  );
+  if (block.type === "step") return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className={s.formInput} style={{ maxWidth: 110 }} type="number" value={block.number ?? ""} onChange={e => onChange({ number: e.target.value === "" ? undefined : Number(e.target.value) })} placeholder="Nº (auto)" />
+        <input className={s.formInput} value={block.title} onChange={e => onChange({ title: e.target.value })} placeholder="Título do passo (ex.: Baixe o Obsidian)" />
+      </div>
+      <input className={s.formInput} value={block.subtitle} onChange={e => onChange({ subtitle: e.target.value })} placeholder="Subtítulo do passo — opcional" />
+    </div>
+  );
+  if (block.type === "callout") return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <select className={s.formSelect} style={{ maxWidth: 130 }} value={block.variant || "info"} onChange={e => onChange({ variant: e.target.value })}>
+          <option value="info">Info (teal)</option>
+          <option value="warning">Atenção (âmbar)</option>
+        </select>
+        <input className={s.formInput} value={block.lead} onChange={e => onChange({ lead: e.target.value })} placeholder="Início em destaque (ex.: Atenção:) — opcional" />
+      </div>
+      <textarea className={s.formTextarea} rows={3} value={block.text} onChange={e => onChange({ text: e.target.value })} placeholder="Texto do callout. Suporta **negrito**, [link](url)." />
+    </div>
+  );
+  if (block.type === "linkcard") return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input className={s.formInput} value={block.title} onChange={e => onChange({ title: e.target.value })} placeholder="Título (ex.: Baixar o Obsidian)" />
+        <input className={s.formInput} style={{ maxWidth: 120 }} value={block.badge} onChange={e => onChange({ badge: e.target.value })} placeholder="Selo (GRÁTIS)" />
+      </div>
+      <input className={s.formInput} value={block.url} onChange={e => onChange({ url: e.target.value })} placeholder="https://…" />
+    </div>
+  );
   return null;
 }
 

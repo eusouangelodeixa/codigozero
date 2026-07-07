@@ -13,12 +13,12 @@ import {
 import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
-import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
-import { sendCredentialsEmail } from '../services/payment.service';
+import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -750,6 +750,90 @@ router.get('/users/export', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[ADMIN] Users export error:', error);
     res.status(500).json({ error: 'Erro ao exportar usuários' });
+  }
+});
+
+// POST /api/admin/users/grant-trial — create (or upgrade) a user with a manual
+// trial subscription (7 days or 1 month) and send the access credentials by
+// BOTH WhatsApp and email — identical delivery to a real purchase. After the
+// window passes, the daily expiry cron pushes them into the normal
+// pay-to-continue flow. No Lojou/Stripe order; grantedManually excludes them
+// from MRR/revenue. Reuses the existing credential-provisioning helpers.
+router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const whatsappRaw = String(req.body?.whatsapp || req.body?.phone || '').trim();
+    const duration = req.body?.duration === '1m' ? '1m' : '7d';
+
+    if (!name || !email || !whatsappRaw) {
+      return res.status(400).json({ error: 'Nome, e-mail e WhatsApp são obrigatórios.' });
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return res.status(400).json({ error: 'E-mail inválido.' });
+    }
+    if (whatsappRaw.replace(/\D/g, '').length < 8) {
+      return res.status(400).json({ error: 'WhatsApp inválido.' });
+    }
+
+    const phone = normalizeMzPhone(whatsappRaw) || `258${Date.now().toString().slice(-9)}`;
+    const days = duration === '1m' ? 30 : 7;
+    const now = new Date();
+    const subscriptionEnd = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    // Reuse-by-identity (email OR phone) so re-granting to someone who already
+    // exists updates their window instead of 500ing on the @unique email/phone.
+    const existing = await prisma.user.findFirst({ where: { OR: [{ email }, { phone }] } });
+    const { raw, hash } = await generateUserPassword();
+
+    const base: any = {
+      role: 'member',
+      isActive: true,
+      subscriptionStatus: 'active',
+      subscriptionStart: now,
+      subscriptionEnd,
+      grantedManually: true,
+      passwordHash: hash,
+      remarketingStage: 'none',
+    };
+
+    let user;
+    if (existing) {
+      user = await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          ...base,
+          name: name || existing.name,
+          ...(existing.lojouOrderId ? {} : { lojouOrderId: `MANUAL_${existing.id.slice(0, 8)}` }),
+        },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: { ...base, name, email, phone, lojouOrderId: `MANUAL_${randomUUID().slice(0, 8)}` },
+      });
+    }
+
+    // Deliver credentials on BOTH channels — same helpers the purchase flow uses.
+    const emailRes = await sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw })
+      .catch((e) => { console.error('[ADMIN] grant-trial email failed:', e?.message || e); return { success: false } as any; });
+    const waRes = await sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
+      .catch((e) => { console.error('[ADMIN] grant-trial whatsapp failed:', e?.message || e); return { success: false } as any; });
+
+    return res.json({
+      user: {
+        id: user.id, name: user.name, email: user.email, phone: user.phone,
+        subscriptionStatus: user.subscriptionStatus, subscriptionEnd: user.subscriptionEnd,
+      },
+      created: !existing,
+      durationDays: days,
+      delivery: {
+        email: (emailRes as any)?.success !== false,
+        whatsapp: (waRes as any)?.success !== false,
+      },
+    });
+  } catch (e: any) {
+    console.error('[ADMIN] grant-trial error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao conceder acesso. Tente de novo.' });
   }
 });
 

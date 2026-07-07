@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BlockList, type Block } from "@/components/content/BlockView";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-type Block = { id?: string; type: string; [k: string]: any };
 type Related = { slug: string; title: string; theme?: string | null };
 type Page = {
   slug: string; title: string; theme?: string | null; blocks: Block[];
@@ -12,31 +12,6 @@ type Page = {
   ctaText?: string | null; ctaUrl?: string | null;
   headScripts?: string | null; related: Related[];
 };
-
-// ── Minimal, safe markdown → HTML for text blocks (admin-authored) ──────────
-function esc(s: string) {
-  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function inline(s: string) {
-  return esc(s)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-}
-function mdToHtml(src: string) {
-  const lines = (src || "").split(/\r?\n/);
-  const out: string[] = [];
-  let list: string[] = [];
-  const flush = () => { if (list.length) { out.push(`<ul>${list.map((li) => `<li>${inline(li)}</li>`).join("")}</ul>`); list = []; } };
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line.startsWith("- ")) { list.push(line.slice(2)); continue; }
-    flush();
-    if (line) out.push(`<p>${inline(line)}</p>`);
-  }
-  flush();
-  return out.join("");
-}
 
 const LEAD_KEY = "cz_lead";
 
@@ -174,7 +149,7 @@ export default function ContentPageClient({ slug }: { slug: string }) {
     <main style={{ ...wrap, alignItems: "stretch" }}>
       <article style={{ maxWidth: 720, width: "100%", margin: "0 auto" }}>
         <h1 style={{ fontSize: 30, fontWeight: 800, margin: "0 0 20px" }}>{page.title}</h1>
-        {page.blocks.map((b, i) => <BlockView key={b.id || i} block={b} />)}
+        <BlockList blocks={page.blocks} />
 
         {/* CTA final → Código Zero */}
         <div style={{ marginTop: 40, paddingTop: 28, borderTop: "1px solid var(--border)", textAlign: "center" }}>
@@ -202,48 +177,6 @@ export default function ContentPageClient({ slug }: { slug: string }) {
   );
 }
 
-function BlockView({ block }: { block: Block }) {
-  const [copied, setCopied] = useState(false);
-
-  if (block.type === "heading") {
-    const Tag = (`h${block.level || 2}`) as any;
-    return <Tag style={{ fontWeight: 700, margin: "22px 0 10px" }}>{block.text}</Tag>;
-  }
-  if (block.type === "text") {
-    return <div style={{ lineHeight: 1.7, margin: "0 0 14px" }} dangerouslySetInnerHTML={{ __html: mdToHtml(block.md || "") }} />;
-  }
-  if (block.type === "copyblock") {
-    const copy = () => { navigator.clipboard?.writeText(block.text || "").then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }); };
-    return (
-      <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16, margin: "0 0 16px", background: "var(--bg-elevated, rgba(255,255,255,0.03))" }}>
-        {block.label && <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>{block.label}</div>}
-        <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 12 }}>{block.text}</div>
-        <button onClick={copy} style={copyBtn}>{copied ? "Copiado ✓" : "Copiar"}</button>
-      </div>
-    );
-  }
-  if (block.type === "image") {
-    const img = <img src={block.url} alt={block.alt || ""} style={{ maxWidth: "100%", borderRadius: 12, display: "block", margin: "0 auto 16px" }} />;
-    return block.href ? <a href={block.href} target="_blank" rel="noopener noreferrer">{img}</a> : img;
-  }
-  if (block.type === "button") {
-    return <div style={{ margin: "0 0 16px" }}><a href={block.url} style={{ ...ctaStyle, display: "inline-block" }}>{block.label || "Abrir"}</a></div>;
-  }
-  if (block.type === "file") {
-    if (!block.url) return null;
-    return <div style={{ margin: "0 0 16px" }}><a href={block.url} target="_blank" rel="noopener noreferrer" style={{ ...ctaStyle, display: "inline-block" }}>{block.label || "Baixar arquivo"}</a></div>;
-  }
-  if (block.type === "video") {
-    return (
-      <div style={{ margin: "0 0 18px", borderRadius: 12, overflow: "hidden" }} dangerouslySetInnerHTML={{ __html: block.embedHtml || "" }} />
-    );
-  }
-  if (block.type === "divider") {
-    return <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "24px 0" }} />;
-  }
-  return null;
-}
-
 // ── Inline styles (CSS vars come from globals.css, same as the landing) ─────
 const wrap: React.CSSProperties = {
   minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center",
@@ -260,10 +193,6 @@ const ctaStyle: React.CSSProperties = {
 };
 const linkBtn: React.CSSProperties = {
   background: "none", border: "none", color: "var(--text-tertiary)", fontSize: 13, cursor: "pointer", textDecoration: "underline", padding: 4,
-};
-const copyBtn: React.CSSProperties = {
-  padding: "8px 16px", borderRadius: 8, background: "var(--accent)", color: "var(--accent-fg)",
-  fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer",
 };
 const relCard: React.CSSProperties = {
   display: "block", padding: "14px 16px", borderRadius: 10, border: "1px solid var(--border)",

@@ -98,15 +98,14 @@ export default function AdminLp() {
         </button>
       </div>
 
-      {/* ── Links (o mais importante) ── */}
+      {/* ── Link do grupo (o mais importante) ── */}
       <div className={styles.card} style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🔗 Links dos botões</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🔗 Link do grupo</h2>
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16 }}>
-          Onde caem os dois botões da tela final (“TÁ LIBERADO”).
+          Onde cai o botão verde da tela final (“TÁ LIBERADO”). O link da Central vai na <strong>descrição do grupo</strong> — o lead só descobre depois de entrar.
         </p>
         <div className={styles.formGrid}>
           <Field label="Link do grupo do WhatsApp (botão verde)" field="groupUrl" hint="Cole o convite do grupo (https://chat.whatsapp.com/…). Enquanto vazio, o botão fica desativado." />
-          <Field label="Link da Central de Material" field="centralUrl" hint="Ex.: https://central.czero.sbs" />
         </div>
       </div>
 
@@ -178,8 +177,7 @@ export default function AdminLp() {
           <Field label="Passo 1 — descrição" field="step1Desc" multiline />
           <Field label="Passo 1 — texto do botão" field="step1Cta" />
           <Field label="Passo 2 — título" field="step2Title" />
-          <Field label="Passo 2 — descrição (use **negrito**)" field="step2Desc" multiline />
-          <Field label="Passo 2 — texto do botão" field="step2Cta" />
+          <Field label="Passo 2 — descrição (só texto, sem botão — use **negrito**)" field="step2Desc" multiline />
         </div>
       </div>
 

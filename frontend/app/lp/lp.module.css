@@ -321,23 +321,6 @@
 .waCta:hover { filter: brightness(1.05); }
 .waCta:active { transform: translateY(1px); }
 
-.centralCta {
-  display: block;
-  width: 100%;
-  margin-top: 18px;
-  padding: 16px 20px;
-  font-size: 1.0rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-align: center;
-  color: var(--lp-cream);
-  background: transparent;
-  border: 1px solid var(--lp-border-strong);
-  border-radius: 12px;
-  transition: border-color 0.15s, background 0.15s;
-}
-.centralCta:hover { border-color: var(--lp-accent); background: rgba(45, 212, 191, 0.08); }
-
 /* ── Footer ──────────────────────────────────────────────────────────── */
 .footer {
   text-align: center;

@@ -103,7 +103,6 @@ export default function LpClient() {
   };
 
   const groupUrl = (cfg.groupUrl || "").trim();
-  const centralUrl = (cfg.centralUrl || LP_DEFAULTS.centralUrl).trim();
 
   return (
     <div className={styles.page}>
@@ -220,9 +219,6 @@ export default function LpClient() {
                   <p className={styles.stepDesc}>{renderBold(cfg.step2Desc)}</p>
                 </div>
               </div>
-              <a className={styles.centralCta} href={centralUrl} target="_blank" rel="noopener noreferrer">
-                {cfg.step2Cta}
-              </a>
             </div>
           </div>
         )}

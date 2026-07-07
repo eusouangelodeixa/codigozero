@@ -75,12 +75,12 @@ export const LP_DEFAULTS = {
   step1Cta: "ENTRAR NO GRUPO →",
   step2Title: "Pega o material na Central",
   step2Desc:
-    "Na **Central de Material** tá o passo a passo deste reel e de todos os outros, num lugar só. É só escolher e resgatar.",
-  step2Cta: "ABRIR A CENTRAL →",
+    "Na **descrição do grupo** tem o link da Central de Material — o passo a passo deste reel e de todos os outros, num lugar só. É só entrar e resgatar.",
 
-  // ── Links (admin-configurable) ────────────────────────────────────────
+  // ── Link (admin-configurable) ─────────────────────────────────────────
+  // Só o grupo tem botão. O link da Central vai na DESCRIÇÃO do grupo — o
+  // lead descobre depois de entrar (não expomos a Central aqui).
   groupUrl: "",                                   // WhatsApp group invite link
-  centralUrl: "https://central.czero.sbs",        // Central de Material hub
 
   // ── Footer ────────────────────────────────────────────────────────────
   footer: "Código Zero · IA · Claude Code na prática · @eusouangelodeixa",

@@ -70,7 +70,13 @@ export const env = {
   // ── Stripe (international card payments — non-MZ leads) ────────────
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
+  // The Código Zero price id(s) on Stripe — comma-separated if more than one.
+  // The Stripe account is SHARED across many products/Payment Links, so the
+  // webhook MUST verify each checkout is ours before recording a member/sale.
   STRIPE_PRICE_ID: process.env.STRIPE_PRICE_ID || '',
+  // The Código Zero product id(s) — comma-separated. Broader net than the
+  // price id (covers coupons/extra prices under the same product).
+  STRIPE_PRODUCT_ID: process.env.STRIPE_PRODUCT_ID || '',
   // The hosted Stripe checkout link used when a non-MZ lead submits the
   // landing form. This is a static link generated in the Stripe dashboard
   // (e.g. https://buy.stripe.com/...). The webhook still uses the

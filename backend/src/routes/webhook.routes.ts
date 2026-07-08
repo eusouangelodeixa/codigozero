@@ -1063,7 +1063,51 @@ router.post('/stripe', async (req: Request, res: Response) => {
  * granted access manually before Stripe was wired — Esley etc.) by
  * matching on email.
  */
+/**
+ * True only when a checkout is for the Código Zero product. The Stripe account
+ * is SHARED across many products/Payment Links, so Stripe delivers
+ * checkout.session.completed for ALL of them to this one endpoint. Matches the
+ * line items' price id against env.STRIPE_PRICE_ID and/or their product id
+ * against env.STRIPE_PRODUCT_ID (each may be comma-separated). Fails CLOSED —
+ * when the product can't be verified it returns false and alerts superadmins,
+ * so we never record a foreign product as a Código Zero sale.
+ */
+async function sessionIsForCzProduct(session: Stripe.Checkout.Session): Promise<boolean> {
+  const prices = (env.STRIPE_PRICE_ID || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const products = (env.STRIPE_PRODUCT_ID || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!prices.length && !products.length) {
+    console.error('[STRIPE-WEBHOOK/CHECKOUT] STRIPE_PRICE_ID/STRIPE_PRODUCT_ID not configured — cannot verify the product; skipping to avoid recording a foreign sale.');
+    return false;
+  }
+  try {
+    const items = await getStripe().checkout.sessions.listLineItems(session.id, { limit: 10, expand: ['data.price.product'] });
+    for (const li of items.data) {
+      const priceId = li.price?.id;
+      const prod = li.price?.product as any;
+      const productId = typeof prod === 'string' ? prod : prod?.id;
+      if (priceId && prices.includes(priceId)) return true;
+      if (productId && products.includes(productId)) return true;
+    }
+    return false;
+  } catch (e: any) {
+    console.error('[STRIPE-WEBHOOK/CHECKOUT] listLineItems failed — cannot verify product:', e?.message || e);
+    sendPushToSuperAdmins({
+      title: '⚠️ Stripe: checkout não verificado',
+      body: `Não deu pra confirmar o produto do checkout ${session.id}. Se for uma venda do Código Zero, conceda o acesso pelo /admin/users.`,
+      url: '/admin/users',
+    }).catch(() => {});
+    return false; // fail closed — never record an unverified sale
+  }
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  // Ignore checkouts for any OTHER product on the shared Stripe account (e.g.
+  // "Mira Society", "Cash Flow") — otherwise they'd create a bogus CZ member.
+  if (!(await sessionIsForCzProduct(session))) {
+    console.log(`[STRIPE-WEBHOOK/CHECKOUT] Session ${session.id} is not the Código Zero product — ignored.`);
+    return;
+  }
+
   // Pull the customer details. Payment Links always create a Customer
   // before completing, so session.customer is set.
   const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;

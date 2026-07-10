@@ -836,6 +836,51 @@ router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/admin/users/:id/resend-access — RE-send a user's login credentials.
+// Passwords are bcrypt-hashed and can't be read back, so "reenviar acesso" must
+// GENERATE A NEW password, persist it, and deliver it on BOTH channels (WhatsApp
+// + e-mail) — same helpers the purchase/grant flows use. The old password stops
+// working. We AWAIT both sends here (unlike grant-trial's fire-and-forget) so the
+// admin gets real per-channel delivery feedback, and we return the raw password
+// so it can be copied and handed over manually when Komunika/Resend is down
+// (the documented locked-out-buyer recovery). Does NOT touch the subscription —
+// use "Conceder acesso" for that. Admin-gated by the router-level middleware.
+router.post('/users/:id/resend-access', async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const { raw, hash } = await generateUserPassword();
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
+
+    // Await both so the admin sees whether each channel delivered. The password
+    // is already reset above, so a failed send never leaves the account broken —
+    // the admin can copy `password` from the response and send it manually.
+    const emailDelivery = await sendCredentialsEmail({
+      name: user.name, email: user.email, rawPassword: raw,
+    }).catch((e) => ({ ok: false, status: `throw:${e?.message || 'erro'}` }));
+
+    const whatsapp = user.phone
+      ? await sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
+          .catch((e) => ({ delivered: false, status: `throw:${e?.message || 'erro'}` }))
+      : { delivered: false, status: 'sem-telefone' };
+
+    console.log(`[ADMIN] resend-access ${user.email} → email.ok=${emailDelivery.ok} wa.delivered=${whatsapp.delivered}`);
+
+    return res.json({
+      success: true,
+      email: user.email,
+      phone: user.phone,
+      password: raw,
+      whatsapp: { delivered: whatsapp.delivered, status: whatsapp.status },
+      emailDelivery: { ok: emailDelivery.ok, status: emailDelivery.status },
+    });
+  } catch (e: any) {
+    console.error('[ADMIN] resend-access error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao reenviar acesso. Tente de novo.' });
+  }
+});
+
 router.get('/users/:id', async (req: AuthRequest, res: Response) => {
   try {
     const user = await prisma.user.findUnique({

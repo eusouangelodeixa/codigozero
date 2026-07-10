@@ -61,6 +61,9 @@ export default function AdminUsers() {
   const [granting, setGranting] = useState(false);
   const [grantForm, setGrantForm] = useState({ name: "", email: "", whatsapp: "", duration: "7d" });
   const [grantBusy, setGrantBusy] = useState(false);
+  // "Reenviar acesso" (reset senha + reenvio) — id em envio + resultado p/ modal
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendResult, setResendResult] = useState<any>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -172,6 +175,35 @@ export default function AdminUsers() {
     }
   };
 
+  // Reenviar acesso: gera NOVA senha e reenvia login por WhatsApp + e-mail (a
+  // senha antiga deixa de valer — senhas são hasheadas, não dá pra reler). Mostra
+  // a senha nova num modal pra copiar/entregar manualmente se algum canal falhar.
+  const handleResend = async (u: any) => {
+    if (
+      !confirm(
+        `Reenviar acesso de "${u.name}"?\n\nIsto gera uma NOVA senha e envia por WhatsApp + e-mail. A senha atual deixará de funcionar.`
+      )
+    )
+      return;
+    setResendingId(u.id);
+    try {
+      const r = await fetch(`${API}/api/admin/users/${u.id}/resend-access`, {
+        method: "POST",
+        headers: hdr(),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        showToast(d.error || "Erro ao reenviar acesso");
+        return;
+      }
+      setResendResult(d);
+    } catch {
+      showToast("Erro de conexão");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
   const statusBadge = (s: string) => (
     <span className={`${styles.badge} ${statusBadgeClass(s)}`}>{STATUS_LABEL[s] || s}</span>
   );
@@ -239,6 +271,7 @@ export default function AdminUsers() {
                 <td>
                   <div className={styles.actions}>
                     <button className={styles.actionBtn} onClick={() => setEditing({ ...u })}>Editar</button>
+                    <button className={styles.actionBtn} onClick={() => handleResend(u)} disabled={resendingId === u.id}>{resendingId === u.id ? "Enviando…" : "Reenviar acesso"}</button>
                     <button className={styles.actionBtn} onClick={() => toggleActive(u)}>{u.isActive ? "Desativar" : "Ativar"}</button>
                     <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={() => handleDelete(u.id, u.name)}>Remover</button>
                   </div>
@@ -264,6 +297,7 @@ export default function AdminUsers() {
               <div className={styles.mCardRow}><span className={styles.mCardLabel}>1º acesso</span><span className={styles.mCardValue}><FirstAccess at={u.firstAccessAt} role={u.role} status={u.subscriptionStatus} /></span></div>
               <div className={styles.mCardActions}>
                 <button className={styles.actionBtn} onClick={() => setEditing({ ...u })}>Editar</button>
+                <button className={styles.actionBtn} onClick={() => handleResend(u)} disabled={resendingId === u.id}>{resendingId === u.id ? "Enviando…" : "Reenviar acesso"}</button>
                 <button className={styles.actionBtn} onClick={() => toggleActive(u)}>{u.isActive ? "Desativar" : "Ativar"}</button>
                 <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={() => handleDelete(u.id, u.name)}>Remover</button>
               </div>
@@ -358,6 +392,60 @@ export default function AdminUsers() {
                 {grantBusy ? "Concedendo…" : "Conceder e enviar acesso"}
               </button>
               <button className={styles.btnSecondary} onClick={() => setGranting(false)} disabled={grantBusy}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resendResult && (
+        <div className={styles.modalOverlay} onClick={() => setResendResult(null)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Acesso reenviado ✓</h2>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "-6px 0 14px" }}>
+              Uma nova senha foi gerada e enviada por WhatsApp e e-mail. Se algum canal falhar,
+              copie os dados abaixo e envie manualmente ao usuário.
+            </p>
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>E-mail</label>
+                <input className={styles.formInput} readOnly value={resendResult.email || ""} onFocus={(e) => e.target.select()} />
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Nova senha</label>
+                <input
+                  className={styles.formInput}
+                  readOnly
+                  value={resendResult.password || ""}
+                  style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", letterSpacing: "0.04em" }}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13, margin: "12px 0 4px", color: "var(--text-secondary)" }}>
+              <span>WhatsApp: {resendResult.whatsapp?.delivered ? "✅ entregue" : `⚠️ falhou (${resendResult.whatsapp?.status})`}</span>
+              <span>E-mail: {resendResult.emailDelivery?.ok ? "✅ enviado" : `⚠️ falhou (${resendResult.emailDelivery?.status})`}</span>
+            </div>
+            <div className={styles.btnRow}>
+              <button
+                className={styles.btnPrimary}
+                onClick={() => {
+                  const pw = resendResult.password || "";
+                  // navigator.clipboard é undefined fora de contexto seguro (http / webviews
+                  // antigos) — o optional-chaining evita o crash mas engoliria o feedback,
+                  // então tratamos esse caso explicitamente (a senha segue selecionável acima).
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(pw).then(
+                      () => showToast("Senha copiada ✓"),
+                      () => showToast("Não foi possível copiar — selecione a senha acima")
+                    );
+                  } else {
+                    showToast("Copie manualmente: selecione a senha acima");
+                  }
+                }}
+              >
+                Copiar senha
+              </button>
+              <button className={styles.btnSecondary} onClick={() => setResendResult(null)}>Fechar</button>
             </div>
           </div>
         </div>

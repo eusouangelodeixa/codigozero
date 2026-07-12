@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import styles from "../admin.module.css";
+import k from "@/components/admin/kit.module.css";
+import { AdminPage } from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
@@ -74,17 +76,14 @@ export default function AdminAulas() {
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Gestão de Aulas</h1>
-        <p className={styles.pageDesc}>{modules.length} módulos · {modules.reduce((s, m) => s + (m.lessons?.length || 0), 0)} aulas</p>
-      </div>
-
-      <div className={styles.btnRow} style={{ marginBottom: 24 }}>
-        <button className={styles.btnPrimary} onClick={() => setEditMod({ title: "", description: "", icon: "📚", sortOrder: modules.length })}>
-          + Novo Módulo
-        </button>
-      </div>
-
+      <AdminPage
+        title="Aulas"
+        actions={
+          <button className={`${k.btn} ${k.btnPrimary}`} onClick={() => setEditMod({ title: "", description: "", icon: "📚", sortOrder: modules.length })}>
+            + Novo Módulo
+          </button>
+        }
+      >
       {modules.map(mod => (
         <div key={mod.id} className={styles.card}>
           <div className={styles.cardHeader}>
@@ -113,8 +112,8 @@ export default function AdminAulas() {
                     <td>{i + 1}</td>
                     <td>{lesson.title}</td>
                     <td>{lesson.duration ? `${Math.floor(lesson.duration / 60)}min` : "—"}</td>
-                    <td>{(lesson.materials || []).length > 0 ? <span className={`${styles.badge} ${styles.badgeTeal}`}>{lesson.materials.length} arquivos</span> : <span style={{ color: "#555" }}>—</span>}</td>
-                    <td>{lesson.content ? <span className={`${styles.badge} ${styles.badgeGreen}`}>✓</span> : <span style={{ color: "#555" }}>—</span>}</td>
+                    <td>{(lesson.materials || []).length > 0 ? <span className={`${styles.badge} ${styles.badgeTeal}`}>{lesson.materials.length} arquivos</span> : <span style={{ color: "var(--text-tertiary)" }}>—</span>}</td>
+                    <td>{lesson.content ? <span className={`${styles.badge} ${styles.badgeGreen}`}>✓</span> : <span style={{ color: "var(--text-tertiary)" }}>—</span>}</td>
                     <td>
                       <div className={styles.actions}>
                         <button className={styles.actionBtn} onClick={() => openLessonEditor(lesson)}>Editar</button>
@@ -128,6 +127,7 @@ export default function AdminAulas() {
           )}
         </div>
       ))}
+      </AdminPage>
 
       {/* Module Modal */}
       {editMod && (
@@ -194,7 +194,7 @@ export default function AdminAulas() {
                 </div>
                 <div className={`${styles.formGroup} ${styles.formGroupFull}`}>
                   <label className={styles.formLabel}>Vídeo (URL ou Embed completo)</label>
-                  <p style={{ fontSize: 12, color: "#666", margin: "4px 0 8px" }}>
+                  <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "4px 0 8px" }}>
                     Cola aqui o código de embed da Kilax/YouTube/Vimeo (algo como <code>&lt;iframe src="..."&gt;</code>) ou só a URL. O player aplica fullscreen automaticamente.
                   </p>
                   <textarea
@@ -220,7 +220,7 @@ export default function AdminAulas() {
             {lessonTab === "content" && (
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Conteúdo da Aula (Texto / Markdown)</label>
-                <p style={{ fontSize: 12, color: "#666", margin: "4px 0 12px" }}>
+                <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "4px 0 12px" }}>
                   Escreva o conteúdo textual da aula. Pode usar Markdown para formatação.
                 </p>
                 <textarea
@@ -236,7 +236,7 @@ export default function AdminAulas() {
             {/* Materials Tab */}
             {lessonTab === "materials" && (
               <div>
-                <p style={{ fontSize: 12, color: "#888", marginBottom: 16 }}>
+                <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 16 }}>
                   Adicione links, PDFs, ferramentas e recursos complementares para a aula.
                 </p>
                 {(editLesson.materials || []).map((mat: any, i: number) => (

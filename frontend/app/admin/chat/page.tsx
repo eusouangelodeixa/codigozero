@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "../admin.module.css";
+import { AdminPage, SegmentedControl } from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
@@ -168,328 +169,298 @@ export default function AdminChatPage() {
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <h1 className={styles.pageTitle}>💬 Chat</h1>
-            <p className={styles.pageDesc}>
-              {view === "support" ? "Conversas de suporte 1:1 com membros" : "Chat da comunidade — todos os membros"}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "4px", background: "rgba(255,255,255,0.03)", padding: "3px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <button
-              onClick={() => { setView("support"); setMessages([]); }}
-              style={{
-                padding: "6px 14px", fontSize: "12px", fontWeight: 500, borderRadius: "6px",
-                color: view === "support" ? "#2DD4BF" : "#888",
-                background: view === "support" ? "rgba(45,212,191,0.1)" : "transparent",
-                transition: "all 0.15s",
-              }}
-            >
-              🎧 Suporte 1:1
-            </button>
-            <button
-              onClick={() => { setView("community"); setMessages([]); }}
-              style={{
-                padding: "6px 14px", fontSize: "12px", fontWeight: 500, borderRadius: "6px",
-                color: view === "community" ? "#2DD4BF" : "#888",
-                background: view === "community" ? "rgba(45,212,191,0.1)" : "transparent",
-                transition: "all 0.15s",
-              }}
-            >
-              💬 Comunidade
-            </button>
-          </div>
-        </div>
-      </div>
+      <AdminPage
+        title="Chat de suporte"
+        actions={
+          <SegmentedControl<View>
+            value={view}
+            onChange={(v) => { setView(v); setMessages([]); }}
+            options={[
+              { value: "support", label: "🎧 Suporte 1:1" },
+              { value: "community", label: "💬 Comunidade" },
+            ]}
+          />
+        }
+      >
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : (view === "support" ? "320px 1fr" : "1fr"),
+          gap: "0", border: "1px solid var(--border-glass)",
+          borderRadius: "12px", overflow: "hidden",
+          height: isMobile ? "calc(100svh - 140px)" : "calc(100vh - 180px)",
+          minHeight: isMobile ? 0 : "500px",
+        }}>
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : (view === "support" ? "320px 1fr" : "1fr"),
-        gap: "0", border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: "12px", overflow: "hidden",
-        height: isMobile ? "calc(100svh - 140px)" : "calc(100vh - 180px)",
-        minHeight: isMobile ? 0 : "500px",
-      }}>
+          {/* ── Inbox Sidebar (support only; on mobile, only when no convo is open) ── */}
+          {view === "support" && (!isMobile || !selectedUserId) && (
+            <div style={{ background: "#0d0d12", borderRight: "1px solid var(--border-glass)", display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-glass)", fontSize: "13px", color: "#888", fontWeight: 600 }}>
+                {conversations.length} Conversa{conversations.length !== 1 ? "s" : ""}
+              </div>
 
-        {/* ── Inbox Sidebar (support only; on mobile, only when no convo is open) ── */}
-        {view === "support" && (!isMobile || !selectedUserId) && (
-          <div style={{ background: "#0d0d12", borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: "13px", color: "#888", fontWeight: 600 }}>
-              {conversations.length} Conversa{conversations.length !== 1 ? "s" : ""}
-            </div>
-
-            <div style={{ flex: 1, overflowY: "auto" }}>
-              {conversations.length === 0 && (
-                <div style={{ padding: "40px 16px", textAlign: "center", color: "#555", fontSize: "13px" }}>
-                  Nenhuma conversa de suporte ainda.
-                </div>
-              )}
-
-              {conversations.map(convo => {
-                const isSelected = convo.userId === selectedUserId;
-                const badge = statusBadge(convo.user?.subscriptionStatus || "");
-                return (
-                  <button
-                    key={convo.channel}
-                    onClick={() => { setSelectedUserId(convo.userId); setMessages([]); }}
-                    style={{
-                      width: "100%", textAlign: "left", padding: "12px 16px",
-                      background: isSelected ? "rgba(45,212,191,0.06)" : "transparent",
-                      borderBottom: "1px solid rgba(255,255,255,0.03)",
-                      transition: "background 0.12s",
-                      display: "flex", gap: "10px", alignItems: "flex-start", cursor: "pointer",
-                    }}
-                  >
-                    <div style={{
-                      width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
-                      background: isSelected ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.06)",
-                      color: isSelected ? "#2DD4BF" : "#888",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "14px", fontWeight: 700, overflow: "hidden",
-                    }}>
-                      {convo.user?.avatarUrl
-                        ? <img src={avatarSrc(convo.user.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
-                        : convo.user?.name?.[0]?.toUpperCase() || "?"
-                      }
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
-                        <span style={{ fontSize: "13px", fontWeight: 600, color: isSelected ? "#fff" : "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {convo.user?.name || "Usuário"}
-                        </span>
-                        {convo.unreadCount > 0 && (
-                          <span style={{ background: "#2DD4BF", color: "#000", fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "10px", flexShrink: 0 }}>
-                            {convo.unreadCount}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: "12px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {convo.lastMessage
-                          ? `${convo.lastMessage.sender.role === "admin" ? "Você: " : ""}${convo.lastMessage.content || (convo.lastMessage.type === "image" ? "📷 Imagem" : convo.lastMessage.type === "audio" ? "🎤 Áudio" : convo.lastMessage.type === "poll" ? "📊 Enquete" : "")}`
-                          : "Sem mensagens"}
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
-                        <span className={`${styles.badge} ${styles[badge.cls]}`} style={{ fontSize: "10px", padding: "1px 6px" }}>
-                          {badge.label}
-                        </span>
-                        {convo.lastMessage && (
-                          <span style={{ fontSize: "10px", color: "#555" }}>{formatDate(convo.lastMessage.createdAt)}</span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Chat Panel (on mobile, only when a conversation/community is open) ── */}
-        {(!isMobile || showChatPanel) && (
-        <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0f", minWidth: 0 }}>
-          {!showChatPanel ? (
-            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px" }}>
-              <span style={{ fontSize: "40px", opacity: 0.4 }}>💬</span>
-              <p style={{ color: "#555", fontSize: "14px" }}>Selecione uma conversa</p>
-            </div>
-          ) : (
-            <>
-              {/* Chat header */}
-              {view === "support" && selectedConvo && (
-                <div style={{
-                  padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                  display: "flex", alignItems: "center", gap: "10px", flexShrink: 0,
-                }}>
-                  {isMobile && (
-                    <button
-                      onClick={() => { setSelectedUserId(null); setMessages([]); }}
-                      style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", padding: "4px", marginLeft: "-4px", display: "flex", flexShrink: 0 }}
-                      aria-label="Voltar para a lista"
-                    >
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-                    </button>
-                  )}
-                  <div style={{
-                    width: "32px", height: "32px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-                    background: "rgba(45,212,191,0.12)", color: "#2DD4BF",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "13px", fontWeight: 700,
-                  }}>
-                    {selectedConvo.user?.avatarUrl
-                      ? <img src={avatarSrc(selectedConvo.user.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : selectedConvo.user?.name?.[0]?.toUpperCase() || "?"
-                    }
-                  </div>
-                  <div>
-                    <p style={{ fontSize: "14px", fontWeight: 600, color: "#fff", margin: 0 }}>
-                      {selectedConvo.user?.name || "Usuário"}
-                    </p>
-                    <p style={{ fontSize: "11px", color: "#888", margin: 0 }}>
-                      {selectedConvo.user?.email}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {view === "community" && (
-                <div style={{
-                  padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                  flexShrink: 0,
-                }}>
-                  <p style={{ fontSize: "14px", fontWeight: 600, color: "#fff", margin: 0 }}>💬 Chat da Comunidade</p>
-                  <p style={{ fontSize: "11px", color: "#888", margin: 0 }}>Todos os membros podem ver e participar</p>
-                </div>
-              )}
-
-              {/* Messages */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                {messages.length === 0 && (
-                  <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: "13px" }}>
-                    {view === "community" ? "Nenhuma mensagem na comunidade ainda." : `Início da conversa com ${selectedConvo?.user?.name || "este usuário"}`}
+              <div style={{ flex: 1, overflowY: "auto" }}>
+                {conversations.length === 0 && (
+                  <div style={{ padding: "40px 16px", textAlign: "center", color: "#555", fontSize: "13px" }}>
+                    Nenhuma conversa de suporte ainda.
                   </div>
                 )}
 
-                {messages.map(msg => {
-                  const isMine = msg.sender.id === adminId;
-                  const isAdminSender = msg.sender.role === "admin";
+                {conversations.map(convo => {
+                  const isSelected = convo.userId === selectedUserId;
+                  const badge = statusBadge(convo.user?.subscriptionStatus || "");
                   return (
-                    <div key={msg.id} style={{ display: "flex", justifyContent: isMine ? "flex-end" : "flex-start", marginBottom: "2px", gap: "8px", alignItems: "flex-end" }}>
-                      {!isMine && view === "community" && (
-                        <div style={{
-                          width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0, overflow: "hidden",
-                          background: isAdminSender ? "rgba(45,212,191,0.15)" : "rgba(255,255,255,0.06)",
-                          color: isAdminSender ? "#2DD4BF" : "#888",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: "11px", fontWeight: 700,
-                        }}>
-                          {msg.sender.avatarUrl
-                            ? <img src={avatarSrc(msg.sender.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                            : msg.sender.name?.[0]?.toUpperCase() || "?"
-                          }
-                        </div>
-                      )}
+                    <button
+                      key={convo.channel}
+                      onClick={() => { setSelectedUserId(convo.userId); setMessages([]); }}
+                      style={{
+                        width: "100%", textAlign: "left", padding: "12px 16px",
+                        background: isSelected ? "rgba(45,212,191,0.06)" : "transparent",
+                        borderBottom: "1px solid rgba(255,255,255,0.03)",
+                        transition: "background 0.12s",
+                        display: "flex", gap: "10px", alignItems: "flex-start", cursor: "pointer",
+                      }}
+                    >
                       <div style={{
-                        maxWidth: "70%", padding: "8px 14px", borderRadius: "14px",
-                        background: isMine ? "rgba(45,212,191,0.12)" : "rgba(255,255,255,0.04)",
-                        border: isMine ? "none" : "1px solid rgba(255,255,255,0.06)",
-                        borderBottomRightRadius: isMine ? "4px" : "14px",
-                        borderBottomLeftRadius: isMine ? "14px" : "4px",
+                        width: "36px", height: "36px", borderRadius: "50%", flexShrink: 0,
+                        background: isSelected ? "var(--accent-dim)" : "rgba(255,255,255,0.06)",
+                        color: isSelected ? "var(--accent)" : "#888",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "14px", fontWeight: 700, overflow: "hidden",
                       }}>
-                        {!isMine && view === "community" && (
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
-                            <span style={{ fontSize: "11px", fontWeight: 700, color: isAdminSender ? "#2DD4BF" : "#aaa" }}>
-                              {msg.sender.name}
+                        {convo.user?.avatarUrl
+                          ? <img src={avatarSrc(convo.user.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} />
+                          : convo.user?.name?.[0]?.toUpperCase() || "?"
+                        }
+                      </div>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+                          <span style={{ fontSize: "13px", fontWeight: 600, color: isSelected ? "var(--text-primary)" : "#ccc", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {convo.user?.name || "Usuário"}
+                          </span>
+                          {convo.unreadCount > 0 && (
+                            <span style={{ background: "var(--accent)", color: "var(--accent-fg)", fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "10px", flexShrink: 0 }}>
+                              {convo.unreadCount}
                             </span>
-                            {isAdminSender && (
-                              <span style={{
-                                fontSize: "8px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px",
-                                padding: "1px 5px", borderRadius: "3px",
-                                background: "rgba(45,212,191,0.12)", color: "#2DD4BF",
-                                border: "1px solid rgba(45,212,191,0.2)",
-                              }}>
-                                Moderador
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {msg.type === "image" && msg.mediaUrl ? (
-                          <img src={mediaSrc(msg.mediaUrl)} alt={msg.content || "imagem"} onClick={() => window.open(mediaSrc(msg.mediaUrl), "_blank")} style={{ maxWidth: "220px", maxHeight: "260px", borderRadius: "10px", display: "block", cursor: "pointer" }} />
-                        ) : msg.type === "audio" && msg.mediaUrl ? (
-                          <audio controls preload="none" src={mediaSrc(msg.mediaUrl)} style={{ height: "36px", maxWidth: "220px" }} />
-                        ) : msg.type === "poll" && msg.poll ? (
-                          <div style={{ minWidth: "200px" }}>
-                            <p style={{ fontSize: "13px", fontWeight: 700, color: "#fff", margin: "0 0 6px" }}>📊 {msg.poll.question}</p>
-                            {(() => {
-                              const total = msg.poll.options.reduce((s, o) => s + o.count, 0);
-                              return msg.poll.options.map((o) => {
-                                const pct = total > 0 ? Math.round((o.count / total) * 100) : 0;
-                                return (
-                                  <div key={o.id} style={{ position: "relative", padding: "5px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "4px", overflow: "hidden" }}>
-                                    <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: "rgba(45,212,191,0.12)" }} />
-                                    <span style={{ position: "relative", fontSize: "12px", color: "#ddd", display: "flex", justifyContent: "space-between", gap: "8px" }}>
-                                      <span>{o.text}</span><span style={{ fontWeight: 700 }}>{pct}%</span>
-                                    </span>
-                                  </div>
-                                );
-                              });
-                            })()}
-                            <span style={{ fontSize: "10px", color: "#666" }}>{msg.poll.totalVoters} voto(s)</span>
-                          </div>
-                        ) : (
-                          <p style={{ fontSize: "13px", color: "#ddd", margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-                            {msg.content}
-                          </p>
-                        )}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px", gap: "8px" }}>
-                          <span style={{ fontSize: "10px", color: "#555" }}>{formatTime(msg.createdAt)}</span>
-                          <button
-                            onClick={() => handleDelete(msg.id)}
-                            style={{ fontSize: "11px", opacity: 0.3, cursor: "pointer", padding: "0 2px", transition: "opacity 0.15s" }}
-                            onMouseOver={e => e.currentTarget.style.opacity = "0.8"}
-                            onMouseOut={e => e.currentTarget.style.opacity = "0.3"}
-                            title="Apagar mensagem"
-                          >
-                            🗑
-                          </button>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {convo.lastMessage
+                            ? `${convo.lastMessage.sender.role === "admin" ? "Você: " : ""}${convo.lastMessage.content || (convo.lastMessage.type === "image" ? "📷 Imagem" : convo.lastMessage.type === "audio" ? "🎤 Áudio" : convo.lastMessage.type === "poll" ? "📊 Enquete" : "")}`
+                            : "Sem mensagens"}
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+                          <span className={`${styles.badge} ${styles[badge.cls]}`} style={{ fontSize: "10px", padding: "1px 6px" }}>
+                            {badge.label}
+                          </span>
+                          {convo.lastMessage && (
+                            <span style={{ fontSize: "10px", color: "#555" }}>{formatDate(convo.lastMessage.createdAt)}</span>
+                          )}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
-                <div ref={messagesEndRef} />
               </div>
+            </div>
+          )}
 
-              {/* Input */}
-              <div style={{
-                display: "flex", gap: "8px", padding: "12px 20px",
-                borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0,
-              }}>
-                <input
-                  ref={inputRef}
-                  style={{
-                    flex: 1, padding: "10px 16px", borderRadius: "20px",
-                    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                    color: "#fff", fontSize: "13px", outline: "none",
-                  }}
-                  placeholder={view === "community" ? "Enviar para a comunidade..." : "Responder..."}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || sending}
-                  style={{
-                    width: "36px", height: "36px", borderRadius: "50%",
-                    background: "#2DD4BF", color: "#000", display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                    opacity: !input.trim() ? 0.4 : 1, cursor: !input.trim() ? "not-allowed" : "pointer",
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </button>
+          {/* ── Chat Panel (on mobile, only when a conversation/community is open) ── */}
+          {(!isMobile || showChatPanel) && (
+          <div style={{ display: "flex", flexDirection: "column", background: "#0a0a0f", minWidth: 0 }}>
+            {!showChatPanel ? (
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "8px" }}>
+                <span style={{ fontSize: "40px", opacity: 0.4 }}>💬</span>
+                <p style={{ color: "#555", fontSize: "14px" }}>Selecione uma conversa</p>
               </div>
-            </>
+            ) : (
+              <>
+                {/* Chat header */}
+                {view === "support" && selectedConvo && (
+                  <div style={{
+                    padding: "12px 20px", borderBottom: "1px solid var(--border-glass)",
+                    display: "flex", alignItems: "center", gap: "10px", flexShrink: 0,
+                  }}>
+                    {isMobile && (
+                      <button
+                        onClick={() => { setSelectedUserId(null); setMessages([]); }}
+                        style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", padding: "4px", marginLeft: "-4px", display: "flex", flexShrink: 0 }}
+                        aria-label="Voltar para a lista"
+                      >
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                      </button>
+                    )}
+                    <div style={{
+                      width: "32px", height: "32px", borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                      background: "rgba(45,212,191,0.12)", color: "var(--accent)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "13px", fontWeight: 700,
+                    }}>
+                      {selectedConvo.user?.avatarUrl
+                        ? <img src={avatarSrc(selectedConvo.user.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : selectedConvo.user?.name?.[0]?.toUpperCase() || "?"
+                      }
+                    </div>
+                    <div>
+                      <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
+                        {selectedConvo.user?.name || "Usuário"}
+                      </p>
+                      <p style={{ fontSize: "11px", color: "#888", margin: 0 }}>
+                        {selectedConvo.user?.email}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {view === "community" && (
+                  <div style={{
+                    padding: "12px 20px", borderBottom: "1px solid var(--border-glass)",
+                    flexShrink: 0,
+                  }}>
+                    <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>💬 Chat da Comunidade</p>
+                    <p style={{ fontSize: "11px", color: "#888", margin: 0 }}>Todos os membros podem ver e participar</p>
+                  </div>
+                )}
+
+                {/* Messages */}
+                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {messages.length === 0 && (
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#555", fontSize: "13px" }}>
+                      {view === "community" ? "Nenhuma mensagem na comunidade ainda." : `Início da conversa com ${selectedConvo?.user?.name || "este usuário"}`}
+                    </div>
+                  )}
+
+                  {messages.map(msg => {
+                    const isMine = msg.sender.id === adminId;
+                    const isAdminSender = msg.sender.role === "admin";
+                    return (
+                      <div key={msg.id} style={{ display: "flex", justifyContent: isMine ? "flex-end" : "flex-start", marginBottom: "2px", gap: "8px", alignItems: "flex-end" }}>
+                        {!isMine && view === "community" && (
+                          <div style={{
+                            width: "28px", height: "28px", borderRadius: "50%", flexShrink: 0, overflow: "hidden",
+                            background: isAdminSender ? "var(--accent-dim)" : "rgba(255,255,255,0.06)",
+                            color: isAdminSender ? "var(--accent)" : "#888",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: "11px", fontWeight: 700,
+                          }}>
+                            {msg.sender.avatarUrl
+                              ? <img src={avatarSrc(msg.sender.avatarUrl)} alt="" onError={hideOnError} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              : msg.sender.name?.[0]?.toUpperCase() || "?"
+                            }
+                          </div>
+                        )}
+                        <div style={{
+                          maxWidth: "70%", padding: "8px 14px", borderRadius: "14px",
+                          background: isMine ? "rgba(45,212,191,0.12)" : "var(--bg-glass)",
+                          border: isMine ? "none" : "1px solid var(--border-glass)",
+                          borderBottomRightRadius: isMine ? "4px" : "14px",
+                          borderBottomLeftRadius: isMine ? "14px" : "4px",
+                        }}>
+                          {!isMine && view === "community" && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                              <span style={{ fontSize: "11px", fontWeight: 700, color: isAdminSender ? "var(--accent)" : "#aaa" }}>
+                                {msg.sender.name}
+                              </span>
+                              {isAdminSender && (
+                                <span style={{
+                                  fontSize: "8px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px",
+                                  padding: "1px 5px", borderRadius: "3px",
+                                  background: "rgba(45,212,191,0.12)", color: "var(--accent)",
+                                  border: "1px solid rgba(45,212,191,0.2)",
+                                }}>
+                                  Moderador
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {msg.type === "image" && msg.mediaUrl ? (
+                            <img src={mediaSrc(msg.mediaUrl)} alt={msg.content || "imagem"} onClick={() => window.open(mediaSrc(msg.mediaUrl), "_blank")} style={{ maxWidth: "220px", maxHeight: "260px", borderRadius: "10px", display: "block", cursor: "pointer" }} />
+                          ) : msg.type === "audio" && msg.mediaUrl ? (
+                            <audio controls preload="none" src={mediaSrc(msg.mediaUrl)} style={{ height: "36px", maxWidth: "220px" }} />
+                          ) : msg.type === "poll" && msg.poll ? (
+                            <div style={{ minWidth: "200px" }}>
+                              <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-primary)", margin: "0 0 6px" }}>📊 {msg.poll.question}</p>
+                              {(() => {
+                                const total = msg.poll.options.reduce((s, o) => s + o.count, 0);
+                                return msg.poll.options.map((o) => {
+                                  const pct = total > 0 ? Math.round((o.count / total) * 100) : 0;
+                                  return (
+                                    <div key={o.id} style={{ position: "relative", padding: "5px 8px", borderRadius: "6px", border: "1px solid var(--border-default)", marginBottom: "4px", overflow: "hidden" }}>
+                                      <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: "rgba(45,212,191,0.12)" }} />
+                                      <span style={{ position: "relative", fontSize: "12px", color: "#ddd", display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                                        <span>{o.text}</span><span style={{ fontWeight: 700 }}>{pct}%</span>
+                                      </span>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                              <span style={{ fontSize: "10px", color: "#666" }}>{msg.poll.totalVoters} voto(s)</span>
+                            </div>
+                          ) : (
+                            <p style={{ fontSize: "13px", color: "#ddd", margin: 0, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                              {msg.content}
+                            </p>
+                          )}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "2px", gap: "8px" }}>
+                            <span style={{ fontSize: "10px", color: "#555" }}>{formatTime(msg.createdAt)}</span>
+                            <button
+                              onClick={() => handleDelete(msg.id)}
+                              style={{ fontSize: "11px", opacity: 0.3, cursor: "pointer", padding: "0 2px", transition: "opacity 0.15s" }}
+                              onMouseOver={e => e.currentTarget.style.opacity = "0.8"}
+                              onMouseOut={e => e.currentTarget.style.opacity = "0.3"}
+                              title="Apagar mensagem"
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input */}
+                <div style={{
+                  display: "flex", gap: "8px", padding: "12px 20px",
+                  borderTop: "1px solid var(--border-glass)", flexShrink: 0,
+                }}>
+                  <input
+                    ref={inputRef}
+                    style={{
+                      flex: 1, padding: "10px 16px", borderRadius: "20px",
+                      background: "var(--bg-glass)", border: "1px solid var(--border-default)",
+                      color: "var(--text-primary)", fontSize: "13px", outline: "none",
+                    }}
+                    placeholder={view === "community" ? "Enviar para a comunidade..." : "Responder..."}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={!input.trim() || sending}
+                    style={{
+                      width: "36px", height: "36px", borderRadius: "50%",
+                      background: "var(--accent)", color: "var(--accent-fg)", display: "flex",
+                      alignItems: "center", justifyContent: "center",
+                      opacity: !input.trim() ? 0.4 : 1, cursor: !input.trim() ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           )}
         </div>
-        )}
-      </div>
+      </AdminPage>
 
-      {toast && (
-        <div style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 200,
-          padding: "10px 18px", borderRadius: 8,
-          background: "rgba(45,212,191,0.12)", border: "1px solid rgba(45,212,191,0.25)",
-          color: "#2DD4BF", fontSize: 13,
-        }}>
-          {toast}
-        </div>
-      )}
+      {toast && <div className={styles.toast}>{toast}</div>}
     </>
   );
 }

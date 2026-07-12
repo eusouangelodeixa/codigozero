@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui";
-import { MetricCard, RevenueChart, type Period, type RevenueDatum } from "@/components/admin";
-import adminStyles from "./admin.module.css";
+import { AdminPage, MetricCard, RevenueChart, type Period, type RevenueDatum } from "@/components/admin";
 import styles from "./dashboard.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -114,11 +113,9 @@ const IconLeads = () => (
     <line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 );
-const IconSlots = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 1l3 5 6 1-4.5 4.5L18 18l-6-3-6 3 1.5-6.5L3 7l6-1z" />
-  </svg>
-);
+
+// Quantas transações a "Atividade recente" exibe (o contador reflete este limite).
+const FEED_LIMIT = 8;
 
 const formatDateAxis = (period: Period) => (raw: string) => {
   if (period === "12m") return raw; // already "mai/26" style
@@ -167,14 +164,7 @@ export default function AdminDashboard() {
   );
 
   return (
-    <div className={styles.page}>
-      <div className={adminStyles.pageHeader}>
-        <h1 className={adminStyles.pageTitle}>Visão geral</h1>
-        <p className={adminStyles.pageDesc}>
-          O coração da operação. Métricas em tempo real, receita, atividade dos últimos dias e saúde da plataforma.
-        </p>
-      </div>
-
+    <AdminPage title="Visão geral">
       {/* ─── Primary KPIs ─── */}
       <div className={styles.metricsPrimary}>
         <MetricCard
@@ -263,26 +253,15 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Vagas — full row when set */}
-      {stats && typeof stats.vagasRestantes !== "string" && (
-        <div className={styles.metricsPrimary}>
-          <MetricCard
-            label="Vagas restantes"
-            value={fmtNumber(stats.vagasRestantes as number)}
-            icon={<IconSlots />}
-            iconAccent
-            sub="para a turma atual"
-          />
-        </div>
-      )}
-
       {/* ─── Activity feed ─── */}
       <div className={styles.activityCard}>
         <div className={styles.activityHead}>
           <h3 className={styles.activityTitle}>Atividade recente</h3>
           {finance && (
             <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-              {finance.recentTransactions.length} transação(ões)
+              {finance.recentTransactions.length > FEED_LIMIT
+                ? `${FEED_LIMIT} de ${finance.recentTransactions.length}`
+                : `${finance.recentTransactions.length} transação(ões)`}
             </span>
           )}
         </div>
@@ -290,7 +269,7 @@ export default function AdminDashboard() {
           {loadingFin && !finance ? (
             <div className={styles.activityEmpty}>Carregando…</div>
           ) : finance?.recentTransactions.length ? (
-            finance.recentTransactions.slice(0, 8).map((tx) => (
+            finance.recentTransactions.slice(0, FEED_LIMIT).map((tx) => (
               <div key={tx.id} className={styles.activityRow}>
                 <div className={styles.activityName}>
                   <span className={styles.activityNameMain}>{tx.userName || "Cliente"}</span>
@@ -306,6 +285,6 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
-    </div>
+    </AdminPage>
   );
 }

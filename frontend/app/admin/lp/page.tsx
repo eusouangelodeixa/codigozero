@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../admin.module.css";
+import k from "@/components/admin/kit.module.css";
+import { AdminPage } from "@/components/admin";
 import { LP_DEFAULTS, type LpSurveyStep } from "../../lp/lpDefaults";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -74,16 +76,18 @@ export default function AdminLp() {
   };
 
   return (
-    <div>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>LP — Reels</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <a className={styles.btnSecondary} href="/lp" target="_blank" rel="noopener noreferrer">Ver página ↗</a>
-          <button className={styles.btnPrimary} onClick={save} disabled={saving}>
-            {saving ? "Salvando…" : "Salvar"}
-          </button>
-        </div>
-      </div>
+    <>
+      <AdminPage
+        title="LP — Reels"
+        actions={
+          <>
+            <a className={`${k.btn} ${k.btnSecondary}`} href="/lp" target="_blank" rel="noopener noreferrer">Ver página ↗</a>
+            <button type="button" className={`${k.btn} ${k.btnPrimary}`} onClick={save} disabled={saving}>
+              {saving ? "Salvando…" : "Salvar"}
+            </button>
+          </>
+        }
+      >
 
       {/* ── Inscrições (tracking) ── */}
       <div className={styles.card} style={{ marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -194,8 +198,9 @@ export default function AdminLp() {
           {saving ? "Salvando…" : "Salvar"}
         </button>
       </div>
+      </AdminPage>
 
       {toast && <div className={styles.toast}>{toast}</div>}
-    </div>
+    </>
   );
 }

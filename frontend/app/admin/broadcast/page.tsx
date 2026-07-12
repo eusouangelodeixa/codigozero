@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "../admin.module.css";
 import DateRangeFilter, { DateRange } from "@/components/admin/DateRangeFilter";
+import { AdminPage } from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
@@ -289,10 +290,7 @@ export default function BroadcastPage() {
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>📡 Broadcast</h1>
-        <p className={styles.pageDesc}>Disparo em massa via WhatsApp com personalização e anti-bloqueio</p>
-      </div>
+      <AdminPage title="Broadcast">
 
       {/* ── Audience ── */}
       <div className={styles.card}>
@@ -323,8 +321,8 @@ export default function BroadcastPage() {
                   onClick={() => setSegment(seg.id)}
                   style={{
                     cursor: "pointer",
-                    borderColor: segment === seg.id ? "rgba(45,212,191,0.5)" : undefined,
-                    background: segment === seg.id ? "rgba(45,212,191,0.06)" : undefined,
+                    borderColor: segment === seg.id ? "var(--accent-border)" : undefined,
+                    background: segment === seg.id ? "var(--accent-glow)" : undefined,
                   }}
                 >
                   <div className={styles.kpiLabel}>{seg.icon} {seg.desc}</div>
@@ -358,9 +356,9 @@ export default function BroadcastPage() {
                 <option value="lead">Leads</option>
               </select>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0", fontSize: 12, color: "#888" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "8px 0", fontSize: 12, color: "var(--text-secondary)" }}>
               <span>
-                <strong style={{ color: "#2DD4BF" }}>{Object.keys(pickedUsers).length}</strong> selecionado(s)
+                <strong style={{ color: "var(--accent)" }}>{Object.keys(pickedUsers).length}</strong> selecionado(s)
                 {userTotal > userList.length ? ` · mostrando ${userList.length} de ${userTotal}` : ""}
               </span>
               <span style={{ display: "flex", gap: 6 }}>
@@ -378,13 +376,13 @@ export default function BroadcastPage() {
                     key={u.id}
                     style={{
                       display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, cursor: "pointer",
-                      background: picked ? "rgba(45,212,191,0.06)" : "rgba(255,255,255,0.02)",
-                      border: picked ? "1px solid rgba(45,212,191,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                      background: picked ? "var(--accent-glow)" : "var(--bg-glass)",
+                      border: picked ? "1px solid var(--accent-border)" : "1px solid var(--border-glass)",
                     }}
                   >
-                    <input type="checkbox" checked={picked} onChange={() => togglePick(u)} style={{ width: 16, height: 16, accentColor: "#2DD4BF" }} />
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</span>
-                    <span style={{ fontSize: 12, color: "#888", fontFamily: "monospace" }}>{u.phone}</span>
+                    <input type="checkbox" checked={picked} onChange={() => togglePick(u)} style={{ width: 16, height: 16, accentColor: "var(--accent)" }} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>{u.phone}</span>
                     <span className={`${styles.badge} ${styles.badgeGray}`}>{STATUS_LABEL[u.subscriptionStatus] || u.subscriptionStatus}</span>
                   </label>
                 );
@@ -413,7 +411,7 @@ export default function BroadcastPage() {
               ))}
             </select>
             {instances.length === 0 && (
-              <span style={{ fontSize: "12px", color: "#f59e0b", marginTop: "4px", display: "block" }}>
+              <span style={{ fontSize: "12px", color: "var(--color-warning)", marginTop: "4px", display: "block" }}>
                 ⚠️ Nenhuma instância encontrada. Verifique a conexão com o Komunika nas Configurações.
               </span>
             )}
@@ -424,15 +422,15 @@ export default function BroadcastPage() {
             <label style={{
               display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
               padding: "12px 16px", borderRadius: 8,
-              background: sendPush ? "rgba(45,212,191,0.08)" : "rgba(255,255,255,0.02)",
-              border: sendPush ? "1px solid rgba(45,212,191,0.3)" : "1px solid rgba(255,255,255,0.06)",
+              background: sendPush ? "var(--accent-glow)" : "var(--bg-glass)",
+              border: sendPush ? "1px solid var(--accent-border)" : "1px solid var(--border-glass)",
               transition: "all 0.2s",
             }}>
               <input type="checkbox" checked={sendPush} onChange={e => setSendPush(e.target.checked)}
-                style={{ width: 18, height: 18, accentColor: "#2DD4BF" }} />
+                style={{ width: 18, height: 18, accentColor: "var(--accent)" }} />
               <div>
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#fff" }}>🔔 Enviar Push Notification</span>
-                <span style={{ display: "block", fontSize: 11, color: "#888", marginTop: 2 }}>
+                <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>🔔 Enviar Push Notification</span>
+                <span style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
                   Envia notificação no app para todos os alunos (ativos e inativos)
                 </span>
               </div>
@@ -444,28 +442,28 @@ export default function BroadcastPage() {
             <label style={{
               display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
               padding: "12px 16px", borderRadius: 8,
-              background: generateCoupons ? "rgba(245,158,11,0.06)" : "rgba(255,255,255,0.02)",
-              border: generateCoupons ? "1px solid rgba(245,158,11,0.25)" : "1px solid rgba(255,255,255,0.06)",
+              background: generateCoupons ? "rgba(245,158,11,0.06)" : "var(--bg-glass)",
+              border: generateCoupons ? "1px solid rgba(245,158,11,0.25)" : "1px solid var(--border-glass)",
               transition: "all 0.2s",
             }}>
               <input type="checkbox" checked={generateCoupons} onChange={e => setGenerateCoupons(e.target.checked)}
-                style={{ width: 18, height: 18, accentColor: "#f59e0b" }} />
+                style={{ width: 18, height: 18, accentColor: "var(--color-warning)" }} />
               <div>
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#fff" }}>🎟️ Gerar Cupom por Usuário</span>
-                <span style={{ display: "block", fontSize: 11, color: "#888", marginTop: 2 }}>
-                  Cria um cupom único para cada destinatário. Use <strong style={{ color: "#f59e0b" }}>{"{{cupom}}"}</strong> na mensagem.
+                <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>🎟️ Gerar Cupom por Usuário</span>
+                <span style={{ display: "block", fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
+                  Cria um cupom único para cada destinatário. Use <strong style={{ color: "var(--color-warning)" }}>{"{{cupom}}"}</strong> na mensagem.
                 </span>
               </div>
             </label>
             {generateCoupons && (
               <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4 }}>Desconto (%)</label>
+                  <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Desconto (%)</label>
                   <input className={styles.formInput} type="number" min={1} max={100}
                     value={couponDiscount} onChange={e => setCouponDiscount(Math.min(100, Math.max(1, parseInt(e.target.value) || 10)))} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4 }}>Usos por cupom</label>
+                  <label style={{ fontSize: 11, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Usos por cupom</label>
                   <input className={styles.formInput} type="number" min={1} max={10}
                     value={couponMaxUses} onChange={e => setCouponMaxUses(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))} />
                 </div>
@@ -495,8 +493,8 @@ export default function BroadcastPage() {
             />
           </div>
         </div>
-        <p style={{ fontSize: "12px", color: "#888", marginTop: "8px" }}>
-          🛡️ Anti-bloqueio: o sistema vai variar aleatoriamente entre <strong style={{ color: "#2DD4BF" }}>{delayMin}s</strong> e <strong style={{ color: "#2DD4BF" }}>{delayMax}s</strong> de intervalo entre cada envio.
+        <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>
+          🛡️ Anti-bloqueio: o sistema vai variar aleatoriamente entre <strong style={{ color: "var(--accent)" }}>{delayMin}s</strong> e <strong style={{ color: "var(--accent)" }}>{delayMax}s</strong> de intervalo entre cada envio.
         </p>
       </div>
 
@@ -508,14 +506,14 @@ export default function BroadcastPage() {
         <div style={{ marginBottom: "12px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <label className={styles.formLabel} style={{ marginBottom: 0 }}>Conteúdo da mensagem</label>
-            <span style={{ fontSize: "11px", color: "#555" }}>Clique nas variáveis para inserir ↓</span>
+            <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>Clique nas variáveis para inserir ↓</span>
           </div>
 
           {/* Variable chips — compact inline row */}
           <div style={{
             display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px",
             padding: "8px 10px", borderRadius: "8px 8px 0 0",
-            background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+            background: "var(--bg-glass)", border: "1px solid var(--border-glass)",
             borderBottom: "none",
           }}>
             {variables.map(v => (
@@ -525,7 +523,7 @@ export default function BroadcastPage() {
                 style={{
                   padding: "3px 8px", fontSize: "11px", borderRadius: "4px",
                   background: "rgba(45,212,191,0.1)", border: "1px solid rgba(45,212,191,0.15)",
-                  color: "#2DD4BF", cursor: "pointer", fontFamily: "monospace",
+                  color: "var(--accent)", cursor: "pointer", fontFamily: "monospace",
                   transition: "all 0.12s ease", lineHeight: "1.4",
                 }}
                 onMouseOver={e => { e.currentTarget.style.background = "rgba(45,212,191,0.2)"; e.currentTarget.style.borderColor = "rgba(45,212,191,0.4)"; }}
@@ -559,18 +557,18 @@ export default function BroadcastPage() {
                 👁️ Preview
               </label>
               {previewSample && (
-                <span style={{ fontSize: "11px", color: "#888" }}>
-                  Exemplo para: <strong style={{ color: "#2DD4BF" }}>{previewSample.name}</strong> ({previewSample.phone})
+                <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                  Exemplo para: <strong style={{ color: "var(--accent)" }}>{previewSample.name}</strong> ({previewSample.phone})
                 </span>
               )}
             </div>
             <div style={{
               padding: "16px 20px", borderRadius: "8px",
-              background: "var(--bg-base)", border: "1px solid rgba(255,255,255,0.06)",
-              fontSize: "13px", color: "#ddd", lineHeight: "1.7", whiteSpace: "pre-wrap",
+              background: "var(--bg-base)", border: "1px solid var(--border-glass)",
+              fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.7", whiteSpace: "pre-wrap",
               maxHeight: "240px", overflow: "auto",
             }}>
-              {preview || <span style={{ color: "#555" }}>Carregando preview...</span>}
+              {preview || <span style={{ color: "var(--text-tertiary)" }}>Carregando preview...</span>}
             </div>
           </div>
         )}
@@ -598,25 +596,25 @@ export default function BroadcastPage() {
           {/* Progress bar */}
           {progress && progress.total && (
             <div style={{ marginBottom: "16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#888", marginBottom: "6px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
                 <span>
                   {progress.type === "complete" ? "✅ Concluído" : progress.type === "waiting" ? `⏱️ Próximo em ${progress.delay}s...` : `Enviando...`}
                 </span>
                 <span>{(progress.sent || 0) + (progress.failed || 0)} / {progress.total}</span>
               </div>
-              <div style={{ height: "6px", borderRadius: "3px", background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+              <div style={{ height: "6px", borderRadius: "3px", background: "var(--border-glass)", overflow: "hidden" }}>
                 <div style={{
                   width: `${progressPct}%`,
                   height: "100%",
                   borderRadius: "3px",
-                  background: progress.type === "complete" ? "#22c55e" : "#2DD4BF",
+                  background: progress.type === "complete" ? "var(--color-success)" : "var(--accent)",
                   transition: "width 0.3s ease",
                 }} />
               </div>
               <div style={{ display: "flex", gap: "24px", marginTop: "8px", fontSize: "12px" }}>
-                <span style={{ color: "#22c55e" }}>✅ Enviados: {progress.sent || 0}</span>
-                <span style={{ color: "#ef4444" }}>❌ Falhas: {progress.failed || 0}</span>
-                <span style={{ color: "#888" }}>⏳ Pendentes: {(progress.total || 0) - (progress.sent || 0) - (progress.failed || 0)}</span>
+                <span style={{ color: "var(--color-success)" }}>✅ Enviados: {progress.sent || 0}</span>
+                <span style={{ color: "var(--color-error)" }}>❌ Falhas: {progress.failed || 0}</span>
+                <span style={{ color: "var(--text-secondary)" }}>⏳ Pendentes: {(progress.total || 0) - (progress.sent || 0) - (progress.failed || 0)}</span>
               </div>
             </div>
           )}
@@ -631,7 +629,7 @@ export default function BroadcastPage() {
             }}
           >
             {log.map((evt, i) => (
-              <div key={i} style={{ color: evt.type === "sent" || evt.type === "coupon" ? "#22c55e" : evt.type === "error" || evt.type === "skip" || evt.type === "coupon_error" || evt.type === "fatal" ? "#ef4444" : evt.type === "waiting" ? "#888" : evt.type === "complete" ? "#2DD4BF" : "#aaa" }}>
+              <div key={i} style={{ color: evt.type === "sent" || evt.type === "coupon" ? "var(--color-success)" : evt.type === "error" || evt.type === "skip" || evt.type === "coupon_error" || evt.type === "fatal" ? "var(--color-error)" : evt.type === "waiting" ? "var(--text-secondary)" : evt.type === "complete" ? "var(--accent)" : "var(--text-secondary)" }}>
                 {evt.type === "start" && `[START] Iniciando envio para ${evt.total} leads...`}
                 {evt.type === "sent" && `[✓] ${evt.name} — ${evt.phone}`}
                 {evt.type === "error" && `[✗] ${evt.name} — ${evt.error}`}
@@ -643,11 +641,12 @@ export default function BroadcastPage() {
                 {evt.type === "fatal" && `[FATAL] ${evt.error}`}
               </div>
             ))}
-            {sending && log.length === 0 && <div style={{ color: "#888" }}>Conectando ao servidor...</div>}
+            {sending && log.length === 0 && <div style={{ color: "var(--text-secondary)" }}>Conectando ao servidor...</div>}
           </div>
         </div>
       )}
 
+      </AdminPage>
       {toast && <div className={styles.toast}>{toast}</div>}
     </>
   );

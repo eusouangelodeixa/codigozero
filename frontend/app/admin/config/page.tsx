@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, useToast } from "@/components/ui";
-import { Section, SecretField } from "@/components/admin";
-import adminStyles from "../admin.module.css";
+import { AdminPage, Section, SecretField } from "@/components/admin";
 import styles from "./config.module.css";
 import { VISITOR_PROMPT, CHECKOUT_PROMPT } from "./prompts";
 
@@ -282,15 +281,8 @@ export default function AdminConfig() {
   const datetimeValue = toLocalDatetime(config.mentoriaSchedule);
 
   return (
+    <AdminPage title="Configurações">
     <div className={styles.page}>
-      <div className={adminStyles.pageHeader}>
-        <h1 className={adminStyles.pageTitle}>Configurações</h1>
-        <p className={adminStyles.pageDesc}>
-          Comunidade, mentorias, automações Komunika, alertas de milestones e prompts de IA.
-          Chaves sensíveis ficam mascaradas por padrão — clique no olho para revelar.
-        </p>
-      </div>
-
       {/* ── Comunidade ── */}
       <Section
         title="Comunidade"
@@ -559,7 +551,7 @@ export default function AdminConfig() {
             </div>
           </Field>
           {resendTestMsg && (
-            <p className={styles.fieldHint} style={{ color: resendTestMsg.ok ? "var(--accent)" : "#f87171", marginTop: 4 }}>
+            <p className={styles.fieldHint} style={{ color: resendTestMsg.ok ? "var(--accent)" : "var(--color-error)", marginTop: 4 }}>
               {resendTestMsg.text}
             </p>
           )}
@@ -765,6 +757,7 @@ export default function AdminConfig() {
         </div>
       </div>
     </div>
+    </AdminPage>
   );
 }
 

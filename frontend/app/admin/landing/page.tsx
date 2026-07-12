@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import styles from "../admin.module.css";
+import { AdminPage } from "@/components/admin";
 import { LANDING_DEFAULTS } from "../../landingDefaults";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -181,10 +182,7 @@ export default function AdminLanding() {
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Editor da Landing Page</h1>
-        <p className={styles.pageDesc}>Edite todo o conteúdo da página de vendas. Os textos já carregam os valores atuais.</p>
-      </div>
+      <AdminPage title="Landing">
 
       {/* Tab Navigation */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24, flexWrap: "wrap" }}>
@@ -256,7 +254,7 @@ export default function AdminLanding() {
             <Field label="Label (tag)" field="notLabel" />
             <Field label="Título" field="notTitle" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Linhas (parágrafos)
           </h4>
           <StringArray field="notLines" itemLabel="Linha" addLabel="+ Adicionar linha" />
@@ -274,7 +272,7 @@ export default function AdminLanding() {
             <Field label="Label (tag)" field="clinicLabel" />
             <Field label="Título" field="clinicTitle" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Parágrafos
           </h4>
           <StringArray field="clinicParas" itemLabel="Parágrafo" addLabel="+ Adicionar parágrafo" />
@@ -308,7 +306,7 @@ export default function AdminLanding() {
             <Field label="Label (tag)" field="founderLabel" />
             <Field label="Apresentação" field="founderIntro" multiline />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Credenciais
           </h4>
           <StringArray field="founderCreds" itemLabel="Credencial" addLabel="+ Adicionar credencial" />
@@ -331,7 +329,7 @@ export default function AdminLanding() {
             <Field label="Título — Destaque" field="stackTitleHighlight" />
             <Field label="Descrição" field="stackDesc" multiline />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Features (cards do ecossistema)
           </h4>
           {(sec.ecoFeatures || []).map((f: any, i: number) => (
@@ -389,10 +387,10 @@ export default function AdminLanding() {
             <Field label='Contagem (ex: "143")' field="networkMembersCount" />
             <Field label='Label da contagem (ex: "membros ativos")' field="networkMembersLabel" />
           </div>
-          <p style={{ fontSize: 12, color: "#888", marginTop: 12 }}>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 12 }}>
             A imagem mostrada vem de <code>/public/comunidade.jpg</code> — substitua o arquivo direto pra trocar.
           </p>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Pilares da network (4 ideais)
           </h4>
           {(sec.networkPillars || []).map((p: any, i: number) => (
@@ -427,7 +425,7 @@ export default function AdminLanding() {
             <Field label="Label (tag)" field="radarLabel" />
             <Field label="Título" field="radarTitle" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Passos (numerados automaticamente)
           </h4>
           <StringArray field="radarSteps" itemLabel="Passo" addLabel="+ Adicionar passo" />
@@ -446,7 +444,7 @@ export default function AdminLanding() {
             <Field label="Título" field="flowTitle" />
             <Field label="Título — Destaque" field="flowTitleHighlight" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Passos (4 ideais)
           </h4>
           {(sec.flowSteps || []).map((s: any, i: number) => (
@@ -485,7 +483,7 @@ export default function AdminLanding() {
             <Field label="Label (tag)" field="faqLabel" />
             <Field label="Título da seção" field="faqTitle" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "20px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Perguntas e respostas
           </h4>
           {(sec.faqItems || []).map((item: any, i: number) => (
@@ -550,7 +548,7 @@ export default function AdminLanding() {
             <Field label="Texto abaixo do preço" field="priceSub" multiline />
             <Field label="Texto do CTA do Preço" field="priceCtaText" />
           </div>
-          <h4 style={{ color: "#888", fontSize: 12, margin: "24px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          <h4 style={{ color: "var(--text-secondary)", fontSize: 12, margin: "24px 0 12px", textTransform: "uppercase", letterSpacing: 0.5 }}>
             Close Friends (order bump exibido no card de preço)
           </h4>
           <div className={styles.formGrid}>
@@ -607,7 +605,7 @@ export default function AdminLanding() {
           </p>
 
           {headScriptBlocks.length === 0 && (
-            <p style={{ color: "#666", fontSize: 13, marginBottom: 16, fontStyle: "italic" }}>Nenhum script adicionado. Clique em "+ Adicionar Script" para começar.</p>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 13, marginBottom: 16, fontStyle: "italic" }}>Nenhum script adicionado. Clique em "+ Adicionar Script" para começar.</p>
           )}
 
           {headScriptBlocks.map((block, i) => (
@@ -665,7 +663,7 @@ export default function AdminLanding() {
 
           <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
             <label className={styles.formLabel} style={{ marginBottom: 8, display: "block" }}>Body Scripts (&lt;/body&gt;)</label>
-            <p style={{ color: "#666", fontSize: 12, marginBottom: 10 }}>Para scripts que devem ser injetados antes do fechamento do body (ex: noscript do GTM).</p>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 12, marginBottom: 10 }}>Para scripts que devem ser injetados antes do fechamento do body (ex: noscript do GTM).</p>
             <textarea
               className={styles.formTextarea}
               style={{ minHeight: 100, fontFamily: "monospace", fontSize: 12 }}
@@ -691,7 +689,7 @@ export default function AdminLanding() {
 
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>VSL exclusiva da landing de afiliados</label>
-            <p style={{ color: "#666", fontSize: 12, marginBottom: 10 }}>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 12, marginBottom: 10 }}>
               Cole o &lt;iframe&gt; da VSL específica do afiliado. Quando preenchido, sobrepõe a VSL padrão na rota{" "}
               <code style={{ fontFamily: "monospace" }}>/r/&#123;código&#125;</code>.
             </p>
@@ -715,7 +713,7 @@ export default function AdminLanding() {
 
           <div className={styles.formGroup} style={{ marginTop: 24 }}>
             <label className={styles.formLabel}>Pasta de criativos (URL pública)</label>
-            <p style={{ color: "#666", fontSize: 12, marginBottom: 10 }}>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 12, marginBottom: 10 }}>
               Link para Google Drive, Notion ou Dropbox com banners, vídeos e prints que os afiliados podem usar.
               O botão "Acessar pasta de criativos" no painel do afiliado leva para esta URL.
             </p>
@@ -752,6 +750,8 @@ export default function AdminLanding() {
           🔄 Reverter para Padrão
         </button>
       </div>
+
+      </AdminPage>
 
       {toast && <div className={styles.toast}>{toast}</div>}
     </>

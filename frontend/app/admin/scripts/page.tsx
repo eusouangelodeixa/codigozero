@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import styles from "../admin.module.css";
+import k from "@/components/admin/kit.module.css";
+import { AdminPage } from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
@@ -52,25 +54,22 @@ export default function AdminScripts() {
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Banco de Scripts & Pastas</h1>
-        <p className={styles.pageDesc}>
-          {folders.reduce((acc, f) => acc + (f.scripts?.length || 0), 0)} scripts organizados em {folders.length} pastas
-        </p>
-      </div>
-
-      <div className={styles.btnRow} style={{ marginBottom: 24 }}>
-        <button className={styles.btnPrimary} onClick={() => setEditingFolder({ name: "", icon: "📁", sortOrder: 0 })}>
-          + Nova Pasta
-        </button>
-        <button className={styles.btnSecondary} onClick={() => {
-            if (folders.length === 0) return alert("Crie uma pasta primeiro!");
-            setEditingScript({ title: "", folderId: folders[0].id, content: "", icon: "📝", sortOrder: 0 })
-          }}>
-          + Novo Script
-        </button>
-      </div>
-
+      <AdminPage
+        title="Scripts"
+        actions={
+          <>
+            <button className={`${k.btn} ${k.btnPrimary}`} onClick={() => setEditingFolder({ name: "", icon: "📁", sortOrder: 0 })}>
+              + Nova Pasta
+            </button>
+            <button className={`${k.btn} ${k.btnSecondary}`} onClick={() => {
+                if (folders.length === 0) return alert("Crie uma pasta primeiro!");
+                setEditingScript({ title: "", folderId: folders[0].id, content: "", icon: "📝", sortOrder: 0 })
+              }}>
+              + Novo Script
+            </button>
+          </>
+        }
+      >
       {folders.length === 0 && (
         <div className={styles.card} style={{ textAlign: "center", padding: "40px" }}>
           <p style={{ color: "var(--text-secondary)" }}>Nenhuma pasta criada. Crie uma pasta primeiro para adicionar scripts.</p>
@@ -97,7 +96,7 @@ export default function AdminScripts() {
                 {folder.scripts.map((s: any) => (
                   <tr key={s.id}>
                     <td>{s.icon || "📝"} {s.title}</td>
-                    <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#666" }}>{s.content.slice(0, 80)}...</td>
+                    <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-tertiary)" }}>{s.content.slice(0, 80)}...</td>
                     <td>
                       <div className={styles.actions}>
                         <button className={styles.actionBtn} onClick={() => setEditingScript({ ...s })}>Editar</button>
@@ -113,6 +112,7 @@ export default function AdminScripts() {
           )}
         </div>
       ))}
+      </AdminPage>
 
       {/* Modal - Folder */}
       {editingFolder && (

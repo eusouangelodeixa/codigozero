@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import styles from "../admin.module.css";
+import k from "@/components/admin/kit.module.css";
+import { AdminPage, DataTable, StatusBadge, RowActions, type Column } from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const SITE = "https://czero.sbs"; // public domain that serves /conteudo/{slug}
@@ -124,83 +126,73 @@ export default function AdminConteudo() {
 
   // ── LIST VIEW ───────────────────────────────────────────────────────────
   if (!editing) {
-    return (
-      <div>
-        <div className={styles.pageHeader}>
-          <div>
-            <h1 className={styles.pageTitle}>Páginas de Conteúdo</h1>
-            <p className={styles.pageDesc}>Iscas de funil: o lead preenche o form pra ver o conteúdo e vira lead.</p>
+    const columns: Column<any>[] = [
+      {
+        key: "page", header: "Página", primaryOnMobile: true,
+        render: (p) => (
+          <div className={k.cellStack}>
+            <span className={k.cellMain}>{p.title}</span>
+            <a href={`${SITE}/conteudo/${p.slug}`} target="_blank" rel="noreferrer" className={k.cellSub}>
+              /conteudo/{p.slug} ↗
+            </a>
           </div>
-          <button className={styles.btnPrimary} onClick={openNew}>+ Nova página</button>
-        </div>
-
-        <div className={styles.card}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Página</th><th>Tema</th><th>Status</th>
-                <th style={{ textAlign: "right" }}>Inscritos</th>
-                <th style={{ textAlign: "right" }}>Views</th>
-                <th style={{ textAlign: "right" }}>Conversão</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pages.map(p => {
-                const conv = p.viewCount > 0 ? Math.round((p.leadCount / p.viewCount) * 100) : 0;
-                return (
-                  <tr key={p.id}>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{p.title}</div>
-                      <a href={`${SITE}/conteudo/${p.slug}`} target="_blank" rel="noreferrer"
-                         style={{ fontSize: 12, color: "var(--text-tertiary)" }}>/conteudo/{p.slug} ↗</a>
-                    </td>
-                    <td>{p.theme || "—"}</td>
-                    <td>
-                      <span className={`${styles.badge} ${p.status === "published" ? styles.badgeGreen : styles.badgeGray}`}>
-                        {p.status === "published" ? "Publicada" : "Rascunho"}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: "right", fontWeight: 700 }}>{p.leadCount}</td>
-                    <td style={{ textAlign: "right" }}>{p.viewCount}</td>
-                    <td style={{ textAlign: "right" }}>{conv}%</td>
-                    <td>
-                      <div className={styles.actions}>
-                        <button className={styles.actionBtn} onClick={() => openEdit(p.id)}>Editar</button>
-                        <button className={styles.actionBtn} onClick={() => duplicate(p.id)}>Duplicar</button>
-                        <button className={styles.actionBtnDanger} onClick={() => remove(p.id, p.title)}>Excluir</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {pages.length === 0 && (
-                <tr><td colSpan={7} style={{ textAlign: "center", padding: 24, color: "var(--text-tertiary)" }}>
-                  Nenhuma página ainda. Crie a primeira isca.
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        ),
+      },
+      { key: "theme", header: "Tema", render: (p) => p.theme || <span className={k.cellMuted}>—</span> },
+      {
+        key: "status", header: "Status",
+        render: (p) => (
+          <StatusBadge tone={p.status === "published" ? "good" : "neutral"} noDot>
+            {p.status === "published" ? "Publicada" : "Rascunho"}
+          </StatusBadge>
+        ),
+      },
+      { key: "leads", header: "Inscritos", align: "right", render: (p) => <b>{p.leadCount}</b> },
+      { key: "views", header: "Views", align: "right", render: (p) => p.viewCount },
+      {
+        key: "conv", header: "Conversão", align: "right",
+        render: (p) => `${p.viewCount > 0 ? Math.round((p.leadCount / p.viewCount) * 100) : 0}%`,
+      },
+    ];
+    const rowActions = (p: any) => (
+      <RowActions items={[
+        { label: "Editar", onClick: () => openEdit(p.id) },
+        { label: "Duplicar", onClick: () => duplicate(p.id) },
+        { label: "Excluir", onClick: () => remove(p.id, p.title), danger: true },
+      ]} />
+    );
+    return (
+      <>
+        <AdminPage
+          title="Iscas"
+          actions={<button className={`${k.btn} ${k.btnPrimary}`} onClick={openNew}>+ Nova página</button>}
+        >
+          <DataTable
+            columns={columns}
+            rows={pages}
+            getRowKey={(p) => p.id}
+            empty={{ title: "Nenhuma página ainda", desc: "Crie a primeira isca." }}
+            rowActions={rowActions}
+          />
+        </AdminPage>
         {toast && <div className={styles.toast}>{toast}</div>}
-      </div>
+      </>
     );
   }
 
   // ── EDITOR VIEW ─────────────────────────────────────────────────────────
   const related = pages.filter(p => p.id && p.id !== editing.id);
   return (
-    <div>
-      <div className={styles.pageHeader}>
-        <div>
-          <h1 className={styles.pageTitle}>{editing.id ? "Editar página" : "Nova página"}</h1>
-          {editing.slug && <p className={styles.pageDesc}>{SITE}/conteudo/{editing.slug}</p>}
-        </div>
-        <div className={styles.btnRow}>
-          <button className={styles.btnSecondary} onClick={() => setEditing(null)}>Voltar</button>
-          <button className={styles.btnPrimary} onClick={save} disabled={saving}>{saving ? "Salvando…" : "Salvar"}</button>
-        </div>
-      </div>
+    <>
+    <AdminPage
+      title={editing.id ? "Editar página" : "Nova página"}
+      actions={
+        <>
+          <button className={`${k.btn} ${k.btnSecondary}`} onClick={() => setEditing(null)}>Voltar</button>
+          <button className={`${k.btn} ${k.btnPrimary}`} onClick={save} disabled={saving}>{saving ? "Salvando…" : "Salvar"}</button>
+        </>
+      }
+    >
 
       {/* Basics */}
       <div className={styles.card}>
@@ -349,8 +341,9 @@ export default function AdminConteudo() {
         <button className={styles.btnSecondary} onClick={() => setEditing(null)}>Voltar</button>
         <button className={styles.btnPrimary} onClick={save} disabled={saving}>{saving ? "Salvando…" : "Salvar"}</button>
       </div>
-      {toast && <div className={styles.toast}>{toast}</div>}
-    </div>
+    </AdminPage>
+    {toast && <div className={styles.toast}>{toast}</div>}
+    </>
   );
 }
 

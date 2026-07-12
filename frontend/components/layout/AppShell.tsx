@@ -197,6 +197,16 @@ export function AppShell({
     return () => { document.body.style.overflow = prev; };
   }, [menuOpen]);
 
+  // Casca fixa no mobile: trava o scroll do documento SÓ enquanto a área de
+  // membro (AppShell) está montada — o miolo rola pelo .content. Ao navegar para
+  // /admin, /coproducer ou /socios (layouts próprios que rolam o body), o
+  // AppShell desmonta e a trava é removida, devolvendo o scroll a essas áreas.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("cz-lock-scroll");
+    return () => root.classList.remove("cz-lock-scroll");
+  }, []);
+
   const pageTitle = useMemo(() => {
     if (!pathname) return "Código Zero";
     if (pathname.startsWith("/admin")) return "Admin";

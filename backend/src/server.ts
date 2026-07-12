@@ -46,12 +46,37 @@ app.set('trust proxy', 1);
 // Wired early so every request is logged. Logs method/url/status/response time;
 // attaches the authenticated user id when available (auth middleware sets
 // req.user later in the chain, so it's present by the time the response logs).
+//
+// A Lojou envia o segredo do webhook por `?secret=` (ver webhook.routes) — o
+// serializer abaixo REDIGE esse segredo do url/query/header logado para não
+// gravá-lo em claro no log de acesso.
+const redactSecretInUrl = (url?: string): string | undefined =>
+  typeof url === 'string' ? url.replace(/([?&]secret=)[^&#]+/gi, '$1[REDACTED]') : url;
+
 app.use(
   pinoHttp({
     logger,
     customProps: (req) => {
       const userId = (req as any).user?.id;
       return userId ? { userId } : {};
+    },
+    serializers: {
+      req(req: any) {
+        const headers = { ...(req.headers || {}) };
+        if (headers['x-lojou-webhook-secret']) headers['x-lojou-webhook-secret'] = '[REDACTED]';
+        const query = { ...(req.query || {}) };
+        if (query.secret) query.secret = '[REDACTED]';
+        return {
+          id: req.id,
+          method: req.method,
+          url: redactSecretInUrl(req.url),
+          query,
+          params: req.params,
+          headers,
+          remoteAddress: req.socket?.remoteAddress,
+          remotePort: req.socket?.remotePort,
+        };
+      },
     },
     // Quiet the health check so DB-probe pings don't flood logs.
     autoLogging: {

@@ -666,8 +666,8 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
     const status = req.query.status as string; // active | overdue | grace_period | canceled | lead
     const role = req.query.role as string;     // member | admin | superadmin
     const period = req.query.period as string;  // filters createdAt
-    const page = parseInt(req.query.page as string) || 1;
-    const perPage = 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const perPage = Math.min(100, Math.max(10, parseInt(req.query.pageSize as string) || 20));
 
     let where: any = {};
     if (search) {
@@ -682,7 +682,13 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
     const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
     if (window) where.createdAt = window;
 
-    const [users, total] = await Promise.all([
+    // KPIs de saúde da base (contagens, não carregam a lista). "Novos" respeita o
+    // período filtrado; sem período, usa os últimos 30 dias como padrão sensato.
+    const now = new Date();
+    const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const newWindow = window ?? { gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) };
+
+    const [users, total, mActive, mExpiring7d, mOverdue, mNew] = await Promise.all([
       prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -696,9 +702,17 @@ router.get('/users', async (req: AuthRequest, res: Response) => {
         },
       }),
       prisma.user.count({ where }),
+      prisma.user.count({ where: { role: 'member', subscriptionStatus: 'active' } }),
+      prisma.user.count({ where: { role: 'member', subscriptionStatus: 'active', subscriptionEnd: { gte: now, lte: in7d } } }),
+      prisma.user.count({ where: { role: 'member', subscriptionStatus: 'overdue' } }),
+      prisma.user.count({ where: { role: 'member', createdAt: newWindow } }),
     ]);
 
-    res.json({ users, total, page, perPage, lastPage: Math.ceil(total / perPage) });
+    res.json({
+      users, total, page, perPage, pageSize: perPage,
+      totalPages: Math.ceil(total / perPage), lastPage: Math.ceil(total / perPage),
+      metrics: { active: mActive, expiring7d: mExpiring7d, overdue: mOverdue, newInPeriod: mNew },
+    });
   } catch (error) {
     console.error('[ADMIN] Users error:', error);
     res.status(500).json({ error: 'Erro ao carregar usuários' });

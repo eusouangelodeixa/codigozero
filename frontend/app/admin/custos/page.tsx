@@ -1,9 +1,21 @@
 "use client";
-import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import styles from "../admin.module.css";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import a from "../admin.module.css";
+import k from "@/components/admin/kit.module.css";
+import {
+  AdminPage,
+  StatRow,
+  StatTile,
+  DataTable,
+  StatusBadge,
+  SegmentedControl,
+  RowActions,
+  type Column,
+} from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
+const fmt = (n: number) => (n || 0).toLocaleString("pt-BR");
 const fmtMoney = (n: number) =>
   new Intl.NumberFormat("pt-MZ", { style: "currency", currency: "MZN", maximumFractionDigits: 0 }).format(n || 0);
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("pt-MZ", { day: "2-digit", month: "short", year: "numeric" });
@@ -17,12 +29,13 @@ const CATEGORIES = [
   { v: "outro", l: "Outro" },
 ];
 const catLabel = (v: string) => CATEGORIES.find((c) => c.v === v)?.l || "Outro";
-const PERIODS = [
-  { v: "today", l: "Hoje" },
-  { v: "7d", l: "7 dias" },
-  { v: "30d", l: "30 dias" },
-  { v: "12m", l: "12 meses" },
-  { v: "all", l: "Tudo" },
+
+const PERIODS: { value: string; label: string }[] = [
+  { value: "today", label: "Hoje" },
+  { value: "7d", label: "7 dias" },
+  { value: "30d", label: "30 dias" },
+  { value: "12m", label: "12 meses" },
+  { value: "all", label: "Tudo" },
 ];
 
 interface Cost {
@@ -37,11 +50,7 @@ interface Cost {
 }
 interface Totals { company: number; shared: number; total: number; count: number }
 
-const field: CSSProperties = {
-  padding: "10px 12px", background: "var(--bg-elevated)", border: "1px solid var(--border-default)",
-  borderRadius: 8, color: "var(--text-primary)", fontSize: 14, fontFamily: "inherit", width: "100%",
-};
-const label: CSSProperties = { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "var(--text-secondary)" };
+const EMPTY_FORM = { desc: "", amount: "", category: "outro", allocation: "company" as "company" | "shared", incurredAt: "", note: "" };
 
 export default function AdminCustos() {
   const [role, setRole] = useState("");
@@ -49,15 +58,17 @@ export default function AdminCustos() {
   const [costs, setCosts] = useState<Cost[]>([]);
   const [totals, setTotals] = useState<Totals>({ company: 0, shared: 0, total: 0, count: 0 });
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 25;
 
-  const [desc, setDesc] = useState("");
-  const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("outro");
-  const [allocation, setAllocation] = useState<"company" | "shared">("company");
-  const [incurredAt, setIncurredAt] = useState("");
-  const [note, setNote] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   useEffect(() => {
     try { setRole(JSON.parse(localStorage.getItem("cz_user") || "{}").role || ""); } catch {}
@@ -66,183 +77,190 @@ export default function AdminCustos() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API}/api/admin/costs?period=${period}`, { headers: hdr() });
+      const p = new URLSearchParams({ period, page: String(page), pageSize: String(pageSize) });
+      const r = await fetch(`${API}/api/admin/costs?${p}`, { headers: hdr() });
       if (r.ok) {
         const j = await r.json();
-        setCosts(j.costs || []);
+        setCosts(j.items || j.costs || []);
         setTotals(j.totals || { company: 0, shared: 0, total: 0, count: 0 });
+        setTotal(j.total || 0);
+        setTotalPages(j.totalPages || 1);
       }
     } catch {}
     setLoading(false);
-  }, [period]);
+  }, [period, page]);
   useEffect(() => { load(); }, [load]);
+
+  // Trocar o período reinicia a paginação (busca única a partir da página 1).
+  const onPeriod = (v: string) => { setPeriod(v); setPage(1); };
+
+  const openCreate = () => { setForm(EMPTY_FORM); setCreating(true); };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    setErr("");
-    const amt = Number(amount);
-    if (!desc.trim()) { setErr("Informe a descrição."); return; }
-    if (!Number.isFinite(amt) || amt <= 0) { setErr("Informe um valor válido."); return; }
+    const amt = Number(form.amount);
+    if (!form.desc.trim()) { showToast("Informe a descrição."); return; }
+    if (!Number.isFinite(amt) || amt <= 0) { showToast("Informe um valor válido."); return; }
     setSaving(true);
     try {
       const r = await fetch(`${API}/api/admin/costs`, {
         method: "POST",
         headers: hdr(),
-        body: JSON.stringify({ description: desc, amount: amt, category, allocation, incurredAt: incurredAt || undefined, note }),
+        body: JSON.stringify({
+          description: form.desc,
+          amount: amt,
+          category: form.category,
+          allocation: form.allocation,
+          incurredAt: form.incurredAt || undefined,
+          note: form.note,
+        }),
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || "Erro ao salvar");
-      setDesc(""); setAmount(""); setNote(""); setIncurredAt(""); setAllocation("company"); setCategory("outro");
-      load();
+      setCreating(false);
+      setForm(EMPTY_FORM);
+      if (page !== 1) setPage(1); else load();
+      showToast("Custo lançado ✓");
     } catch (e2) {
-      setErr(e2 instanceof Error ? e2.message : "Erro ao salvar");
+      showToast(e2 instanceof Error ? e2.message : "Erro ao salvar");
     }
     setSaving(false);
   };
 
-  const remove = async (id: string) => {
-    if (!confirm("Excluir este custo? As parcelas ainda em aberto dos sócios serão removidas.")) return;
+  const remove = async (c: Cost) => {
+    if (!confirm(`Excluir "${c.description}"?\n\nAs parcelas ainda em aberto dos sócios serão removidas.`)) return;
     try {
-      const r = await fetch(`${API}/api/admin/costs/${id}`, { method: "DELETE", headers: hdr() });
-      if (r.ok) load();
-    } catch {}
+      const r = await fetch(`${API}/api/admin/costs/${c.id}`, { method: "DELETE", headers: hdr() });
+      if (r.ok) { showToast("Custo excluído ✓"); load(); }
+      else showToast("Erro ao excluir custo");
+    } catch { showToast("Erro de conexão"); }
   };
 
   if (role && role !== "superadmin") {
     return (
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>💸 Custos</h1>
-        <p className={styles.pageDesc}>Acesso restrito ao superadmin.</p>
-      </div>
+      <AdminPage title="Custos">
+        <div className={k.tableCard}>
+          <div className={k.empty}>
+            <span className={k.emptyTitle}>Acesso restrito</span>
+            <span className={k.emptyDesc}>Apenas o superadmin pode ver os custos.</span>
+          </div>
+        </div>
+      </AdminPage>
     );
   }
 
-  const allocBadge = (a: string) =>
-    a === "shared" ? (
-      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--accent-border)" }}>Rateado (sócios)</span>
-    ) : (
-      <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "rgba(255,255,255,0.05)", color: "var(--text-secondary)", border: "1px solid var(--border-default)" }}>Empresa</span>
-    );
+  const columns: Column<Cost>[] = [
+    {
+      key: "custo", header: "Custo", primaryOnMobile: true,
+      render: (c) => (
+        <div className={k.cellStack}>
+          <span className={k.cellMain}>{c.description}</span>
+          {(c.note || c.createdBy?.name) && (
+            <span className={k.cellSub}>{[c.note, c.createdBy?.name].filter(Boolean).join(" · ")}</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "tipo", header: "Tipo", mobileLabel: "Tipo",
+      render: (c) =>
+        c.allocation === "shared"
+          ? <StatusBadge tone="accent" noDot>Rateado</StatusBadge>
+          : <StatusBadge tone="neutral" noDot>Empresa</StatusBadge>,
+    },
+    { key: "categoria", header: "Categoria", muted: true, hideOnMobile: true, render: (c) => catLabel(c.category) },
+    { key: "data", header: "Data", muted: true, render: (c) => fmtDate(c.incurredAt) },
+    { key: "valor", header: "Valor", align: "right", mono: true, render: (c) => `−${fmtMoney(c.amount)}` },
+  ];
+
+  const rowActions = (c: Cost): ReactNode => (
+    <RowActions items={[{ label: "Excluir", onClick: () => remove(c), danger: true }]} />
+  );
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>💸 Custos</h1>
-        <p className={styles.pageDesc}>
-          Gastos abatidos do lucro. Custos <strong>rateados</strong> são divididos entre os sócios pelo % de cada um e reduzem o saldo a sacar.
-        </p>
-      </div>
-
-      {/* Period chips */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-        {PERIODS.map((p) => (
-          <button
-            key={p.v}
-            type="button"
-            onClick={() => setPeriod(p.v)}
-            style={{
-              padding: "6px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
-              border: "1px solid " + (period === p.v ? "var(--accent-border)" : "var(--border-default)"),
-              background: period === p.v ? "var(--accent-dim)" : "transparent",
-              color: period === p.v ? "var(--accent)" : "var(--text-secondary)",
-            }}
-          >
-            {p.l}
+      <AdminPage
+        title="Custos"
+        actions={
+          <button type="button" className={`${k.btn} ${k.btnPrimary}`} onClick={openCreate}>
+            ＋ Lançar custo
           </button>
-        ))}
-      </div>
+        }
+        kpis={
+          <StatRow>
+            <StatTile accent label="Total" loading={loading} value={fmtMoney(totals.total)} />
+            <StatTile label="Rateado" loading={loading} value={fmtMoney(totals.shared)} />
+            <StatTile label="Empresa" loading={loading} value={fmtMoney(totals.company)} />
+            <StatTile label="Lançamentos" loading={loading} value={fmt(totals.count)} />
+          </StatRow>
+        }
+      >
+        <DataTable
+          columns={columns}
+          rows={costs}
+          getRowKey={(c) => c.id}
+          loading={loading}
+          empty={{ title: "Nenhum custo no período", desc: "Ajuste o período ou lance um novo custo." }}
+          rowActions={rowActions}
+          pagination={{ page, totalPages, total, pageSize, onChange: setPage }}
+          toolbar={
+            <SegmentedControl value={period} onChange={onPeriod} options={PERIODS} />
+          }
+        />
+      </AdminPage>
 
-      {/* Totals */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 }}>
-        {[
-          { label: "Total de custos", value: totals.total, hint: `${totals.count} lançamento(s)` },
-          { label: "Rateados (sócios)", value: totals.shared, hint: "divididos pelo % de cada sócio" },
-          { label: "Da empresa", value: totals.company, hint: "abatem só do lucro" },
-        ].map((c) => (
-          <div key={c.label} style={{ padding: 16, borderRadius: 12, background: "var(--bg-surface)", border: "1px solid var(--border-default)" }}>
-            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 6 }}>{c.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>{fmtMoney(c.value)}</div>
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>{c.hint}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Add cost */}
-      <form onSubmit={submit} style={{ padding: 18, borderRadius: 12, background: "var(--bg-surface)", border: "1px solid var(--border-default)", marginBottom: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Lançar custo</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <label style={{ ...label, gridColumn: "1 / -1" }}>
-            <span>Descrição</span>
-            <input style={field} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Ex.: Assinatura de ferramenta, anúncios, salário…" />
-          </label>
-          <label style={label}>
-            <span>Valor (MZN)</span>
-            <input style={field} type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-          </label>
-          <label style={label}>
-            <span>Categoria</span>
-            <select style={{ ...field, cursor: "pointer" }} value={category} onChange={(e) => setCategory(e.target.value)}>
-              {CATEGORIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}
-            </select>
-          </label>
-          <label style={label}>
-            <span>Tipo</span>
-            <select style={{ ...field, cursor: "pointer" }} value={allocation} onChange={(e) => setAllocation(e.target.value as "company" | "shared")}>
-              <option value="company">Custo da empresa</option>
-              <option value="shared">Rateado entre os sócios</option>
-            </select>
-          </label>
-          <label style={label}>
-            <span>Data</span>
-            <input style={field} type="date" value={incurredAt} onChange={(e) => setIncurredAt(e.target.value)} />
-          </label>
-          <label style={{ ...label, gridColumn: "1 / -1" }}>
-            <span>Nota (opcional)</span>
-            <input style={field} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Detalhe / referência" />
-          </label>
-        </div>
-        {allocation === "shared" && (
-          <div style={{ fontSize: 12, color: "var(--accent)", background: "var(--accent-dim)", border: "1px solid var(--accent-border)", borderRadius: 8, padding: "8px 12px" }}>
-            Será dividido entre os sócios ativos pelo % de cada um e descontado do saldo a sacar deles.
-          </div>
-        )}
-        {err && <div style={{ fontSize: 13, color: "var(--color-error)" }}>{err}</div>}
-        <div>
-          <button type="submit" disabled={saving} style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "var(--accent)", color: "var(--accent-fg, #001412)", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.7 : 1 }}>
-            {saving ? "Salvando…" : "Lançar custo"}
-          </button>
-        </div>
-      </form>
-
-      {/* List */}
-      <div style={{ borderRadius: 12, background: "var(--bg-surface)", border: "1px solid var(--border-default)", overflow: "hidden" }}>
-        {loading ? (
-          <div style={{ padding: 32, textAlign: "center", color: "var(--text-tertiary)", fontSize: 13 }}>Carregando…</div>
-        ) : costs.length === 0 ? (
-          <div style={{ padding: 32, textAlign: "center", color: "var(--text-tertiary)", fontSize: 13 }}>Nenhum custo no período.</div>
-        ) : (
-          costs.map((c) => (
-            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid var(--border-subtle)" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{c.description}</span>
-                  {allocBadge(c.allocation)}
-                  <span style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "2px 8px", borderRadius: 999, background: "rgba(255,255,255,0.04)" }}>{catLabel(c.category)}</span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 3 }}>
-                  {fmtDate(c.incurredAt)}{c.createdBy?.name ? ` · ${c.createdBy.name}` : ""}{c.note ? ` · ${c.note}` : ""}
-                </div>
+      {creating && (
+        <div className={a.modalOverlay} onClick={() => !saving && setCreating(false)}>
+          <form className={a.modal} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+            <h2 className={a.modalTitle}>Lançar custo</h2>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "-6px 0 14px" }}>
+              Gastos abatidos do lucro. Custos <strong>rateados</strong> são divididos entre os sócios pelo % de cada um e reduzem o saldo a sacar.
+            </p>
+            <div className={a.formGrid}>
+              <div className={`${a.formGroup} ${a.formGroupFull}`}>
+                <label className={a.formLabel}>Descrição</label>
+                <input className={a.formInput} value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} placeholder="Ex.: Assinatura de ferramenta, anúncios, salário…" autoFocus />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                −{fmtMoney(c.amount)}
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Valor (MZN)</label>
+                <input className={a.formInput} type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" />
               </div>
-              <button type="button" onClick={() => remove(c.id)} title="Excluir" aria-label="Excluir" style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-default)", background: "transparent", color: "var(--text-tertiary)", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg>
-              </button>
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Categoria</label>
+                <select className={a.formSelect} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                  {CATEGORIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}
+                </select>
+              </div>
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Tipo</label>
+                <select className={a.formSelect} value={form.allocation} onChange={(e) => setForm({ ...form, allocation: e.target.value as "company" | "shared" })}>
+                  <option value="company">Custo da empresa</option>
+                  <option value="shared">Rateado entre os sócios</option>
+                </select>
+              </div>
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Data</label>
+                <input className={a.formInput} type="date" value={form.incurredAt} onChange={(e) => setForm({ ...form, incurredAt: e.target.value })} />
+              </div>
+              <div className={`${a.formGroup} ${a.formGroupFull}`}>
+                <label className={a.formLabel}>Nota (opcional)</label>
+                <input className={a.formInput} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Detalhe / referência" />
+              </div>
             </div>
-          ))
-        )}
-      </div>
+            {form.allocation === "shared" && (
+              <p style={{ color: "var(--accent)", fontSize: 12, margin: "12px 0 0" }}>
+                Será dividido entre os sócios ativos pelo % de cada um e descontado do saldo a sacar deles.
+              </p>
+            )}
+            <div className={a.btnRow}>
+              <button type="submit" className={a.btnPrimary} disabled={saving}>{saving ? "Salvando…" : "Lançar custo"}</button>
+              <button type="button" className={a.btnSecondary} onClick={() => setCreating(false)} disabled={saving}>Cancelar</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {toast && <div className={a.toast}>{toast}</div>}
     </>
   );
 }

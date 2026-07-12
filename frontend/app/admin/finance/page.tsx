@@ -1,9 +1,18 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui";
-import { MetricCard, RevenueChart, type Period as ChartPeriod } from "@/components/admin";
-import adminStyles from "../admin.module.css";
+import {
+  AdminPage,
+  MetricCard,
+  RevenueChart,
+  Section,
+  DataTable,
+  StatusBadge,
+  SearchInput,
+  type Period as ChartPeriod,
+  type Column,
+} from "@/components/admin";
+import k from "@/components/admin/kit.module.css";
 import styles from "./finance.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -132,7 +141,6 @@ const IconChurn = () => (
     <path d="M23 6l-9.5 9.5-5-5L1 18" /><path d="M17 6h6v6" />
   </svg>
 );
-
 const IconRefund = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 2v6h6" /><path d="M3 13a9 9 0 103-7.7L3 8" />
@@ -149,11 +157,13 @@ const IconCost = () => (
   </svg>
 );
 
-const statusBadge = (s: string) => {
-  if (s === "approved") return <Badge variant="success" size="sm">Aprovada</Badge>;
-  if (s === "refunded") return <Badge variant="warning" size="sm">Reembolsada</Badge>;
-  if (s === "failed" || s === "cancelled" || s === "canceled") return <Badge variant="error" size="sm">Cancelada</Badge>;
-  return <Badge variant="neutral" size="sm">Pendente</Badge>;
+/** Status da transação → StatusBadge do kit, preservando os rótulos do financeiro
+ *  (failed/cancelled = "Cancelada"; pending = "Pendente"). */
+const txStatusBadge = (s: string) => {
+  if (s === "approved") return <StatusBadge tone="good">Aprovada</StatusBadge>;
+  if (s === "refunded") return <StatusBadge tone="neutral">Reembolsada</StatusBadge>;
+  if (s === "failed" || s === "cancelled" || s === "canceled") return <StatusBadge tone="danger">Cancelada</StatusBadge>;
+  return <StatusBadge tone="warn">Pendente</StatusBadge>;
 };
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
@@ -164,9 +174,26 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: "custom", label: "Personalizado" },
 ];
 
+// Grade herói: 4 KPIs numa fileira (auto-fit, responsiva sem media query).
+const heroGrid: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: "var(--grid-gap)",
+};
+
 // Map our extended period to what RevenueChart accepts internally
 const toChartPeriod = (p: Period): ChartPeriod =>
   p === "12m" ? "12m" : p === "7d" ? "7d" : "30d";
+
+/** Título enxuto acima de uma tabela (o kit não expõe tabela com título). */
+function TableHeading({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, margin: "2px 2px 0" }}>
+      <h2 style={{ fontSize: "0.95rem", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--text-primary)", margin: 0 }}>{children}</h2>
+      {right != null && <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{right}</span>}
+    </div>
+  );
+}
 
 export default function AdminFinance() {
   const router = useRouter();
@@ -181,9 +208,7 @@ export default function AdminFinance() {
   const [txStatus, setTxStatus] = useState<string>("all"); // all | approved | failed | refunded | pending
   const [coproducers, setCoproducers] = useState<CoproducerOpt[]>([]);
 
-  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [page, setPage] = useState(1);
   const limit = 10;
@@ -195,18 +220,6 @@ export default function AdminFinance() {
   const upcomingTotalPages = Math.max(1, Math.ceil(upcoming.length / upcomingLimit));
   const upcomingClamped = Math.min(upcomingPage, upcomingTotalPages);
   const upcomingSlice = upcoming.slice((upcomingClamped - 1) * upcomingLimit, upcomingClamped * upcomingLimit);
-
-  // Debounce search input → 300ms
-  useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 300);
-    return () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    };
-  }, [searchInput]);
 
   const fetchData = useCallback(async () => {
     const token = localStorage.getItem("cz_token");
@@ -323,16 +336,120 @@ export default function AdminFinance() {
     ? `${data.metrics.renewalRate.toFixed(0)}% renovaram`
     : "—";
 
-  return (
-    <div className={styles.page}>
-      <div className={adminStyles.pageHeader}>
-        <h1 className={adminStyles.pageTitle}>Financeiro</h1>
-        <p className={adminStyles.pageDesc}>
-          KPIs ao vivo: receita, MRR, novas vendas, renovações e churn. Comparado ao período anterior.
-        </p>
-      </div>
+  // Setters de filtro que resetam a paginação para a página 1 (busca única).
+  const onSearch = (v: string) => { setSearch(v); setPage(1); };
+  const onPeriod = (p: Period) => { setPeriod(p); setPage(1); };
+  const onSource = (v: string) => { setSource(v); setPage(1); };
+  const onTxType = (v: string) => { setTxType(v); setPage(1); };
+  const onTxStatus = (v: string) => { setTxStatus(v); setPage(1); };
 
-      {/* ── Filters ─────────────────────────────────────────── */}
+  const skeleton = loading && !data;
+
+  // ── Colunas: transações ────────────────────────────────────────────────
+  const txColumns: Column<Tx>[] = [
+    {
+      key: "cliente", header: "Cliente", primaryOnMobile: true,
+      render: (tx) => (
+        <div className={k.cellStack}>
+          <span className={k.cellMain}>{tx.userName || "Cliente"}</span>
+          <span className={k.cellSub}>{tx.userEmail || tx.userPhone || "—"}</span>
+        </div>
+      ),
+    },
+    {
+      key: "tipo", header: "Tipo", mobileLabel: "Tipo",
+      render: (tx) => (
+        <span className={k.cellInline}>
+          {tx.isRenewal ? <StatusBadge tone="info" noDot>Renovação</StatusBadge> : <StatusBadge tone="good" noDot>Nova</StatusBadge>}
+          {tx.isCloseFriends && <span className={styles.cfTag} title="Close Friends">★ CF</span>}
+        </span>
+      ),
+    },
+    {
+      key: "origem", header: "Origem", mobileLabel: "Origem",
+      render: (tx) =>
+        tx.coproducer
+          ? <StatusBadge tone="accent" noDot>{tx.coproducer.displayName || tx.coproducer.user.name}</StatusBadge>
+          : <span className={k.cellMuted}>Principal</span>,
+    },
+    {
+      key: "data", header: "Data", mobileLabel: "Data",
+      render: (tx) => (
+        <div className={k.cellStack}>
+          <span>{fmtDateTime(tx.createdAt)}</span>
+          <span className={k.cellSub}>
+            {tx.paymentMethod || "M-Pesa"}
+            {tx.gateway && tx.gateway !== "lojou" ? ` · ${tx.gateway.toUpperCase()}` : ""}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "bruto", header: "Bruto", align: "right", mono: true, mobileLabel: "Bruto",
+      render: (tx) => (
+        <>
+          {tx.grossAmount != null ? fmtMoney(tx.grossAmount) : "—"}
+          {tx.orderBumpAmount ? <div className={k.cellSub}>incl. bump {fmtMoney(tx.orderBumpAmount)}</div> : null}
+        </>
+      ),
+    },
+    {
+      key: "taxa", header: "Taxa Lojou", align: "right", mono: true, muted: true, mobileLabel: "Taxa Lojou",
+      render: (tx) => (tx.lojouFee != null ? `−${fmtMoney(tx.lojouFee)}` : "—"),
+    },
+    {
+      key: "split", header: "Split coprod.", align: "right", mono: true, mobileLabel: "Split coprod.",
+      render: (tx) =>
+        tx.coproducerFee != null && tx.coproducerFee > 0
+          ? <span style={{ color: "var(--accent)" }}>−{fmtMoney(tx.coproducerFee)}</span>
+          : <span className={k.cellMuted}>—</span>,
+    },
+    {
+      key: "liquido", header: "Líquido", align: "right", mono: true, mobileLabel: "Líquido",
+      render: (tx) => <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{fmtMoney(tx.amount)}</span>,
+    },
+    {
+      key: "status", header: "Status", mobileLabel: "Status",
+      render: (tx) => txStatusBadge(tx.status),
+    },
+  ];
+
+  // ── Colunas: próximas renovações ───────────────────────────────────────
+  const upcomingColumns: Column<UpcomingUser>[] = [
+    {
+      key: "cliente", header: "Cliente", primaryOnMobile: true,
+      render: (u) => (
+        <div className={k.cellStack}>
+          <span className={k.cellMain}>
+            {u.name || "Membro"}
+            {u.closeFriends && <span className={styles.cfTag} title="Close Friends">★ CF</span>}
+          </span>
+          <span className={k.cellSub}>{u.email}</span>
+        </div>
+      ),
+    },
+    { key: "phone", header: "Telefone", mono: true, mobileLabel: "Telefone", render: (u) => u.phone || "—" },
+    { key: "expira", header: "Expira em", muted: true, mobileLabel: "Expira em", render: (u) => fmtDate(u.subscriptionEnd) },
+    {
+      key: "dias", header: "Dias", align: "right", mobileLabel: "Dias restantes",
+      render: (u) => (
+        <span className={`${styles.daysLeft} ${u.daysUntilExpiry != null && u.daysUntilExpiry <= 3 ? styles.daysLeftUrgent : ""}`}>
+          {u.daysUntilExpiry ?? "—"}d
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <AdminPage
+      title="Financeiro"
+      actions={
+        <button type="button" className={`${k.btn} ${k.btnSecondary}`} onClick={exportCsv} disabled={exporting}>
+          {exporting ? "Exportando…" : "Exportar CSV"}
+        </button>
+      }
+    >
+      {/* ── Filtros (período / origem / busca) — governam KPIs, gráfico e lista ── */}
       <div className={styles.filtersCard}>
         <div className={styles.periodChips}>
           {PERIOD_OPTIONS.map((opt) => (
@@ -340,7 +457,7 @@ export default function AdminFinance() {
               key={opt.value}
               type="button"
               className={`${styles.periodChip} ${period === opt.value ? styles.periodChipActive : ""}`}
-              onClick={() => { setPeriod(opt.value); setPage(1); }}
+              onClick={() => onPeriod(opt.value)}
             >
               {opt.label}
             </button>
@@ -360,37 +477,9 @@ export default function AdminFinance() {
           </div>
         )}
 
-        <div className={styles.searchWrap}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={styles.searchIcon}>
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            className={styles.searchInput}
-            placeholder="Buscar por nome, email ou telefone…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-          {searchInput && (
-            <button type="button" className={styles.searchClear} onClick={() => setSearchInput("")} aria-label="Limpar busca">×</button>
-          )}
-        </div>
+        <SearchInput defaultValue={search} onSearch={onSearch} placeholder="Buscar por nome, e-mail ou telefone…" />
 
-        {/* Source filter: principal vs each coproducer */}
-        <select
-          value={source}
-          onChange={(e) => { setSource(e.target.value); setPage(1); }}
-          style={{
-            padding: "8px 12px",
-            background: "var(--bg-elevated)",
-            border: "1px solid var(--border-default)",
-            borderRadius: 8,
-            color: "var(--text-primary)",
-            fontSize: 13,
-            fontFamily: "inherit",
-            cursor: "pointer",
-            minWidth: 180,
-          }}
-        >
+        <select className={k.select} value={source} onChange={(e) => onSource(e.target.value)} aria-label="Origem">
           <option value="all">Origem: Todas</option>
           <option value="principal">Origem: Principal</option>
           {coproducers.map((c) => (
@@ -399,13 +488,13 @@ export default function AdminFinance() {
         </select>
       </div>
 
-      {/* ── KPI cards ───────────────────────────────────────── */}
-      <div className={styles.metricsGrid}>
+      {/* ── Fileira herói (4 KPIs primários) ── */}
+      <div style={heroGrid}>
         <MetricCard
           accent
           label="Faturamento"
           value={data ? fmtMoney(data.metrics.revenue) : undefined}
-          loading={loading && !data}
+          loading={skeleton}
           icon={<IconRevenue />}
           iconAccent
           delta={data?.metrics.revenueGrowth ?? null}
@@ -413,17 +502,39 @@ export default function AdminFinance() {
           sparkline={(data?.chartData ?? []).length > 1 ? data!.chartData.map((d) => ({ value: d.amount })) : undefined}
         />
         <MetricCard
+          accent
+          label="Lucro líquido"
+          value={data ? fmtMoney(data.metrics.profit ?? 0) : undefined}
+          loading={skeleton}
+          icon={<IconRevenue />}
+          iconAccent
+          sub="receita líquida − custos"
+        />
+        <MetricCard
           label="MRR ativo"
           value={data ? fmtMoney(data.metrics.mrr) : undefined}
-          loading={loading && !data}
+          loading={skeleton}
           icon={<IconUsers />}
           iconAccent
           sub={data ? `${data.metrics.activePaidUsers} assinantes ativos` : ""}
         />
         <MetricCard
+          label="Ticket médio"
+          value={data ? fmtMoney(data.metrics.ticket) : undefined}
+          loading={skeleton}
+          icon={<IconBolt />}
+          iconAccent
+          delta={data?.metrics.ticketGrowth ?? null}
+          sub="vs período anterior"
+        />
+      </div>
+
+      {/* ── Tira secundária (vendas / renovações) ── */}
+      <div className={styles.metricsGrid}>
+        <MetricCard
           label="Novas vendas"
           value={data ? data.metrics.newCount.toLocaleString("pt-MZ") : undefined}
-          loading={loading && !data}
+          loading={skeleton}
           icon={<IconNew />}
           iconAccent
           sub={data ? `${fmtMoney(data.metrics.newRevenue)} no período` : ""}
@@ -431,7 +542,7 @@ export default function AdminFinance() {
         <MetricCard
           label="Renovações"
           value={data ? data.metrics.renewalCount.toLocaleString("pt-MZ") : undefined}
-          loading={loading && !data}
+          loading={skeleton}
           icon={<IconRenew />}
           iconAccent
           sub={data ? `${fmtMoney(data.metrics.renewalRevenue)} no período` : ""}
@@ -439,74 +550,62 @@ export default function AdminFinance() {
         <MetricCard
           label="Taxa de renovação"
           value={data?.metrics.renewalRate != null ? `${data.metrics.renewalRate.toFixed(0)}%` : "—"}
-          loading={loading && !data}
+          loading={skeleton}
           icon={<IconChurn />}
           iconAccent
           sub={data ? `${data.metrics.realizedRenewals}/${data.metrics.expectedRenewals} esperadas` : ""}
         />
-        <MetricCard
-          label="Ticket médio"
-          value={data ? fmtMoney(data.metrics.ticket) : undefined}
-          loading={loading && !data}
-          icon={<IconBolt />}
-          iconAccent
-          delta={data?.metrics.ticketGrowth ?? null}
-          sub="vs período anterior"
-        />
-        <MetricCard
-          label="Faturamento bruto"
-          value={data?.metrics.grossRevenue != null ? fmtMoney(data.metrics.grossRevenue) : undefined}
-          loading={loading && !data}
-          icon={<IconRevenue />}
-          sub="antes de taxa Lojou e split"
-        />
-        <MetricCard
-          label="Taxa Lojou"
-          value={data?.metrics.totalLojouFee != null ? fmtMoney(data.metrics.totalLojouFee) : undefined}
-          loading={loading && !data}
-          icon={<IconBolt />}
-          sub="10% + 10 MT por item"
-        />
-        <MetricCard
-          label="Pago a coprodutores"
-          value={data?.metrics.totalCoproducerFee != null ? fmtMoney(data.metrics.totalCoproducerFee) : undefined}
-          loading={loading && !data}
-          icon={<IconUsers />}
-          sub="split sobre o principal"
-        />
-        <MetricCard
-          label="Reembolsos"
-          value={data ? (data.metrics.refundedCount ?? 0).toLocaleString("pt-MZ") : undefined}
-          loading={loading && !data}
-          icon={<IconRefund />}
-          sub={data ? `${fmtMoney(data.metrics.refundedAmount ?? 0)} no período` : ""}
-        />
-        <MetricCard
-          label="Pagamento iniciado"
-          value={data ? (data.metrics.initiatedCount ?? 0).toLocaleString("pt-MZ") : undefined}
-          loading={loading && !data}
-          icon={<IconCancel />}
-          sub={data ? `${fmtMoney(data.metrics.initiatedAmount ?? 0)} — checkout não concluído` : ""}
-        />
-        <MetricCard
-          label="Custos"
-          value={data ? fmtMoney(data.metrics.costsTotal ?? 0) : undefined}
-          loading={loading && !data}
-          icon={<IconCost />}
-          sub={data ? `${fmtMoney(data.metrics.costsShared ?? 0)} rateados · ${fmtMoney(data.metrics.costsCompany ?? 0)} empresa` : ""}
-        />
-        <MetricCard
-          accent
-          label="Lucro líquido"
-          value={data ? fmtMoney(data.metrics.profit ?? 0) : undefined}
-          loading={loading && !data}
-          icon={<IconRevenue />}
-          iconAccent
-          sub="receita líquida − custos"
-        />
       </div>
 
-      {/* ── Chart ───────────────────────────────────────────── */}
+      {/* ── Taxas & perdas (colapsável, secundário) ── */}
+      <Section title="Taxas & perdas" defaultOpen={false}>
+        <div className={styles.metricsGrid}>
+          <MetricCard
+            label="Faturamento bruto"
+            value={data?.metrics.grossRevenue != null ? fmtMoney(data.metrics.grossRevenue) : undefined}
+            loading={skeleton}
+            icon={<IconRevenue />}
+            sub="antes de taxa Lojou e split"
+          />
+          <MetricCard
+            label="Taxa Lojou"
+            value={data?.metrics.totalLojouFee != null ? fmtMoney(data.metrics.totalLojouFee) : undefined}
+            loading={skeleton}
+            icon={<IconBolt />}
+            sub="10% + 10 MT por item"
+          />
+          <MetricCard
+            label="Split coprodutores"
+            value={data?.metrics.totalCoproducerFee != null ? fmtMoney(data.metrics.totalCoproducerFee) : undefined}
+            loading={skeleton}
+            icon={<IconUsers />}
+            sub="split sobre o principal"
+          />
+          <MetricCard
+            label="Reembolsos"
+            value={data ? (data.metrics.refundedCount ?? 0).toLocaleString("pt-MZ") : undefined}
+            loading={skeleton}
+            icon={<IconRefund />}
+            sub={data ? `${fmtMoney(data.metrics.refundedAmount ?? 0)} no período` : ""}
+          />
+          <MetricCard
+            label="Pagamento iniciado"
+            value={data ? (data.metrics.initiatedCount ?? 0).toLocaleString("pt-MZ") : undefined}
+            loading={skeleton}
+            icon={<IconCancel />}
+            sub={data ? `${fmtMoney(data.metrics.initiatedAmount ?? 0)} — checkout não concluído` : ""}
+          />
+          <MetricCard
+            label="Custos"
+            value={data ? fmtMoney(data.metrics.costsTotal ?? 0) : undefined}
+            loading={skeleton}
+            icon={<IconCost />}
+            sub={data ? `${fmtMoney(data.metrics.costsShared ?? 0)} rateados · ${fmtMoney(data.metrics.costsCompany ?? 0)} empresa` : ""}
+          />
+        </div>
+      </Section>
+
+      {/* ── Gráfico ── */}
       <RevenueChart
         data={chartWithCount}
         period={toChartPeriod(period)}
@@ -519,269 +618,61 @@ export default function AdminFinance() {
         formatCurrency={fmtMoney}
       />
 
-      {/* ── Upcoming renewals ───────────────────────────────── */}
+      {/* ── Próximas renovações ── */}
       {upcoming.length > 0 && (
-        <div className={styles.txCard}>
-          <div className={styles.txHead}>
-            <span className={styles.txTitle}>Próximas renovações (30 dias)</span>
-            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-              {upcoming.length} usuários
-            </span>
-          </div>
-          <div className={styles.txWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Telefone</th>
-                  <th>Expira em</th>
-                  <th style={{ textAlign: "right" }}>Dias</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcomingSlice.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div className={styles.client}>
-                        <span className={styles.clientName}>
-                          {u.name || "Membro"}
-                          {u.closeFriends && (
-                            <span className={styles.cfTag} title="Close Friends">★ CF</span>
-                          )}
-                        </span>
-                        <span className={styles.clientEmail}>{u.email}</span>
-                      </div>
-                    </td>
-                    <td><span className={styles.method}>{u.phone}</span></td>
-                    <td>{fmtDate(u.subscriptionEnd)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className={`${styles.daysLeft} ${u.daysUntilExpiry != null && u.daysUntilExpiry <= 3 ? styles.daysLeftUrgent : ""}`}>
-                        {u.daysUntilExpiry ?? "—"}d
-                      </span>
-                    </td>
-                    <td></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className={styles.txMobile}>
-              {upcomingSlice.map((u) => (
-                <div key={u.id} className={styles.txMobileCard}>
-                  <div className={styles.txmHead}>
-                    <span className={styles.txmName}>
-                      {u.name || "Membro"}{u.closeFriends && <span className={styles.cfTag} style={{ marginLeft: 6 }}>★ CF</span>}
-                    </span>
-                    <span className={`${styles.daysLeft} ${u.daysUntilExpiry != null && u.daysUntilExpiry <= 3 ? styles.daysLeftUrgent : ""}`}>
-                      {u.daysUntilExpiry ?? "—"}d
-                    </span>
-                  </div>
-                  <div className={styles.txmRow}><span className={styles.txmLabel}>Telefone</span><span className={styles.txmValue}>{u.phone}</span></div>
-                  <div className={styles.txmRow}><span className={styles.txmLabel}>Expira em</span><span className={styles.txmValue}>{fmtDate(u.subscriptionEnd)}</span></div>
-                </div>
-              ))}
-            </div>
-          </div>
-          {upcoming.length > upcomingLimit && (
-            <div className={styles.pagination}>
-              <button type="button" className={styles.pageBtn} onClick={() => setUpcomingPage((p) => Math.max(1, p - 1))} disabled={upcomingClamped <= 1}>‹ Anterior</button>
-              <span className={styles.pageInfo}>Página {upcomingClamped} de {upcomingTotalPages}</span>
-              <button type="button" className={styles.pageBtn} onClick={() => setUpcomingPage((p) => Math.min(upcomingTotalPages, p + 1))} disabled={upcomingClamped >= upcomingTotalPages}>Próxima ›</button>
-            </div>
-          )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+          <TableHeading right={`${upcoming.length} usuários`}>Próximas renovações · 30 dias</TableHeading>
+          <DataTable
+            columns={upcomingColumns}
+            rows={upcomingSlice}
+            getRowKey={(u) => u.id}
+            empty={{ title: "Nenhuma renovação próxima" }}
+            pagination={{
+              page: upcomingClamped,
+              totalPages: upcomingTotalPages,
+              total: upcoming.length,
+              pageSize: upcomingLimit,
+              onChange: setUpcomingPage,
+            }}
+          />
         </div>
       )}
 
-      {/* ── Transactions ────────────────────────────────────── */}
-      <div className={styles.txCard}>
-        <div className={styles.txHead}>
-          <span className={styles.txTitle}>Transações</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <select
-              value={txType}
-              onChange={(e) => { setTxType(e.target.value); setPage(1); }}
-              className={styles.txFilter}
-            >
-              <option value="all">Tipo: Todos</option>
-              <option value="new">Novas</option>
-              <option value="renewal">Renovações</option>
-              <option value="closeFriends">Close Friends</option>
-            </select>
-            <select
-              value={txStatus}
-              onChange={(e) => { setTxStatus(e.target.value); setPage(1); }}
-              className={styles.txFilter}
-            >
-              <option value="all">Status: Todos</option>
-              <option value="approved">Aprovadas</option>
-              <option value="refunded">Reembolsadas</option>
-              <option value="failed">Canceladas</option>
-              <option value="pending">Pagamento iniciado</option>
-            </select>
-            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-              {data ? `${data.transactions.items.length} de ${data.transactions.total}` : "—"}
-            </span>
-            <button
-              type="button"
-              className={styles.pageBtn}
-              onClick={exportCsv}
-              disabled={exporting}
-            >
-              {exporting ? "Exportando…" : "Exportar CSV"}
-            </button>
-          </div>
-        </div>
-
-        <div className={styles.txWrap}>
-          {data?.transactions.items.length ? (
+      {/* ── Transações ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+        <TableHeading>Transações</TableHeading>
+        <DataTable
+          columns={txColumns}
+          rows={data?.transactions.items ?? []}
+          getRowKey={(t) => t.id}
+          loading={skeleton}
+          empty={{ title: "Nenhuma transação no período.", desc: "Ajuste o período ou os filtros." }}
+          pagination={{
+            page,
+            totalPages,
+            total: data?.transactions.total ?? 0,
+            pageSize: limit,
+            onChange: setPage,
+          }}
+          toolbar={
             <>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Tipo</th>
-                  <th>Origem</th>
-                  <th>Data</th>
-                  <th>Método</th>
-                  <th style={{ textAlign: "right" }} title="Valor total pago pelo cliente (produto + bumps), antes das taxas">Bruto</th>
-                  <th style={{ textAlign: "right" }} title="Taxa da Lojou: 10% + 10 MT por item">Taxa Lojou</th>
-                  <th style={{ textAlign: "right" }} title="Parte repassada ao coprodutor">Split coprod.</th>
-                  <th style={{ textAlign: "right" }} title="O que entrou de fato, depois das taxas">Líquido</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.transactions.items.map((tx) => (
-                  <tr key={tx.id}>
-                    <td>
-                      <div className={styles.client}>
-                        <span className={styles.clientName}>{tx.userName || "Cliente"}</span>
-                        <span className={styles.clientEmail}>
-                          {tx.userEmail || tx.userPhone || "—"}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      {tx.isRenewal ? (
-                        <Badge variant="info" size="sm">Renovação</Badge>
-                      ) : (
-                        <Badge variant="success" size="sm">Nova</Badge>
-                      )}
-                      {tx.isCloseFriends && (
-                        <span className={styles.cfTag} style={{ marginLeft: 6 }} title="Close Friends">★ CF</span>
-                      )}
-                    </td>
-                    <td>
-                      {tx.coproducer ? (
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(168,85,247,0.12)", color: "#a855f7", fontWeight: 600 }}>
-                          {tx.coproducer.displayName || tx.coproducer.user.name}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Principal</span>
-                      )}
-                    </td>
-                    <td>{fmtDateTime(tx.createdAt)}</td>
-                    <td>
-                      <span className={styles.method}>{tx.paymentMethod || "M-Pesa"}</span>
-                      {tx.gateway && tx.gateway !== "lojou" && (
-                        <span
-                          style={{
-                            marginLeft: 6,
-                            fontSize: 10,
-                            padding: "2px 7px",
-                            borderRadius: 999,
-                            fontWeight: 700,
-                            letterSpacing: 0.3,
-                            background: tx.gateway === "stripe" ? "rgba(99,91,255,0.14)" : "rgba(168,168,168,0.14)",
-                            color: tx.gateway === "stripe" ? "#635bff" : "var(--text-tertiary)",
-                          }}
-                          title={tx.stripePaymentIntentId || tx.gateway}
-                        >
-                          {tx.gateway.toUpperCase()}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
-                      {tx.grossAmount != null ? fmtMoney(tx.grossAmount) : "—"}
-                      {tx.orderBumpAmount ? (
-                        <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
-                          incl. bump {fmtMoney(tx.orderBumpAmount)}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)", fontSize: 12 }}>
-                      {tx.lojouFee != null ? `−${fmtMoney(tx.lojouFee)}` : "—"}
-                    </td>
-                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", color: tx.coproducerFee ? "#a855f7" : "var(--text-tertiary)", fontSize: 12 }}>
-                      {tx.coproducerFee != null && tx.coproducerFee > 0 ? `−${fmtMoney(tx.coproducerFee)}` : "—"}
-                    </td>
-                    <td className={styles.amount} style={{ textAlign: "right" }}>
-                      {fmtMoney(tx.amount)}
-                    </td>
-                    <td>{statusBadge(tx.status)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className={styles.txMobile}>
-              {data.transactions.items.map((tx) => (
-                <div key={tx.id} className={styles.txMobileCard}>
-                  <div className={styles.txmHead}>
-                    <span className={styles.txmName}>
-                      {tx.userName || "Cliente"}
-                    </span>
-                    <span className={styles.txmAmount}>{fmtMoney(tx.amount)}</span>
-                  </div>
-                  <div className={styles.txmTags}>
-                    {tx.isRenewal ? <Badge variant="info" size="sm">Renovação</Badge> : <Badge variant="success" size="sm">Nova</Badge>}
-                    {tx.isCloseFriends && <span className={styles.cfTag} title="Close Friends">★ CF</span>}
-                    {statusBadge(tx.status)}
-                    {tx.coproducer && (
-                      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: "rgba(168,85,247,0.12)", color: "#a855f7", fontWeight: 600 }}>
-                        {tx.coproducer.displayName || tx.coproducer.user.name}
-                      </span>
-                    )}
-                  </div>
-                  <div className={styles.txmRow}><span className={styles.txmLabel}>Data</span><span className={styles.txmValue}>{fmtDateTime(tx.createdAt)}</span></div>
-                  <div className={styles.txmRow}><span className={styles.txmLabel}>Método</span><span className={styles.txmValue}>{tx.paymentMethod || "M-Pesa"}{tx.gateway && tx.gateway !== "lojou" ? ` · ${tx.gateway.toUpperCase()}` : ""}</span></div>
-                  <div className={styles.txmRow}><span className={styles.txmLabel}>Bruto</span><span className={styles.txmValue}>{tx.grossAmount != null ? fmtMoney(tx.grossAmount) : "—"}</span></div>
-                  <div className={styles.txmRow}><span className={styles.txmLabel}>Taxa Lojou</span><span className={styles.txmValue}>{tx.lojouFee != null ? `−${fmtMoney(tx.lojouFee)}` : "—"}</span></div>
-                  {tx.coproducerFee != null && tx.coproducerFee > 0 && (
-                    <div className={styles.txmRow}><span className={styles.txmLabel}>Split coprod.</span><span className={styles.txmValue}>−{fmtMoney(tx.coproducerFee)}</span></div>
-                  )}
-                </div>
-              ))}
-            </div>
+              <select className={k.select} value={txType} onChange={(e) => onTxType(e.target.value)} aria-label="Tipo">
+                <option value="all">Tipo: Todos</option>
+                <option value="new">Novas</option>
+                <option value="renewal">Renovações</option>
+                <option value="closeFriends">Close Friends</option>
+              </select>
+              <select className={k.select} value={txStatus} onChange={(e) => onTxStatus(e.target.value)} aria-label="Status">
+                <option value="all">Status: Todos</option>
+                <option value="approved">Aprovadas</option>
+                <option value="refunded">Reembolsadas</option>
+                <option value="failed">Canceladas</option>
+                <option value="pending">Pagamento iniciado</option>
+              </select>
             </>
-          ) : loading ? (
-            <div className={styles.empty}>Carregando…</div>
-          ) : (
-            <div className={styles.empty}>Nenhuma transação no período.</div>
-          )}
-        </div>
-
-        {data && data.transactions.total > limit && (
-          <div className={styles.pagination}>
-            <button
-              type="button"
-              className={styles.pageBtn}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-            >‹ Anterior</button>
-            <span className={styles.pageInfo}>
-              Página {page} de {totalPages}
-            </span>
-            <button
-              type="button"
-              className={styles.pageBtn}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >Próxima ›</button>
-          </div>
-        )}
+          }
+        />
       </div>
-    </div>
+    </AdminPage>
   );
 }

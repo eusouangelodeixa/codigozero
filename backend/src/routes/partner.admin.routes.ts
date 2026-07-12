@@ -257,20 +257,42 @@ router.delete('/partners/:id', superadminMiddleware, async (req: AuthRequest, re
 router.get('/partner-withdrawals', async (req: AuthRequest, res: Response) => {
   try {
     const status = (req.query.status as string) || undefined;
-    const rows = await prisma.partnerWithdrawal.findMany({
-      where: status ? { status } : {},
-      orderBy: { createdAt: 'desc' },
-      include: {
-        partner: {
-          select: {
-            displayName: true,
-            user: { select: { id: true, name: true, email: true, phone: true } },
+    const where = status ? { status } : {};
+    const { page, pageSize, skip, take } = pageArgs(req);
+    // Page of rows + total matching the SAME status filter, plus the always-on
+    // pending metrics (independent of the current filter) for the queue badge.
+    const [rows, total, pendingAgg] = await Promise.all([
+      prisma.partnerWithdrawal.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true,
+          amountRequested: true, // bruto
+          feeAmount: true,       // taxa
+          amountNet: true,       // líquido
+          payoutMethod: true,
+          payoutTarget: true,
+          status: true,
+          notes: true,
+          processedAt: true,
+          processedBy: true,
+          createdAt: true,
+          partner: {
+            select: {
+              displayName: true, // quem pediu (sócio)
+              user: { select: { id: true, name: true, email: true, phone: true } },
+            },
           },
         },
-      },
-      take: 200,
-    });
-    res.json({ withdrawals: rows });
+      }),
+      prisma.partnerWithdrawal.count({ where }),
+      prisma.partnerWithdrawal.aggregate({ where: { status: 'pending' }, _sum: { amountNet: true }, _count: true }),
+    ]);
+    const metrics = { pendingCount: pendingAgg._count, pendingAmount: pendingAgg._sum.amountNet ?? 0 };
+    // `withdrawals` kept as an alias of `items` for backward compat with the old front.
+    res.json({ ...paginated(rows, total, page, pageSize), withdrawals: rows, metrics });
   } catch (error) {
     console.error('[ADMIN/PARTNERS] withdrawals list error:', error);
     res.status(500).json({ error: 'Erro ao listar saques' });

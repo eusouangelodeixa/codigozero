@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import a from "../admin.module.css";
 import k from "@/components/admin/kit.module.css";
+import { displayEmail } from "@/lib/format";
 import {
   AdminPage,
   StatRow,
@@ -192,7 +193,7 @@ export default function AdminUsers() {
       render: (u) => (
         <div className={k.cellStack}>
           <span className={k.cellMain}>{u.name}</span>
-          <span className={k.cellSub}>{u.email}</span>
+          <span className={k.cellSub}>{displayEmail(u.email)}</span>
         </div>
       ),
     },

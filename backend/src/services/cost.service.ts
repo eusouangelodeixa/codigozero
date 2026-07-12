@@ -72,16 +72,38 @@ function windowClause(from?: Date, to?: Date): Prisma.CostWhereInput {
   return { incurredAt };
 }
 
-export async function listCosts(opts: { from?: Date; to?: Date; category?: string; allocation?: string; limit?: number } = {}) {
+type CostListOpts = { from?: Date; to?: Date; category?: string; allocation?: string; skip?: number; take?: number; limit?: number };
+
+/** Where-clause for the cost LIST (window + optional category/allocation filters). */
+function costListWhere(opts: CostListOpts): Prisma.CostWhereInput {
   const where: Prisma.CostWhereInput = { ...windowClause(opts.from, opts.to) };
   if (opts.category && opts.category !== 'all') where.category = opts.category;
   if (opts.allocation && opts.allocation !== 'all') where.allocation = opts.allocation;
+  return where;
+}
+
+export async function listCosts(opts: CostListOpts = {}) {
   return prisma.cost.findMany({
-    where,
+    where: costListWhere(opts),
     orderBy: { incurredAt: 'desc' },
-    take: Math.min(opts.limit ?? 200, 500),
-    include: { createdBy: { select: { name: true } } },
+    skip: opts.skip,
+    take: opts.take ?? Math.min(opts.limit ?? 200, 500),
+    select: {
+      id: true,
+      description: true,
+      amount: true,
+      category: true,
+      allocation: true,
+      incurredAt: true,
+      note: true,
+      createdBy: { select: { name: true } },
+    },
   });
+}
+
+/** Count of costs matching the SAME list filters (drives list pagination). */
+export async function countCosts(opts: CostListOpts = {}) {
+  return prisma.cost.count({ where: costListWhere(opts) });
 }
 
 /** Totals for a window: company vs shared vs grand total. */

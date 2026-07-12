@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
@@ -16,7 +16,7 @@ import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { pageArgs, paginated } from '../lib/pagination';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
-import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
+import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
 import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
@@ -1425,14 +1425,9 @@ router.get('/email-events', async (req: AuthRequest, res: Response) => {
   try {
     const sinceDays = Math.min(30, Math.max(1, parseInt(req.query.days as string) || 7));
     const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
-
     // Only real Resend e-mails carry a resendId; ignore stray/manual test posts.
-    const rows = await prisma.emailEvent.findMany({
-      where: { createdAt: { gte: since }, resendId: { not: null } },
-      orderBy: { createdAt: 'asc' },
-      take: 4000,
-      select: { type: true, recipient: true, subject: true, resendId: true, createdAt: true },
-    });
+    const where: Prisma.EmailEventWhereInput = { createdAt: { gte: since }, resendId: { not: null } };
+    const { page, pageSize, skip, take } = pageArgs(req);
 
     const PRIORITY: Record<string, number> = {
       'email.complained': 100,
@@ -1444,24 +1439,52 @@ router.get('/email-events', async (req: AuthRequest, res: Response) => {
       'email.sent': 10,
     };
 
-    type Grouped = {
-      resendId: string;
-      recipient: string | null;
-      subject: string | null;
-      status: string;
-      prio: number;
-      lastAt: Date;
-      types: Set<string>;
-    };
+    // Paginate the DISTINCT e-mails (grouped by resendId) IN THE DB, newest
+    // activity first — instead of pulling every event into memory. The funnel
+    // counts below are separate DISTINCT-e-mail COUNTs over the WHOLE window
+    // (not the page), matching the previous Set-based aggregation exactly.
+    const distinctByType = (type: string) =>
+      prisma.emailEvent.findMany({ where: { ...where, type }, distinct: ['resendId'], select: { resendId: true } });
+
+    const [groups, allIds, delivered, opened, clicked, bounced, complained] = await Promise.all([
+      prisma.emailEvent.groupBy({
+        by: ['resendId'],
+        where,
+        _max: { createdAt: true },
+        orderBy: { _max: { createdAt: 'desc' } },
+        skip,
+        take,
+      }),
+      // Every distinct e-mail in the window → funnel "sent" AND the paging total.
+      prisma.emailEvent.findMany({ where, distinct: ['resendId'], select: { resendId: true } }),
+      distinctByType('email.delivered'),
+      distinctByType('email.opened'),
+      distinctByType('email.clicked'),
+      distinctByType('email.bounced'),
+      distinctByType('email.complained'),
+    ]);
+
+    const total = allIds.length;
+    const pageIds = groups.map((g) => g.resendId as string);
+
+    // Only the events for THIS page's e-mails — derive recipient/subject and the
+    // furthest status per e-mail (same in-window scope as before).
+    const evs = pageIds.length
+      ? await prisma.emailEvent.findMany({
+          where: { ...where, resendId: { in: pageIds } },
+          select: { type: true, recipient: true, subject: true, resendId: true, createdAt: true },
+        })
+      : [];
+
+    type Grouped = { recipient: string | null; subject: string | null; status: string; prio: number; lastAt: Date };
     const map = new Map<string, Grouped>();
-    for (const e of rows) {
+    for (const e of evs) {
       const key = e.resendId as string;
       let g = map.get(key);
       if (!g) {
-        g = { resendId: key, recipient: e.recipient, subject: e.subject, status: e.type, prio: PRIORITY[e.type] ?? 0, lastAt: e.createdAt, types: new Set() };
+        g = { recipient: e.recipient, subject: e.subject, status: e.type, prio: PRIORITY[e.type] ?? 0, lastAt: e.createdAt };
         map.set(key, g);
       }
-      g.types.add(e.type);
       if (e.recipient) g.recipient = e.recipient;
       if (e.subject) g.subject = e.subject;
       if (e.createdAt > g.lastAt) g.lastAt = e.createdAt;
@@ -1472,21 +1495,23 @@ router.get('/email-events', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    const emails = [...map.values()]
-      .sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime())
-      .slice(0, 200)
-      .map((g) => ({ resendId: g.resendId, recipient: g.recipient, subject: g.subject, status: g.status, lastAt: g.lastAt }));
+    // Preserve the DB page ordering (newest activity first).
+    const emails = pageIds.map((id) => {
+      const g = map.get(id)!;
+      return { resendId: id, recipient: g.recipient, subject: g.subject, status: g.status, lastAt: g.lastAt };
+    });
 
-    const counts = { sent: map.size, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0 };
-    for (const g of map.values()) {
-      if (g.types.has('email.delivered')) counts.delivered++;
-      if (g.types.has('email.opened')) counts.opened++;
-      if (g.types.has('email.clicked')) counts.clicked++;
-      if (g.types.has('email.bounced')) counts.bounced++;
-      if (g.types.has('email.complained')) counts.complained++;
-    }
+    const counts = {
+      sent: total,
+      delivered: delivered.length,
+      opened: opened.length,
+      clicked: clicked.length,
+      bounced: bounced.length,
+      complained: complained.length,
+    };
 
-    res.json({ emails, counts, sinceDays });
+    // `emails` kept as an alias of `items` for backward compat with the old front.
+    res.json({ ...paginated(emails, total, page, pageSize), emails, counts, sinceDays });
   } catch (error) {
     console.error('[ADMIN] email-events error:', error);
     res.status(500).json({ error: 'Erro ao carregar eventos de e-mail' });
@@ -1527,11 +1552,17 @@ router.get('/costs', async (req: AuthRequest, res: Response) => {
   if (!requireSuperadmin(req, res)) return;
   try {
     const { from, to } = parseCostPeriod(req.query);
-    const [costsList, totals] = await Promise.all([
-      listCosts({ from, to, category: req.query.category as string, allocation: req.query.allocation as string }),
+    const { page, pageSize, skip, take } = pageArgs(req);
+    const listOpts = { from, to, category: req.query.category as string, allocation: req.query.allocation as string, skip, take };
+    // Page of costs + total matching the SAME filters. `totals` stays aggregated
+    // over the WHOLE period (never just the page) — money math is untouched.
+    const [costsList, total, totals] = await Promise.all([
+      listCosts(listOpts),
+      countCosts(listOpts),
       costTotals({ from, to }),
     ]);
-    res.json({ costs: costsList, totals, categories: COST_CATEGORIES });
+    // `costs` kept as an alias of `items` for backward compat with the old front.
+    res.json({ ...paginated(costsList, total, page, pageSize), costs: costsList, totals, categories: COST_CATEGORIES });
   } catch (e) {
     console.error('[COSTS] list error:', e);
     res.status(500).json({ error: 'Erro ao carregar custos' });
@@ -3091,20 +3122,42 @@ router.patch('/affiliates/:id', async (req: AuthRequest, res: Response) => {
 router.get('/affiliate-withdrawals', async (req: AuthRequest, res: Response) => {
   try {
     const status = req.query.status as string | undefined;
-    const rows = await prisma.affiliateWithdrawal.findMany({
-      where: status ? { status } : undefined,
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-      take: 200,
-      include: {
-        affiliate: {
-          select: {
-            code: true,
-            user: { select: { id: true, name: true, email: true, phone: true } },
+    const where = status ? { status } : {};
+    const { page, pageSize, skip, take } = pageArgs(req);
+    // Page of rows + total matching the SAME status filter, plus the always-on
+    // pending metrics (independent of the current filter) for the queue badge.
+    const [rows, total, pendingAgg] = await Promise.all([
+      prisma.affiliateWithdrawal.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        skip,
+        take,
+        select: {
+          id: true,
+          amountRequested: true, // bruto
+          feeAmount: true,       // taxa
+          amountNet: true,       // líquido
+          payoutMethod: true,
+          payoutTarget: true,
+          status: true,
+          notes: true,
+          processedAt: true,
+          processedBy: true,
+          createdAt: true,
+          affiliate: {
+            select: {
+              code: true, // quem pediu (afiliado)
+              user: { select: { id: true, name: true, email: true, phone: true } },
+            },
           },
         },
-      },
-    });
-    return res.json({ withdrawals: rows });
+      }),
+      prisma.affiliateWithdrawal.count({ where }),
+      prisma.affiliateWithdrawal.aggregate({ where: { status: 'pending' }, _sum: { amountNet: true }, _count: true }),
+    ]);
+    const metrics = { pendingCount: pendingAgg._count, pendingAmount: pendingAgg._sum.amountNet ?? 0 };
+    // `withdrawals` kept as an alias of `items` for backward compat with the old front.
+    return res.json({ ...paginated(rows, total, page, pageSize), withdrawals: rows, metrics });
   } catch (error) {
     console.error('[ADMIN] withdrawals list error:', error);
     return res.status(500).json({ error: 'Erro ao carregar saques' });

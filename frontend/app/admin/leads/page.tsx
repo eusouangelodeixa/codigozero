@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import styles from "../admin.module.css";
 import k from "@/components/admin/kit.module.css";
+import { displayEmail, isPlaceholderEmail } from "@/lib/format";
 import {
   AdminPage,
   StatRow,
@@ -173,7 +174,7 @@ export default function AdminLeads() {
       render: (l) => (
         <div className={k.cellStack}>
           <span className={k.cellMain}>{l.name}</span>
-          <span className={k.cellSub}>{l.email}</span>
+          <span className={k.cellSub}>{displayEmail(l.email)}</span>
         </div>
       ),
     },
@@ -194,7 +195,7 @@ export default function AdminLeads() {
     const digits = (l.phone || "").replace(/\D/g, "");
     const items: RowAction[] = [
       { label: "WhatsApp", onClick: () => window.open(`https://wa.me/${digits}`, "_blank", "noopener"), disabled: !digits },
-      { label: "Copiar e-mail", onClick: () => copy(l.email, "Email") },
+      { label: "Copiar e-mail", onClick: () => copy(l.email, "Email"), disabled: isPlaceholderEmail(l.email) },
       { label: "Copiar telefone", onClick: () => copy(l.phone || "", "Telefone"), disabled: !l.phone },
     ];
     return <RowActions items={items} />;
@@ -259,7 +260,7 @@ export default function AdminLeads() {
         onClose={closeLead}
         size="lg"
         title={lead ? lead.name : "Carregando…"}
-        description={lead ? lead.email : undefined}
+        description={lead ? displayEmail(lead.email) : undefined}
       >
         {detailLoading && !lead ? (
           <div className={styles.detailLoading}>Carregando detalhes…</div>

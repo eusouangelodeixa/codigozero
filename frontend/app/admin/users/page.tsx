@@ -56,11 +56,6 @@ function FirstAccess({ at, role, status }: { at?: string; role?: string; status?
   return <StatusBadge tone="warn" noDot>Pendente</StatusBadge>;
 }
 
-const IconActive = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>);
-const IconClock = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>);
-const IconAlert = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12" y2="17" /></svg>);
-const IconNew = () => (<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 11v6M19 14h6" /></svg>);
-
 export default function AdminUsers() {
   const [users, setUsers] = useState<U[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -232,9 +227,7 @@ export default function AdminUsers() {
   return (
     <>
       <AdminPage
-        eyebrow="Pessoas"
         title="Usuários"
-        desc="Membros pagantes, admins e leads. Busque, filtre e gerencie acessos."
         actions={
           <>
             <button type="button" className={`${k.btn} ${k.btnSecondary}`} onClick={exportCsv} disabled={exporting}>
@@ -247,10 +240,10 @@ export default function AdminUsers() {
         }
         kpis={
           <StatRow>
-            <StatTile accent label="Ativos" icon={<IconActive />} loading={!metrics} value={metrics && fmt(metrics.active)} hint="assinaturas em dia" tone="good" />
-            <StatTile label="Vencendo em 7d" icon={<IconClock />} loading={!metrics} value={metrics && fmt(metrics.expiring7d)} hint="renovações próximas" tone={metrics && metrics.expiring7d > 0 ? "warn" : undefined} />
-            <StatTile label="Atrasados" icon={<IconAlert />} loading={!metrics} value={metrics && fmt(metrics.overdue)} hint="assinatura vencida" tone={metrics && metrics.overdue > 0 ? "danger" : undefined} />
-            <StatTile label="Novos no período" icon={<IconNew />} loading={!metrics} value={metrics && fmt(metrics.newInPeriod)} hint="cadastros recentes" />
+            <StatTile accent label="Ativos" loading={!metrics} value={metrics && fmt(metrics.active)} />
+            <StatTile label="Vencendo 7d" loading={!metrics} value={metrics && fmt(metrics.expiring7d)} tone={metrics && metrics.expiring7d > 0 ? "warn" : undefined} />
+            <StatTile label="Atrasados" loading={!metrics} value={metrics && fmt(metrics.overdue)} tone={metrics && metrics.overdue > 0 ? "danger" : undefined} />
+            <StatTile label="Novos" loading={!metrics} value={metrics && fmt(metrics.newInPeriod)} />
           </StatRow>
         }
       >

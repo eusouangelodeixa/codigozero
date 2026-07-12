@@ -115,57 +115,78 @@ const I = {
       <path d="M21 8.94l-2-.39a7.71 7.71 0 00-.46-1.11l1.14-1.68a.5.5 0 00-.06-.63L18.43 4.5a.5.5 0 00-.63-.06L16.12 5.58a7.71 7.71 0 00-1.11-.46L14.62 3a.5.5 0 00-.49-.41h-2.26a.5.5 0 00-.49.41l-.39 1.94" />
     </svg>
   ),
+  Receipt: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z" />
+      <line x1="8" y1="9" x2="16" y2="9" /><line x1="8" y1="13" x2="14" y2="13" />
+    </svg>
+  ),
+  Pie: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.21 15.89A10 10 0 118 2.83" /><path d="M22 12A10 10 0 0012 2v10z" />
+    </svg>
+  ),
+  Film: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="2" /><line x1="7" y1="2" x2="7" y2="22" /><line x1="17" y1="2" x2="17" y2="22" /><line x1="2" y1="12" x2="22" y2="12" />
+    </svg>
+  ),
+  Target: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" />
+    </svg>
+  ),
+  Mail: (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" /><path d="M22 7l-10 6L2 7" />
+    </svg>
+  ),
 };
 
 const NAV: NavGroup[] = [
   {
-    label: "Visão Geral",
+    label: "Operação",
     items: [
-      { href: "/admin",         label: "Dashboard",   icon: I.Dashboard },
-      { href: "/admin/finance", label: "Financeiro",  icon: I.Finance },
-      { href: "/admin/custos",  label: "Custos",      icon: I.Finance, superadmin: true },
-      { href: "/admin/status",  label: "Status",      icon: I.Status },
+      { href: "/admin",         label: "Dashboard",  icon: I.Dashboard },
+      { href: "/admin/finance", label: "Financeiro", icon: I.Finance },
+      { href: "/admin/custos",  label: "Custos",     icon: I.Receipt, superadmin: true },
+      { href: "/admin/status",  label: "Status",     icon: I.Status },
     ],
   },
   {
     label: "Pessoas",
     items: [
-      { href: "/admin/users",   label: "Usuários",    icon: I.Users },
-      { href: "/admin/leads",   label: "Leads",       icon: I.Leads },
-      { href: "/admin/chat",    label: "Chat Suporte", icon: I.Chat },
+      { href: "/admin/users", label: "Usuários", icon: I.Users },
+      { href: "/admin/leads", label: "Leads",    icon: I.Leads },
+      { href: "/admin/chat",  label: "Chat",     icon: I.Chat },
     ],
   },
   {
     label: "Conteúdo",
     items: [
-      { href: "/admin/aulas",    label: "Aulas",        icon: I.Lessons },
-      { href: "/admin/scripts",  label: "Scripts",      icon: I.Scripts },
-      { href: "/admin/landing",  label: "Landing page", icon: I.Landing },
-      { href: "/admin/lp",       label: "LP — Reels",   icon: I.Landing },
-      { href: "/admin/conteudo", label: "Páginas/Iscas", icon: I.Landing },
+      { href: "/admin/aulas",    label: "Aulas",      icon: I.Lessons },
+      { href: "/admin/scripts",  label: "Scripts",    icon: I.Scripts },
+      { href: "/admin/landing",  label: "Landing",    icon: I.Landing },
+      { href: "/admin/lp",       label: "LP — Reels", icon: I.Film },
+      { href: "/admin/conteudo", label: "Iscas",      icon: I.Target },
     ],
   },
   {
-    label: "Operação",
+    label: "Parcerias",
     items: [
-      { href: "/admin/broadcast", label: "Broadcast", icon: I.Broadcast },
-      { href: "/admin/emails",    label: "E-mails",   icon: I.Broadcast },
-      { href: "/admin/cupons",    label: "Cupons",    icon: I.Coupons },
-      { href: "/admin/config",    label: "Configurações", icon: I.Config },
-    ],
-  },
-  {
-    label: "Afiliados",
-    items: [
-      { href: "/admin/afiliados", label: "Afiliados",  icon: I.Affiliates },
-      { href: "/admin/saques",    label: "Saques",     icon: I.Withdrawals },
-    ],
-  },
-  {
-    label: "Parceiros",
-    items: [
+      { href: "/admin/afiliados",   label: "Afiliados",    icon: I.Affiliates },
       { href: "/admin/coproducers", label: "Coprodutores", icon: I.Coproducers },
-      { href: "/admin/socios", label: "Sócios", icon: I.Finance },
+      { href: "/admin/socios",      label: "Sócios",       icon: I.Pie },
+      { href: "/admin/saques",      label: "Saques",       icon: I.Withdrawals },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { href: "/admin/broadcast", label: "Broadcast",     icon: I.Broadcast },
+      { href: "/admin/emails",    label: "E-mails",       icon: I.Mail },
+      { href: "/admin/cupons",    label: "Cupons",        icon: I.Coupons },
+      { href: "/admin/config",    label: "Configurações", icon: I.Config },
     ],
   },
 ];
@@ -236,18 +257,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className={styles.sidebarNav}>
           {NAV.map((group) => (
             <div key={group.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span
-                style={{
-                  padding: "12px 12px 6px",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.16em",
-                  textTransform: "uppercase",
-                  color: "var(--text-tertiary)",
-                }}
-              >
-                {group.label}
-              </span>
+              <span className={styles.navGroupLabel}>{group.label}</span>
               {group.items.filter((item) => !item.superadmin || user?.role === "superadmin").map((item) => (
                 <button
                   key={item.href}

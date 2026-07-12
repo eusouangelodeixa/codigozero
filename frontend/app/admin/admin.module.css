@@ -183,6 +183,15 @@
   background: var(--accent-dim);
 }
 
+.navGroupLabel {
+  padding: 12px 12px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
 /* ─── Main ────────────────────────────────────────────── */
 .main {
   min-width: 0;

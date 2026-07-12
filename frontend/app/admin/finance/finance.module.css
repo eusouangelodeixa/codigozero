@@ -288,7 +288,7 @@
   font-weight: 700;
   color: var(--text-primary);
 }
-.daysLeftUrgent { color: #ef4444; }
+.daysLeftUrgent { color: var(--color-error); }
 
 @media (max-width: 900px) {
   .filtersCard { flex-direction: column; align-items: stretch; }

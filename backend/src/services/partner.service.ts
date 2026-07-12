@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getPartnerOpenCostShareTotal } from './cost.service';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app.czero.sbs';
 
@@ -249,18 +249,27 @@ export async function requestWithdrawal(opts: {
       },
     });
 
-    await tx.partnerCommission.updateMany({
-      where: { id: { in: consumedIds } },
+    const consumeResult = await tx.partnerCommission.updateMany({
+      where: { id: { in: consumedIds }, status: 'available' },
       data: { status: 'withdrawn', withdrawalId: withdrawal.id },
     });
+    // Consumo condicional: se outra requisição concorrente já consumiu alguma
+    // dessas comissões, o count diverge — abortamos (rollback) para não lastrear
+    // dois saques no mesmo pool de comissões (pagamento em dobro).
+    if (consumeResult.count !== consumedIds.length) {
+      throw new Error('WITHDRAWAL_CONFLICT');
+    }
 
     // Settle the partner's open cost debits — they were just covered by the
     // consumed commissions, so they stop reducing future balances.
     if (openShares.length > 0) {
-      await tx.partnerCostShare.updateMany({
-        where: { id: { in: openShares.map((s) => s.id) } },
+      const settleResult = await tx.partnerCostShare.updateMany({
+        where: { id: { in: openShares.map((s) => s.id) }, status: 'open' },
         data: { status: 'settled', settledAt: new Date(), withdrawalId: withdrawal.id },
       });
+      if (settleResult.count !== openShares.length) {
+        throw new Error('WITHDRAWAL_CONFLICT');
+      }
     }
 
     return {
@@ -269,6 +278,11 @@ export async function requestWithdrawal(opts: {
       amountNet: q.amountNet,
       feeAmount: q.feeAmount,
     };
+  }).catch((e: any) => {
+    if (e?.message === 'WITHDRAWAL_CONFLICT') {
+      return { ok: false as const, error: 'Saldo alterado durante o processamento. Tente novamente.' };
+    }
+    throw e;
   });
 }
 

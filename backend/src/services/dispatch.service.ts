@@ -1,7 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { initiateSdrOutbound } from './sdr.service';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 export interface DispatchContact {
   phone: string;

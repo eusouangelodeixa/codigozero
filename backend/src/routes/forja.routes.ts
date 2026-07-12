@@ -4,7 +4,7 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // GET /api/forja/modules
 router.get('/modules', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {

@@ -24,7 +24,7 @@ import { sendPushToSuperAdmins } from './push.service';
 import { sendWhatsAppMessage, type WhatsAppSendResult } from '../lib/whatsapp';
 import { sendEmail, type EmailSendResult } from '../lib/email';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 /**
  * Build a random 8-char password (hex) + bcrypt hash.

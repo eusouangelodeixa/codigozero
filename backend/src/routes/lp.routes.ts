@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { normalizeMzPhone } from '../lib/whatsapp';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 /**
  * PUBLIC routes for the reels LP (lp.czero.sbs). Mounted at /api/lp.

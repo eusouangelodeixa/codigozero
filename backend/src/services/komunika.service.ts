@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
-import { sendPushToSuperAdmins } from '../routes/auth.routes';
+import { sendPushToSuperAdmins } from './push.service';
 
 /**
  * Komunika EMBEDDED MODULE integration (provision + SSO).
@@ -19,7 +19,7 @@ import { sendPushToSuperAdmins } from '../routes/auth.routes';
  * CODIGO_ZERO_JWT_SECRET on the Komunika side.
  */
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // Exponential backoff for 5xx / network errors: 1s, 2s, 4s, 8s, 16s.
 // One initial attempt + these 5 retries, then we give up and alert.

@@ -34,8 +34,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           router.replace("/socios");
         }
       } catch {}
+      // Há cache confiável → revela o app na hora (caminho rápido).
+      setReady(true);
     }
-    setReady(true);
+    // Sem cache: NÃO revela ainda — espera /api/auth/me confirmar (setReady no
+    // .then/.catch abaixo). Evita o flash da UI protegida numa sessão inválida.
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     fetch(`${API_URL}/api/auth/me`, {
@@ -51,6 +54,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         return res.json();
       })
       .then((data) => {
+        setReady(true);
         if (data?.user) {
           setUser(data.user);
           localStorage.setItem("cz_user", JSON.stringify(data.user));
@@ -72,7 +76,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { setReady(true); });
   }, [router]);
 
   useEffect(() => {

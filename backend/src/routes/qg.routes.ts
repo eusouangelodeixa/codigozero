@@ -4,7 +4,7 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // GET /api/qg/info
 router.get('/info', authMiddleware, subscriptionMiddleware, async (_req: AuthRequest, res: Response) => {

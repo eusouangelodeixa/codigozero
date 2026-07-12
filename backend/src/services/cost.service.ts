@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 export const COST_CATEGORIES = ['ferramentas', 'ads', 'salario', 'infra', 'impostos', 'outro'] as const;

@@ -211,7 +211,9 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: 12px;
-  overflow: hidden;
+  /* rola na horizontal no mobile em vez de cortar as colunas */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .tableHead {
   display: flex;
@@ -222,7 +224,7 @@
 }
 .tableTitle { font-size: 13px; font-weight: 700; color: var(--text-primary); }
 .tableHint { font-size: 11px; color: var(--text-tertiary); }
-.table { width: 100%; border-collapse: collapse; }
+.table { width: 100%; border-collapse: collapse; min-width: 560px; }
 .table th {
   text-align: left;
   padding: 10px 16px;

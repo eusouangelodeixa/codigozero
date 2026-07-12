@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { env } from '../config/env';
 import { sendPushToUser } from './push.service';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 /**
  * Notification types emitted to coproducers. The matching toggle column

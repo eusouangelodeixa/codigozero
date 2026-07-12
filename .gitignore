@@ -24,6 +24,15 @@ backend/prisma/migrations/migration_lock.toml
 # Docker
 infrastructure/data/
 
+# Runtime uploads (avatares, mídia do disparador) — nunca versionar dado de usuário
+backend/uploads/
+
+# Artefatos compilados do seed (o seed roda via ts-node prisma/seed.ts)
+backend/prisma/seed*.js
+backend/prisma/seed*.js.map
+backend/prisma/seed*.d.ts
+backend/prisma/seed*.d.ts.map
+
 # Logs
 *.log
 npm-debug.log*

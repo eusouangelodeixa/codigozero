@@ -42,6 +42,7 @@
 }
 
 .discordIcon {
+  /* blurple oficial do Discord — marca de terceiro, exceção documentada */
   background: #5865F2;
   border-color: transparent;
   color: #fff;

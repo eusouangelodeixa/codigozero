@@ -13,7 +13,7 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 const TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;

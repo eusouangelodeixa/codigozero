@@ -21,7 +21,7 @@ import { buildSurveyContext } from '../services/lifecycle.service';
 import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // All admin routes require auth + admin role
 router.use(authMiddleware);
@@ -849,6 +849,10 @@ router.post('/users/:id/resend-access', async (req: AuthRequest, res: Response) 
   try {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    // Só o superadmin pode redefinir o acesso (resetar senha) de outro superadmin.
+    if (user.role === 'superadmin' && req.user?.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Apenas o superadmin pode redefinir o acesso de um superadmin' });
+    }
 
     const { raw, hash } = await generateUserPassword();
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
@@ -888,6 +892,10 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
       include: { leads: { take: 10, orderBy: { createdAt: 'desc' } }, lessonProgress: true },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    // Nunca devolver segredos ao painel: o hash bcrypt (senhas geradas têm baixa
+    // entropia e são quebráveis offline) e a chave de API da Komunika.
+    delete (user as any).passwordHash;
+    delete (user as any).komunikaApiKey;
     res.json({ user });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar usuário' });
@@ -897,14 +905,31 @@ router.get('/users/:id', async (req: AuthRequest, res: Response) => {
 router.patch('/users/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, role, isActive, subscriptionStatus, subscriptionStart, subscriptionEnd, password, phone, grantedManually, lojouOrderId, grantAccess } = req.body;
-    const existing = await prisma.user.findUnique({ where: { id: req.params.id }, select: { lojouOrderId: true, grantedManually: true, komunikaCompanyId: true, komunikaDeprovisionedAt: true } });
+    const existing = await prisma.user.findUnique({ where: { id: req.params.id }, select: { role: true, lojouOrderId: true, grantedManually: true, komunikaCompanyId: true, komunikaDeprovisionedAt: true } });
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+    const isSuper = req.user?.role === 'superadmin';
+
+    // ── Proteção de autorização vertical ──
+    // Uma conta superadmin (o dono) só pode ser editada por outro superadmin —
+    // impede que um admin comum troque a senha/e-mail ou desative o dono.
+    if (existing.role === 'superadmin' && !isSuper) {
+      return res.status(403).json({ error: 'Apenas o superadmin pode editar uma conta superadmin' });
+    }
 
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (email !== undefined) data.email = email;
     if (phone !== undefined) data.phone = phone;
-    if (role !== undefined) data.role = role;
+    // Alteração de PAPEL é ação de superadmin, com whitelist e sem auto-promoção.
+    // (Antes: qualquer admin gravava role='superadmin' e fazia takeover.)
+    if (role !== undefined && role !== existing.role) {
+      if (!isSuper) return res.status(403).json({ error: 'Apenas o superadmin pode alterar papéis' });
+      const ALLOWED_ROLES = ['member', 'admin', 'coproducer', 'lead', 'superadmin'];
+      if (!ALLOWED_ROLES.includes(role)) return res.status(400).json({ error: 'Papel inválido' });
+      if (req.params.id === req.user!.id) return res.status(403).json({ error: 'Não é possível alterar o próprio papel' });
+      data.role = role;
+    }
     if (isActive !== undefined) data.isActive = isActive;
     if (subscriptionStatus !== undefined) data.subscriptionStatus = subscriptionStatus;
     if (subscriptionStart !== undefined) data.subscriptionStart = subscriptionStart ? new Date(subscriptionStart) : null;
@@ -3026,6 +3051,9 @@ router.get('/affiliate-withdrawals', async (req: AuthRequest, res: Response) => 
  */
 router.post('/affiliate-withdrawals/:id/approve', async (req: AuthRequest, res: Response) => {
   try {
+    // Pagamento de saque (saída de dinheiro) exige superadmin — mesma barreira
+    // usada para criar/editar sócios (atribuição de receita).
+    if (!requireSuperadmin(req, res)) return;
     const { notes } = req.body;
     const wd = await prisma.affiliateWithdrawal.findUnique({
       where: { id: req.params.id },
@@ -3056,6 +3084,7 @@ router.post('/affiliate-withdrawals/:id/approve', async (req: AuthRequest, res: 
  */
 router.post('/affiliate-withdrawals/:id/reject', async (req: AuthRequest, res: Response) => {
   try {
+    if (!requireSuperadmin(req, res)) return;
     const { notes } = req.body;
     const wd = await prisma.affiliateWithdrawal.findUnique({
       where: { id: req.params.id },

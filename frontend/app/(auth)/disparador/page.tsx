@@ -273,15 +273,18 @@ export default function DisparadorPage() {
   }, [loadDispatchCampaigns, loadSchedules]);
 
   // Poll schedules while any are pending/running so the UI tracks progress.
+  // Depende do BOOLEAN derivado (hasActive), não do array `schedules`: assim o
+  // intervalo é criado uma vez quando começa a atividade e limpo quando acaba —
+  // antes ele era recriado a cada 4s (loadSchedules troca `schedules` a cada tick).
+  const hasActiveSchedules = schedules.some((s) => s.status === "pending" || s.status === "running");
   useEffect(() => {
-    const hasActive = schedules.some((s) => s.status === "pending" || s.status === "running");
-    if (!hasActive) return;
+    if (!hasActiveSchedules) return;
     const id = setInterval(() => {
       loadSchedules();
       loadDispatchCampaigns();
     }, 4000);
     return () => clearInterval(id);
-  }, [schedules, loadSchedules, loadDispatchCampaigns]);
+  }, [hasActiveSchedules, loadSchedules, loadDispatchCampaigns]);
 
   const cancelSchedule = async (id: string) => {
     if (!confirm("Cancelar este agendamento?")) return;

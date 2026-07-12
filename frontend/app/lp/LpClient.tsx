@@ -200,8 +200,10 @@ export default function LpClient() {
                   <p className={styles.stepDesc}>{cfg.step1Desc}</p>
                 </div>
               </div>
+              {/* Sem target="_blank": o público vem do in-app browser do Instagram,
+                  que ignora nova aba. Navega na mesma aba. */}
               {groupUrl ? (
-                <a className={styles.waCta} href={groupUrl} target="_blank" rel="noopener noreferrer">
+                <a className={styles.waCta} href={groupUrl} rel="noopener noreferrer">
                   {cfg.step1Cta}
                 </a>
               ) : (

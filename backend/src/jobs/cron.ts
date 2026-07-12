@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { PrismaClient } from '@prisma/client';
-import { sendPushToSuperAdmins, sendPushToUser, sendPushToUsers } from '../routes/auth.routes';
+import { sendPushToSuperAdmins, sendPushToUser, sendPushToUsers } from '../services/push.service';
 import { env } from '../config/env';
 import { processDueDispatches, processDispatch } from '../services/dispatch.service';
 import { transitionDuePending } from '../services/affiliate.service';
@@ -13,7 +13,7 @@ import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 /**
  * Start all CRON jobs for the Código Zero platform.

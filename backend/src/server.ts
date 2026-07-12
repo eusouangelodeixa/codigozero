@@ -133,7 +133,7 @@ app.use('/api/webhooks', webhookRoutes);
 // ── Health Check ──
 // Probes the DB with a trivial query so load balancers / uptime checks detect
 // DB outages, not just "process is up". Kept fast and dependency-light.
-const healthPrisma = new PrismaClient();
+const healthPrisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 app.get('/api/health', async (_req, res) => {
   try {
     await healthPrisma.$queryRaw`SELECT 1`;
@@ -169,7 +169,14 @@ app.listen(env.PORT, () => {
     logger.warn('[KOMUNIKA] ⚠️ KOMUNIKA_SSO_JWT_SECRET set but KOMUNIKA_HMAC_SECRET MISSING — provisioning is disabled, so no tenant ever exists to open. Set both.');
   }
 
-  startCronJobs();
+  // Crons/alertas usam locks em memória; com mais de uma réplica cada processo
+  // dispararia os mesmos jobs (envios em dobro no número compartilhado da
+  // Komunika). Rode os crons em UMA instância: nas réplicas extras, DISABLE_CRONS=1.
+  if (process.env.DISABLE_CRONS === '1') {
+    logger.warn('[CRON] DISABLE_CRONS=1 — jobs agendados NÃO iniciados nesta instância.');
+  } else {
+    startCronJobs();
+  }
 });
 
 export default app;

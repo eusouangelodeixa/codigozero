@@ -141,7 +141,7 @@ function Cred({
 
 const S: Record<string, CSSProperties> = {
   page: {
-    minHeight: "100vh",
+    minHeight: "100dvh",
     background: "#001412",
     display: "flex",
     alignItems: "center",

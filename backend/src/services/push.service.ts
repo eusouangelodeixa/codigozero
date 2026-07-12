@@ -1,7 +1,7 @@
 import webpush from 'web-push';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 let initialized = false;
 let initError: string | null = null;

@@ -20,7 +20,7 @@
   padding: 8px 14px;
   border-radius: calc(var(--radius-lg) - 4px);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary); /* contraste WCAG: era text-tertiary */
   font-size: var(--type-small);
   font-weight: 500;
   cursor: pointer;

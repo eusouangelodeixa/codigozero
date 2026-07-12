@@ -25,7 +25,7 @@ import {
 } from '../services/push.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // "Parse or 400" — run a Zod schema against the request body and, on failure,
 // reply 400 with the first issue's message (already in PT, matching the manual

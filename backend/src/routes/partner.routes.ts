@@ -11,7 +11,7 @@ import {
 import { sendPushToSuperAdmins } from './auth.routes';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // All partner routes require auth + an enabled PartnerAccount. No subscription
 // gate — sócios are staff, not subscribers.

@@ -139,6 +139,12 @@ model User {
   costsCreated       Cost[]            @relation("CostCreatedBy")
 
   @@index([komunikaCompanyId])
+  // Colunas quentes: todo cron (assinatura/alertas/remarketing/onboarding) filtra
+  // por subscriptionStatus; a renovação Stripe faz findFirst por stripeSubscriptionId
+  // a cada fatura; o funil filtra por remarketingStage.
+  @@index([subscriptionStatus])
+  @@index([stripeSubscriptionId])
+  @@index([remarketingStage])
 }
 
 model Lead {
@@ -262,6 +268,12 @@ model Transaction {
   createdAt     DateTime @default(now())
 
   @@index([coproducerId])
+  // Colunas quentes: faturamento/cron filtram por status; renovação por userEmail;
+  // reconciliação Stripe faz findFirst por stripePaymentIntentId; relatórios por data.
+  @@index([status])
+  @@index([userEmail])
+  @@index([stripePaymentIntentId])
+  @@index([createdAt])
 }
 
 model SystemConfig {

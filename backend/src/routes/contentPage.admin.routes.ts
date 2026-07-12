@@ -8,7 +8,7 @@ import { adminMiddleware } from '../middlewares/admin.middleware';
 import { optimizeImage } from '../lib/image';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // ── Media upload (images + PDFs) for content blocks ─────────────────────────
 // Same disk pattern as chat/avatars: store under uploads/content (persisted via

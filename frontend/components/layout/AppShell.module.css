@@ -6,6 +6,7 @@
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-base);
 }
 
@@ -73,7 +74,7 @@
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .navItem {
@@ -273,8 +274,8 @@
 }
 
 @keyframes contentIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ═══════════════════════ MOBILE TOPBAR ═══════════════════════ */
@@ -289,7 +290,9 @@
   gap: var(--space-3);
   padding: 12px var(--space-4);
   padding-top: calc(12px + env(safe-area-inset-top, 0px));
-  background: rgba(10, 10, 10, 0.85);
+  padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+  padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
+  background: color-mix(in srgb, var(--bg-base) 82%, transparent);
   backdrop-filter: blur(16px) saturate(1.6);
   -webkit-backdrop-filter: blur(16px) saturate(1.6);
   border-bottom: 1px solid var(--border-subtle);
@@ -346,12 +349,14 @@
   left: 0;
   right: 0;
   z-index: var(--z-bottomnav);
-  background: rgba(10, 10, 10, 0.92);
+  background: color-mix(in srgb, var(--bg-base) 88%, transparent);
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
   border-top: 1px solid var(--border-subtle);
   padding: 6px 4px;
   padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(4px + env(safe-area-inset-left, 0px));
+  padding-right: calc(4px + env(safe-area-inset-right, 0px));
 }
 
 .bottomNavInner {
@@ -378,7 +383,7 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: 10px;
   font-weight: 500;
   transition: color var(--motion-fast);
@@ -437,6 +442,7 @@
   transition: transform 260ms var(--ease-out);
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .drawerOpen {
@@ -519,30 +525,48 @@
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
-  .shell { grid-template-columns: 1fr; }
+  .shell { grid-template-columns: 1fr; height: 100dvh; overflow: hidden; }
   .sidebar { display: none; }
   .mobileTopbar { display: flex; }
   .bottomNav { display: block; }
   .drawer { display: flex; }
   .drawerBackdrop { display: block; }
 
+  /* Casca fixa: a coluna principal ocupa a viewport e NÃO rola — quem rola é
+     .content (abaixo). Assim topbar e bottom-nav ficam ancorados na tela e some
+     o "scroll fantasma" do 100vh no iOS (a origem do "não gruda na tela"). */
+  .main {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
     padding: var(--space-5) var(--space-4);
+    padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
     padding-bottom: calc(var(--bottomnav-height) + var(--space-6) + env(safe-area-inset-bottom, 0px));
     animation: contentIn 240ms var(--ease-out);
   }
-  /* Chat full-bleed no mobile: sem padding lateral, mas reservando a barra de
-     navegação fixa embaixo (a .page do chat para acima dela). O topbar já é
-     consumido naturalmente pelo fluxo flex da coluna .main. */
+  /* Chat full-bleed no mobile: gerencia o próprio scroll interno (.page), então
+     a coluna flush não rola. Reserva a barra de navegação fixa embaixo. */
   .contentFlush {
     padding: 0;
     padding-bottom: calc(var(--bottomnav-height) + env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
   }
 }
 
 @media (max-width: 480px) {
   .content {
     padding: var(--space-4) var(--space-3);
+    padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
     padding-bottom: calc(var(--bottomnav-height) + var(--space-4) + env(safe-area-inset-bottom, 0px));
   }
   .contentFlush {
@@ -559,6 +583,7 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-base);
   gap: var(--space-3);
 }

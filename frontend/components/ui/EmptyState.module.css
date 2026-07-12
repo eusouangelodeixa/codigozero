@@ -36,7 +36,7 @@
 
 .description {
   font-size: var(--type-body);
-  color: var(--text-tertiary);
+  color: var(--text-secondary); /* contraste WCAG: era text-tertiary */
   line-height: 1.6;
   max-width: 48ch;
 }

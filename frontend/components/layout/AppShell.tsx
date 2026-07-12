@@ -242,6 +242,10 @@ export function AppShell({
     : "Membro Close Friends";
 
   const go = (href: string) => (e: React.MouseEvent) => {
+    // Respeita o modificador de teclado/mouse: cmd/ctrl/shift/middle-click deixam
+    // o navegador abrir em nova aba/janela (o <a href> real cuida disso). Antes o
+    // preventDefault incondicional engolia o "abrir em nova aba".
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
     e.preventDefault();
     router.push(href);
   };

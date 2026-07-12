@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // ── Money / rule constants (per the affiliate program brief) ──────────────
 // salePrice is the gross sale value used by quoteCommission() when no
@@ -271,10 +271,16 @@ export async function requestWithdrawal(opts: {
       },
     });
 
-    await tx.affiliateCommission.updateMany({
-      where: { id: { in: consumedIds } },
+    const consumeResult = await tx.affiliateCommission.updateMany({
+      where: { id: { in: consumedIds }, status: 'available' },
       data: { status: 'withdrawn', withdrawalId: withdrawal.id },
     });
+    // Consumo condicional: se uma requisição concorrente já consumiu alguma
+    // dessas comissões, o count diverge — abortamos (rollback) para não lastrear
+    // dois saques pendentes no mesmo pool de comissões (pagamento em dobro).
+    if (consumeResult.count !== consumedIds.length) {
+      throw new Error('WITHDRAWAL_CONFLICT');
+    }
 
     return {
       ok: true as const,
@@ -282,6 +288,11 @@ export async function requestWithdrawal(opts: {
       amountNet: q.amountNet,
       feeAmount: q.feeAmount,
     };
+  }).catch((e: any) => {
+    if (e?.message === 'WITHDRAWAL_CONFLICT') {
+      return { ok: false as const, error: 'Saldo alterado durante o processamento. Tente novamente.' };
+    }
+    throw e;
   });
 }
 

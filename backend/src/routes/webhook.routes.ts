@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { env } from '../config/env';
+import { captureException } from '../lib/sentry';
 import { sendPushToSuperAdmins, sendPushToUser } from './auth.routes';
 import {
   creditCommissionForOrder,
@@ -36,7 +37,15 @@ import {
 import type Stripe from 'stripe';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
+
+// Comparação constant-time (via hash, sem vazar comprimento) para segredos de webhook.
+function safeSecretEqual(provided: unknown, expected: string): boolean {
+  if (typeof provided !== 'string' || !expected) return false;
+  const a = crypto.createHash('sha256').update(provided).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 
 // ── Loose, OBSERVABILITY-ONLY shape check for the (already signature-verified,
 // already normalized) Lojou payload. Everything is optional — this NEVER rejects
@@ -155,9 +164,11 @@ const CLOSE_FRIENDS_EXTRA_DAYS = 60; // +2 months on top of the base month
  */
 router.post('/lojou', async (req: Request, res: Response) => {
   try {
-    // ── SECURITY LAYER 1: Webhook Secret (via header OR query param) ──
-    const webhookSecret = req.headers['x-lojou-webhook-secret'] || req.query.secret;
-    if (!env.LOJOU_WEBHOOK_SECRET || webhookSecret !== env.LOJOU_WEBHOOK_SECRET) {
+    // ── SECURITY LAYER 1: Webhook Secret ──
+    // Só via header. Aceitar por ?secret= gravava o segredo nos logs de acesso
+    // (pino-http/nginx logam a URL completa). Comparação constant-time.
+    const webhookSecret = req.headers['x-lojou-webhook-secret'];
+    if (!env.LOJOU_WEBHOOK_SECRET || !safeSecretEqual(webhookSecret, env.LOJOU_WEBHOOK_SECRET)) {
       console.warn('[WEBHOOK] 🚨 REJECTED — invalid or missing webhook secret');
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -206,12 +217,16 @@ router.post('/lojou', async (req: Request, res: Response) => {
     const orderId = data.order_number || data.id || data.order_id || data.transaction_id;
 
     // ── SECURITY LAYER 2: Verified Callback ──
-    // Confirm the order really exists and has the claimed status at Lojou (unless it's a test)
-    const isTestOrder = String(orderId).toUpperCase().startsWith('TEST');
+    // Confirm the order really exists and has the claimed status at Lojou.
+    // O bypass "TEST" só vale fora de produção — em prod ele permitia forjar
+    // um order.approved com order_number "TEST..." e criar membro pago falso.
+    const isTestOrder =
+      env.NODE_ENV !== 'production' && String(orderId).toUpperCase().startsWith('TEST');
     if (orderId && env.LOJOU_API_KEY && !isTestOrder) {
       try {
         const verifyRes = await fetch(`${env.LOJOU_API_URL}/v1/orders/${orderId}`, {
           headers: { 'Authorization': `Bearer ${env.LOJOU_API_KEY}` },
+          signal: AbortSignal.timeout(10000),
         });
         if (verifyRes.ok) {
           const verifiedOrder = await verifyRes.json();
@@ -645,6 +660,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json', 'X-API-Key': komunikaKey },
                       body: JSON.stringify({ instanceId, to: cleanPhone, type: 'text', content: credentialMsg }),
+                      signal: AbortSignal.timeout(10000),
                     });
                     lastStatus = res.status;
                     lastBody = await res.text().catch(() => '');
@@ -739,7 +755,11 @@ router.post('/lojou', async (req: Request, res: Response) => {
             }
           }
         } catch (affErr) {
+          // Comissão de afiliado é idempotente (dedup por lojouOrderId): uma falha
+          // transitória aqui perde o crédito em silêncio pois a re-entrega bate no
+          // dedup do topo. Reportamos ao Sentry para reconciliação manual.
           console.error('[WEBHOOK] Affiliate commission error (non-blocking):', affErr);
+          captureException(affErr);
         }
 
         // ── Partner (sócios) revenue-share credit ──────────────────────
@@ -761,7 +781,12 @@ router.post('/lojou', async (req: Request, res: Response) => {
             }
           }
         } catch (partnerErr) {
+          // Crédito de sócios é idempotente (unique partnerId+orderId): uma falha
+          // transitória perde a comissão pois a re-entrega bate no dedup do topo.
+          // Reportamos ao Sentry para reconciliação manual (creditPartnersForOrder
+          // pode ser reexecutado com segurança).
           console.error('[WEBHOOK] Partner credit error (non-blocking):', partnerErr);
+          captureException(partnerErr);
         }
 
         return res.json({ status: 'user_created', userId: user.id });
@@ -943,6 +968,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('[WEBHOOK] Processing error:', error);
+    captureException(error);
     return res.status(500).json({ error: 'Webhook processing failed' });
   }
 });

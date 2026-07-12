@@ -6,7 +6,7 @@ import { buildKomunikaSsoUrl } from '../services/komunika.service';
 import { env } from '../config/env';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // SSO links are short-lived JWTs minted server-side. Rate-limit so a stolen
 // session can't farm a pile of valid tokens to replay.

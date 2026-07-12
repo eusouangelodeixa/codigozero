@@ -276,6 +276,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  overflow-x: auto; /* páginas sem cards mobile (ex.: emails) rolam a tabela em vez de cortá-la */
 }
 
 .tableToolbar {
@@ -887,8 +888,15 @@
 .expiryUrgent .expiryDays, .expiryUrgent .expiryDate { color: var(--color-error); }
 .expiryWarn .expiryDays { color: var(--color-warning); }
 
+/* Cartões que embrulham uma tabela (aulas/scripts/conteúdo) rolam na horizontal
+   no mobile em vez de estourar/cortar as colunas. */
+.card:has(> .table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
 @media (max-width: 640px) {
-  .table { display: none; }
+  /* Só esconde a tabela quando existe uma lista .mobileCards para substituí-la
+     (users/leads). Nas demais páginas admin sem cards, a tabela permanece
+     visível e rolável na horizontal (overflow-x nos wrappers acima). */
+  .table:has(~ .mobileCards) { display: none; }
   .mobileCards { display: flex; }
 }
 

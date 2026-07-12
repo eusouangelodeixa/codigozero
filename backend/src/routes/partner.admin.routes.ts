@@ -14,7 +14,7 @@ import {
 } from '../services/partner.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // Mounted at /api/admin. Reads need admin; writes that change revenue
 // attribution (create/edit/remove partners) need superadmin — same policy
@@ -268,7 +268,7 @@ router.get('/partner-withdrawals', async (req: AuthRequest, res: Response) => {
 });
 
 // POST /api/admin/partner-withdrawals/:id/approve — mark paid
-router.post('/partner-withdrawals/:id/approve', async (req: AuthRequest, res: Response) => {
+router.post('/partner-withdrawals/:id/approve', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const wd = await prisma.partnerWithdrawal.findUnique({ where: { id: req.params.id } });
     if (!wd) return res.status(404).json({ error: 'Saque não encontrado' });
@@ -287,7 +287,7 @@ router.post('/partner-withdrawals/:id/approve', async (req: AuthRequest, res: Re
 });
 
 // POST /api/admin/partner-withdrawals/:id/reject — release balance back
-router.post('/partner-withdrawals/:id/reject', async (req: AuthRequest, res: Response) => {
+router.post('/partner-withdrawals/:id/reject', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const wd = await prisma.partnerWithdrawal.findUnique({ where: { id: req.params.id } });
     if (!wd) return res.status(404).json({ error: 'Saque não encontrado' });

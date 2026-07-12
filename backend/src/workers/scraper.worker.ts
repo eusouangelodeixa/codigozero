@@ -3,7 +3,7 @@ import { redisConnection } from '../queues/scraper.queue';
 import { PrismaClient } from '@prisma/client';
 import { chromium, Browser } from 'playwright';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 type TriState = 'any' | 'has' | 'none';
 

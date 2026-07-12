@@ -429,7 +429,7 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px; /* 16px evita zoom-on-focus no iOS */
   font-family: inherit;
   outline: none;
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
@@ -530,7 +530,7 @@
 @media (max-width: 540px) { .audioEl { width: 200px; max-width: 200px; } }
 
 /* ── Poll ── */
-.pollCard { display: flex; flex-direction: column; gap: 8px; min-width: 240px; margin: 2px 0; }
+.pollCard { display: flex; flex-direction: column; gap: 8px; min-width: min(240px, 100%); margin: 2px 0; }
 .pollQuestion { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.4; }
 .pollOptions { display: flex; flex-direction: column; gap: 6px; }
 .pollOption {
@@ -640,7 +640,7 @@
 .modalInput {
   width: 100%; padding: 10px 12px; border-radius: var(--radius-md);
   background: var(--bg-elevated); border: 1px solid var(--border-default);
-  color: var(--text-primary); font-size: 14px; font-family: inherit; outline: none;
+  color: var(--text-primary); font-size: 16px; font-family: inherit; outline: none; /* 16px evita zoom-on-focus no iOS */
   transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
 .modalInput:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }

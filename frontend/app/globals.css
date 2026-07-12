@@ -20,6 +20,12 @@ html {
        page), so body is left with default overflow. */
   overflow-x: clip;
   width: 100%;
+  /* Impede o "rubber-banding"/pull-to-refresh que fazia o app "esticar e voltar"
+     como um site comum — parte central da queixa de que não "gruda" na tela. */
+  overscroll-behavior: none;
+  /* Reserva a calha da scrollbar no desktop para o conteúdo não "saltar"
+     lateralmente quando drawer/modal aplicam scroll-lock. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -28,9 +34,11 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 img, video { max-width: 100%; display: block; }
+pre { max-width: 100%; overflow-x: auto; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
 a { color: inherit; text-decoration: none; }
 input, textarea { font-family: inherit; outline: none; border: none; background: none; }
@@ -185,6 +193,26 @@ ul, ol { list-style: none; }
   :root {
     --card-padding:   var(--space-3);
     --page-padding:   var(--space-3);
+  }
+}
+
+/* ── Casca fixa no mobile ──
+   No mobile o documento deixa de rolar: quem rola é a área de conteúdo
+   (.content, definida no AppShell). Isso ancora topbar e bottom-nav na tela
+   (sensação de app nativo) e elimina o "scroll fantasma" do 100vh no iOS. */
+@media (max-width: 768px) {
+  html, body { height: 100%; overflow: hidden; }
+}
+
+/* ── Movimento reduzido (WCAG 2.3.3) ──
+   Respeita quem desativou animações no sistema: sem pulsos infinitos nem
+   deslizes a cada navegação. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

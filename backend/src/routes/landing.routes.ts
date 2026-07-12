@@ -9,7 +9,7 @@ import { getActivePrice } from '../lib/pricing';
 import { notifyCoproducer } from '../services/coproducer.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 const LOJOU_API = `${env.LOJOU_API_URL}/v1`;
 const LOJOU_KEY = env.LOJOU_API_KEY;

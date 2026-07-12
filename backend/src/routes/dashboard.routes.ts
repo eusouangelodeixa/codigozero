@@ -6,7 +6,7 @@ import { env } from '../config/env';
 import { getVerseOfTheDay } from '../services/verse.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // GET /api/dashboard/metrics
 router.get('/metrics', authMiddleware, subscriptionMiddleware, async (req: AuthRequest, res: Response) => {

@@ -102,7 +102,7 @@
   border: 1px solid var(--border-default);
   background: rgba(255,255,255,0.025);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px; /* 16px evita zoom-on-focus no iOS */
   font-family: var(--font-sans);
   line-height: 1.6;
   outline: none;

@@ -5,7 +5,7 @@ import { coproducerMiddleware } from '../middlewares/coproducer.middleware';
 import { notifyCoproducer } from '../services/coproducer.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 router.use(authMiddleware);
 router.use(coproducerMiddleware);

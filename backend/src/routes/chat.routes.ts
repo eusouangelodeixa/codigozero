@@ -10,7 +10,7 @@ import { optimizeImage } from '../lib/image';
 import { sendPushToUser, sendPushToUsers } from './auth.routes';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // "Parse or 400" — run a Zod schema against the body; on failure reply 400 with
 // the first issue's (PT) message and return null so the route can bail early.

@@ -6,7 +6,7 @@ import { superadminMiddleware } from '../middlewares/superadmin.middleware';
 import { generateUniqueCoproducerCode, sendCoproducerWelcome } from '../services/coproducer.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 /**
  * Mounted under /api/admin/coproducers.

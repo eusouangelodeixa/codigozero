@@ -15,7 +15,7 @@
 import { PrismaClient } from '@prisma/client';
 import { provisionKomunika } from '../services/komunika.service';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {

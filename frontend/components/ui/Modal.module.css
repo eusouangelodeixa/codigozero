@@ -28,7 +28,8 @@
   box-shadow: var(--elevation-2);
   width: 100%;
   max-width: 560px;
-  max-height: 88vh;
+  max-height: 88vh; /* fallback para browsers sem dvh */
+  max-height: 88dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -101,6 +102,8 @@
   display: flex;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-6) var(--space-6);
+  /* soma a safe-area para o rodapé não colar na home-bar do iOS */
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border-subtle);
   background: rgba(0,0,0,0.2);
   flex-wrap: wrap;

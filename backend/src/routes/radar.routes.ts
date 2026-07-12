@@ -11,7 +11,7 @@ import {
 } from '../services/dispatch.service';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 import multer from 'multer';
 import path from 'path';
@@ -21,14 +21,33 @@ const uploadDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+// Só mídia esperada pelo Disparador. A extensão é DERIVADA do mimetype validado
+// (nunca do originalname) para impedir que um .html/.svg seja salvo e servido
+// como conteúdo ativo em api.czero.sbs (phishing / XSS via SVG).
+const UPLOAD_MIME_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png',
+  'image/webp': '.webp', 'image/gif': '.gif',
+  'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/ogg': '.ogg',
+  'audio/mp4': '.m4a', 'audio/aac': '.aac', 'audio/wav': '.wav',
+  'audio/x-wav': '.wav', 'audio/webm': '.weba',
+  'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov',
+  'application/pdf': '.pdf',
+};
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = UPLOAD_MIME_EXT[file.mimetype] || '';
     cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + ext);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 15 * 1024 * 1024 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (UPLOAD_MIME_EXT[file.mimetype]) cb(null, true);
+    else cb(new Error('Tipo de arquivo não permitido'));
+  },
+});
 
 /**
  * POST /api/radar/start

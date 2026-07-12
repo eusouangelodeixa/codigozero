@@ -18,7 +18,7 @@ import { env } from '../config/env';
  * the migration, so only genuinely-new buyers are ever messaged.
  */
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 const firstName = (name?: string | null) => (name || 'membro').split(' ')[0];
 const loginUrl = () => `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`;

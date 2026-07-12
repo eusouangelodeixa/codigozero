@@ -14,7 +14,7 @@ import {
 import { sendPushToSuperAdmins } from './auth.routes';
 
 const router = Router();
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // ─────────────────────────────────────────────────────────────────────────
 // PUBLIC — resolve an affiliate code (used by /r/[code] landing route)

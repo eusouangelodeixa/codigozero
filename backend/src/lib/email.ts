@@ -10,7 +10,7 @@
 import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
 
-const prisma = new PrismaClient();
+const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 export interface EmailSendResult {
   ok: boolean;

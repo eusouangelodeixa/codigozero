@@ -309,6 +309,11 @@
 
 .phoneCell:hover .copyIcon { opacity: 1; }
 
+/* Em telas de toque (sem hover) o ícone de copiar fica sempre visível */
+@media (hover: none) {
+  .copyIcon { opacity: 0.6; }
+}
+
 .copiedIndicator {
   color: var(--color-success);
   font-size: 11px;
@@ -326,6 +331,11 @@
 }
 
 .linkInline:hover { color: var(--accent); }
+
+/* Alvo de toque adequado (>=44px) para Maps/Website/Instagram no mobile */
+@media (max-width: 768px) {
+  .linkInline { min-height: 44px; padding: 10px 8px; }
+}
 
 .dim { color: var(--text-tertiary); }
 
@@ -473,7 +483,7 @@
   color: var(--text-primary);
 }
 .ratingStar {
-  color: #FFC107;
+  color: var(--color-warning);
   font-size: 0.95rem;
   line-height: 1;
 }
@@ -570,6 +580,11 @@
 }
 .campaignActionBtn:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-dim); }
 .campaignActionDanger:hover { color: var(--error, #ef4444); border-color: var(--error, #ef4444); background: rgba(239,68,68,0.08); }
+
+/* Alvo de toque maior para os botões de ação da campanha no mobile */
+@media (max-width: 768px) {
+  .campaignActionBtn { width: 38px; height: 38px; }
+}
 .campaignBack {
   align-self: flex-start;
   background: none;

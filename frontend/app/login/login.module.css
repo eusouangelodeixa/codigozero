@@ -4,6 +4,7 @@
 
 .container {
   min-height: 100vh;
+  min-height: 100dvh; /* fallback 100vh acima para browsers sem dvh */
   display: flex;
   align-items: center;
   justify-content: center;

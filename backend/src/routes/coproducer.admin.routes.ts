@@ -4,6 +4,7 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
 import { superadminMiddleware } from '../middlewares/superadmin.middleware';
 import { generateUniqueCoproducerCode, sendCoproducerWelcome } from '../services/coproducer.service';
+import { pageArgs, paginated } from '../lib/pagination';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -25,14 +26,35 @@ router.use(adminMiddleware);
  * active subscribers). Used by both the macro list view and the source
  * filter dropdown in admin/finance.
  */
-router.get('/', async (_req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const accounts = await prisma.coproducerAccount.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-      },
-    });
+    const { page, pageSize, skip, take } = pageArgs(req);
+    // Explicit SELECT: excludes the heavy vslEmbedHtml / headScripts blobs — the
+    // list/table doesn't render them; they load only in the detail endpoint.
+    const [accounts, total] = await Promise.all([
+      prisma.coproducerAccount.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true,
+          code: true,
+          productPid: true,
+          planId: true,
+          publicCheckoutUrl: true,
+          sharePct: true,
+          bumpProductPid: true,
+          bumpPrice: true,
+          displayName: true,
+          enabled: true,
+          notes: true,
+          createdAt: true,
+          updatedAt: true,
+          user: { select: { id: true, name: true, email: true, phone: true } },
+        },
+      }),
+      prisma.coproducerAccount.count(),
+    ]);
 
     // Roll up transactions per coproducer in a single grouped query.
     const rollupsRaw = await prisma.transaction.groupBy({
@@ -67,8 +89,6 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
       displayName: acc.displayName || acc.user.name,
       enabled: acc.enabled,
       notes: acc.notes,
-      vslEmbedHtml: acc.vslEmbedHtml,
-      headScripts: acc.headScripts,
       createdAt: acc.createdAt,
       updatedAt: acc.updatedAt,
       user: acc.user,
@@ -77,7 +97,8 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
       activeSubscribers: subsByCode.get(acc.code) || 0,
     }));
 
-    res.json({ coproducers: items });
+    // `coproducers` kept as an alias of `items` for backward compat with the old front.
+    res.json({ ...paginated(items, total, page, pageSize), coproducers: items });
   } catch (error) {
     console.error('[ADMIN/COPRODUCERS] List error:', error);
     res.status(500).json({ error: 'Erro ao listar coprodutores' });

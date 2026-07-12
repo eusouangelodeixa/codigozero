@@ -12,6 +12,7 @@ import {
   rejectWithdrawal,
   sendPartnerWelcome,
 } from '../services/partner.service';
+import { pageArgs, paginated } from '../lib/pagination';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -25,15 +26,22 @@ router.use(adminMiddleware);
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 // ── GET /api/admin/partners — list partners + rollups + share total ───────
-router.get('/partners', async (_req: AuthRequest, res: Response) => {
+router.get('/partners', async (req: AuthRequest, res: Response) => {
   try {
-    const accounts = await prisma.partnerAccount.findMany({
-      orderBy: { createdAt: 'asc' },
-      include: { user: { select: { id: true, name: true, email: true, phone: true } } },
-    });
+    const { page, pageSize, skip, take } = pageArgs(req);
+    const [accounts, total] = await Promise.all([
+      prisma.partnerAccount.findMany({
+        orderBy: { createdAt: 'asc' },
+        skip,
+        take,
+        include: { user: { select: { id: true, name: true, email: true, phone: true } } },
+      }),
+      prisma.partnerAccount.count(),
+    ]);
 
     // Roll up commissions per partner (lifetime earnings) and the available
-    // balance separately, in two grouped queries.
+    // balance separately, in two grouped queries. Per-partner, so grouping over
+    // just this page's ids preserves each visible row's rollups.
     const ids = accounts.map((a) => a.id);
     const [lifetime, byStatus] = await Promise.all([
       prisma.partnerCommission.groupBy({
@@ -70,7 +78,9 @@ router.get('/partners', async (_req: AuthRequest, res: Response) => {
     }));
 
     const shareTotal = await getActivePartnerShareTotal();
-    res.json({ partners: items, shareTotal });
+    // `partners` kept as an alias of `items` for backward compat with the old front.
+    // shareTotal stays a global aggregate (not paginated).
+    res.json({ ...paginated(items, total, page, pageSize), partners: items, shareTotal });
   } catch (error) {
     console.error('[ADMIN/PARTNERS] List error:', error);
     res.status(500).json({ error: 'Erro ao listar sócios' });

@@ -1,50 +1,66 @@
 "use client";
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import styles from "../admin.module.css";
-import DateRangeFilter, { DateRange } from "@/components/admin/DateRangeFilter";
+import k from "@/components/admin/kit.module.css";
+import {
+  AdminPage,
+  StatRow,
+  StatTile,
+  DataTable,
+  StatusBadge,
+  SearchInput,
+  RowActions,
+  DateRangeFilter,
+  type Column,
+  type RowAction,
+  type DateRange,
+} from "@/components/admin";
 import { Modal, useToast } from "@/components/ui";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
 
-const STATUS_LABEL: Record<string, string> = {
-  active: "Assinante",
-  grace_period: "Carência",
-  overdue: "Atrasado",
-  canceled: "Cancelado",
-  lead: "Lead",
-};
-
-const TX_STATUS_LABEL: Record<string, string> = {
-  approved: "Aprovado",
-  pending: "Pendente",
-  failed: "Falhou",
-  refunded: "Reembolsado",
-};
-
-function statusClass(status: string) {
-  if (status === "active" || status === "approved") return styles.badgeGreen;
-  if (status === "lead" || status === "grace_period" || status === "pending") return styles.badgeYellow;
-  if (status === "overdue" || status === "canceled" || status === "failed" || status === "refunded") return styles.badgeRed;
-  return styles.badgeGray;
+interface Lead {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  subscriptionStatus: string;
+  subscriptionEnd?: string | null;
+  lojouOrderId?: string | null;
+  leadSource?: string | null;
+  createdAt: string;
 }
+interface Metrics { totalLeads: number; subscribers: number; newToday: number; conversionRate: number }
+
+const fmt = (n: number) => n.toLocaleString("pt-BR");
+const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
+const fmtDateTime = (d?: string | null) =>
+  d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+const fmtMoney = (amount?: number | null, currency = "MZN") =>
+  amount == null ? "—" : `${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 
 export default function AdminLeads() {
   const toast = useToast();
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [source, setSource] = useState("all");
   const [pages, setPages] = useState<{ slug: string; title: string }[]>([]);
   const [range, setRange] = useState<DateRange>({ period: "all" });
+  const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const pageSize = 25;
 
   // Detail drawer
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const load = useCallback(() => {
+  const buildParams = useCallback(() => {
     const params = new URLSearchParams();
     if (filter !== "all") params.set("filter", filter);
     if (search) params.set("search", search);
@@ -56,11 +72,25 @@ export default function AdminLeads() {
         if (range.to) params.set("to", range.to);
       }
     }
+    return params;
+  }, [filter, search, source, range]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const params = buildParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
     fetch(`${API}/api/admin/leads?${params}`, { headers: hdr() })
       .then((r) => r.json())
-      .then((data) => { setLeads(data.leads || []); setTotal(data.total || 0); })
-      .catch(console.error);
-  }, [filter, search, source, range]);
+      .then((data) => {
+        setLeads(data.items || data.leads || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+        if (data.metrics) setMetrics(data.metrics);
+      })
+      .catch(() => toast.error("Falha ao carregar leads"))
+      .finally(() => setLoading(false));
+  }, [buildParams, page, toast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -70,26 +100,21 @@ export default function AdminLeads() {
       .then((r) => r.json()).then((d) => setPages(d.pages || [])).catch(() => {});
   }, []);
 
+  // Setters de filtro que resetam a paginação para a página 1 (busca única).
+  const onSearch = (v: string) => { setSearch(v); setPage(1); };
+  const onFilter = (v: string) => { setFilter(v); setPage(1); };
+  const onSource = (v: string) => { setSource(v); setPage(1); };
+  const onRange = (r: DateRange) => { setRange(r); setPage(1); };
+
   const [exporting, setExporting] = useState(false);
 
   // Export the current view as CSV. The route needs the Bearer token, so we
   // fetch with auth → blob → trigger a download instead of navigating to a raw
   // URL. Mirrors the on-screen filters by passing the same query params as load().
   const exportCsv = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (filter !== "all") params.set("filter", filter);
-    if (search) params.set("search", search);
-    if (source !== "all") params.set("source", source);
-    if (range.period !== "all") {
-      params.set("period", range.period);
-      if (range.period === "custom") {
-        if (range.from) params.set("from", range.from);
-        if (range.to) params.set("to", range.to);
-      }
-    }
     setExporting(true);
     try {
-      const res = await fetch(`${API}/api/admin/leads/export?${params}`, { headers: hdr() });
+      const res = await fetch(`${API}/api/admin/leads/export?${buildParams()}`, { headers: hdr() });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -106,7 +131,7 @@ export default function AdminLeads() {
     } finally {
       setExporting(false);
     }
-  }, [filter, search, source, range, toast]);
+  }, [buildParams, toast]);
 
   const openLead = useCallback((id: string) => {
     setSelectedId(id);
@@ -130,17 +155,50 @@ export default function AdminLeads() {
       .catch(() => toast.error("Não foi possível copiar"));
   };
 
-  const badge = (status: string) => (
-    <span className={`${styles.badge} ${statusClass(status)}`}>
-      {STATUS_LABEL[status] || status}
-    </span>
-  );
+  // Rótulo amigável para a origem de captura (LP dos Reels ou isca de conteúdo).
+  const sourceLabel = useCallback((src?: string | null) => {
+    if (!src) return "—";
+    if (src === "lp:reels") return "LP · Reels";
+    if (src.startsWith("content:")) {
+      const slug = src.slice("content:".length);
+      const p = pages.find((pg) => pg.slug === slug);
+      return `Isca · ${p?.title || slug}`;
+    }
+    return src;
+  }, [pages]);
 
-  const fmtDate = (d?: string | null) => (d ? new Date(d).toLocaleDateString("pt-BR") : "—");
-  const fmtDateTime = (d?: string | null) =>
-    d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
-  const fmtMoney = (amount?: number | null, currency = "MZN") =>
-    amount == null ? "—" : `${amount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  const columns: Column<Lead>[] = [
+    {
+      key: "lead", header: "Lead", primaryOnMobile: true,
+      render: (l) => (
+        <div className={k.cellStack}>
+          <span className={k.cellMain}>{l.name}</span>
+          <span className={k.cellSub}>{l.email}</span>
+        </div>
+      ),
+    },
+    { key: "phone", header: "Telefone", mono: true, render: (l) => l.phone || "—" },
+    {
+      key: "source", header: "Origem", hideOnMobile: true,
+      render: (l) => <span className={k.cellMuted}>{sourceLabel(l.leadSource)}</span>,
+    },
+    {
+      key: "status", header: "Status", mobileLabel: "Status",
+      render: (l) => <StatusBadge kind="subscription" value={l.subscriptionStatus} />,
+    },
+    { key: "expira", header: "Expira", muted: true, render: (l) => fmtDate(l.subscriptionEnd) },
+    { key: "criado", header: "Cadastro", muted: true, hideOnMobile: true, render: (l) => fmtDate(l.createdAt) },
+  ];
+
+  const rowActions = (l: Lead): ReactNode => {
+    const digits = (l.phone || "").replace(/\D/g, "");
+    const items: RowAction[] = [
+      { label: "WhatsApp", onClick: () => window.open(`https://wa.me/${digits}`, "_blank", "noopener"), disabled: !digits },
+      { label: "Copiar e-mail", onClick: () => copy(l.email, "Email") },
+      { label: "Copiar telefone", onClick: () => copy(l.phone || "", "Telefone"), disabled: !l.phone },
+    ];
+    return <RowActions items={items} />;
+  };
 
   const lead = detail?.lead;
   const stats = detail?.stats;
@@ -149,102 +207,52 @@ export default function AdminLeads() {
 
   return (
     <>
-      <div className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Leads da Landing Page</h1>
-        <p className={styles.pageDesc}>{total} registos encontrados</p>
-      </div>
-
-      <div className={styles.tableWrap}>
-        <div className={styles.tableToolbar}>
-          <input
-            className={styles.tableSearch}
-            placeholder="Buscar por nome, email ou telefone..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {[
-            { id: "all", label: "Todos" },
-            { id: "subscriber", label: "Assinantes" },
-            { id: "unpaid", label: "Leads" },
-          ].map((f) => (
-            <button
-              key={f.id}
-              className={`${styles.filterBtn} ${filter === f.id ? styles.filterBtnActive : ""}`}
-              onClick={() => setFilter(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className={styles.tableToolbar}>
-          <select
-            className={styles.filterBtn}
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            title="Filtrar por origem (LP dos Reels ou isca de conteúdo)"
-          >
-            <option value="all">Todas as origens</option>
-            <option value="lp:reels">LP — Reels</option>
-            {pages.map((p) => (
-              <option key={p.slug} value={`content:${p.slug}`}>Isca: {p.title}</option>
-            ))}
-          </select>
-          <DateRangeFilter value={range} onChange={setRange} />
-          <button
-            type="button"
-            className={styles.filterBtn}
-            style={{ marginLeft: "auto" }}
-            onClick={exportCsv}
-            disabled={exporting}
-          >
+      <AdminPage
+        title="Leads"
+        actions={
+          <button type="button" className={`${k.btn} ${k.btnSecondary}`} onClick={exportCsv} disabled={exporting}>
             {exporting ? "Exportando…" : "Exportar CSV"}
           </button>
-        </div>
-
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Email</th>
-              <th>Telefone</th>
-              <th>Status</th>
-              <th>Cadastro</th>
-              <th>Expira</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.length === 0 ? (
-              <tr><td colSpan={6} className={styles.empty}>Nenhum lead encontrado</td></tr>
-            ) : leads.map((l) => (
-              <tr key={l.id} className={styles.clickableRow} onClick={() => openLead(l.id)}>
-                <td>{l.name}</td>
-                <td>{l.email}</td>
-                <td>{l.phone}</td>
-                <td>{badge(l.subscriptionStatus)}</td>
-                <td>{fmtDate(l.createdAt)}</td>
-                <td>{fmtDate(l.subscriptionEnd)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className={styles.mobileCards}>
-          {leads.length === 0 ? (
-            <div className={styles.empty}>Nenhum lead encontrado</div>
-          ) : leads.map((l) => (
-            <div key={l.id} className={`${styles.mCard} ${styles.clickableRow}`} onClick={() => openLead(l.id)}>
-              <div className={styles.mCardHead}>
-                <span className={styles.mCardName}>{l.name}</span>
-                {badge(l.subscriptionStatus)}
-              </div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Email</span><span className={styles.mCardValue}>{l.email}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Telefone</span><span className={styles.mCardValue}>{l.phone}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Cadastro</span><span className={styles.mCardValue}>{fmtDate(l.createdAt)}</span></div>
-              <div className={styles.mCardRow}><span className={styles.mCardLabel}>Expira</span><span className={styles.mCardValue}>{fmtDate(l.subscriptionEnd)}</span></div>
-            </div>
-          ))}
-        </div>
-      </div>
+        }
+        kpis={
+          <StatRow>
+            <StatTile accent label="Leads" loading={!metrics} value={metrics && fmt(metrics.totalLeads)} />
+            <StatTile label="Assinantes" loading={!metrics} value={metrics && fmt(metrics.subscribers)} />
+            <StatTile label="Novos hoje" loading={!metrics} value={metrics && fmt(metrics.newToday)} />
+            <StatTile label="Conversão" loading={!metrics} value={metrics && `${metrics.conversionRate}%`} />
+          </StatRow>
+        }
+      >
+        <DataTable
+          columns={columns}
+          rows={leads}
+          getRowKey={(l) => l.id}
+          loading={loading}
+          empty={{ title: "Nenhum lead encontrado", desc: "Ajuste a busca ou os filtros." }}
+          rowActions={rowActions}
+          onRowClick={(l) => openLead(l.id)}
+          pagination={{ page, totalPages, total, pageSize, onChange: setPage }}
+          toolbar={
+            <>
+              <SearchInput defaultValue={search} onSearch={onSearch} placeholder="Buscar por nome, e-mail ou telefone…" />
+              <select className={k.select} value={filter} onChange={(e) => onFilter(e.target.value)} aria-label="Tipo">
+                <option value="all">Todos</option>
+                <option value="subscriber">Assinantes</option>
+                <option value="unpaid">Leads</option>
+              </select>
+              <select className={k.select} value={source} onChange={(e) => onSource(e.target.value)} aria-label="Origem">
+                <option value="all">Todas as origens</option>
+                <option value="lp:reels">LP — Reels</option>
+                {pages.map((p) => (
+                  <option key={p.slug} value={`content:${p.slug}`}>Isca: {p.title}</option>
+                ))}
+              </select>
+              <div className={k.toolbarSpacer} />
+              <DateRangeFilter value={range} onChange={onRange} />
+            </>
+          }
+        />
+      </AdminPage>
 
       <Modal
         open={!!selectedId}
@@ -261,7 +269,7 @@ export default function AdminLeads() {
           <div className={styles.detail}>
             {/* Status + quick actions */}
             <div className={styles.detailActions}>
-              {badge(lead.subscriptionStatus)}
+              <StatusBadge kind="subscription" value={lead.subscriptionStatus} />
               {waDigits && (
                 <a
                   className={`${styles.detailActionBtn} ${styles.detailActionPrimary}`}
@@ -306,7 +314,7 @@ export default function AdminLeads() {
 
             {/* Subscription */}
             <Section title="Assinatura">
-              <Field label="Status" value={STATUS_LABEL[lead.subscriptionStatus] || lead.subscriptionStatus} />
+              <Field label="Status" value={<StatusBadge kind="subscription" value={lead.subscriptionStatus} />} />
               <Field label="Início" value={fmtDate(lead.subscriptionStart)} />
               <Field label="Expira" value={fmtDate(lead.subscriptionEnd)} />
               <Field label="Pedido (Lojou)" value={lead.lojouOrderId || "—"} />
@@ -317,6 +325,7 @@ export default function AdminLeads() {
 
             {/* Attribution */}
             <Section title="Origem & atribuição">
+              <Field label="Origem de captura" value={sourceLabel(lead.leadSource)} />
               <Field label="Afiliado de origem" value={lead.referredByCode || "—"} />
               <Field label="Coprodutor de origem" value={lead.referredByCoproducer || "—"} />
               <Field label="É afiliado" value={lead.affiliateAccount?.code ? `Sim (${lead.affiliateAccount.code})` : "Não"} />
@@ -350,9 +359,7 @@ export default function AdminLeads() {
                           {t.gateway ? ` · ${t.gateway}` : ""}
                         </span>
                       </div>
-                      <span className={`${styles.badge} ${statusClass(t.status)}`}>
-                        {TX_STATUS_LABEL[t.status] || t.status}
-                      </span>
+                      <StatusBadge kind="transaction" value={t.status} />
                     </div>
                   ))}
                 </div>

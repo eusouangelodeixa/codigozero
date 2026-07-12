@@ -1,28 +1,23 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
-import styles from "../admin.module.css";
-
-const I = ({ d, size = 16, color = "currentColor" }: { d: string; size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
-);
-const icons = {
-  ticket: "M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z",
-  plus: "M12 4v16m8-8H4",
-  refresh: "M4 4v5h5M20 20v-5h-5M5 13a7 7 0 0112.9-3.7M19 11a7 7 0 01-12.9 3.7",
-  check: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
-  pause: "M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z",
-  edit: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
-  trash: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
-  send: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
-  search: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
-  link: "M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1",
-  gift: "M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7",
-  warn: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
-  box: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
-};
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import a from "../admin.module.css";
+import k from "@/components/admin/kit.module.css";
+import {
+  AdminPage,
+  StatRow,
+  StatTile,
+  DataTable,
+  StatusBadge,
+  SegmentedControl,
+  RowActions,
+  type Column,
+  type RowAction,
+} from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
+
+const fmt = (n: number) => n.toLocaleString("pt-BR");
 
 interface Coupon {
   id: string;
@@ -45,25 +40,58 @@ interface User {
   phone: string;
 }
 
+interface Metrics {
+  active: number;
+  totalUses: number;
+}
+
+/** Linha de seleção de destinatário (membro/lead) no modal de envio. */
+function PickRow({ selected, onClick, name, sub }: { selected: boolean; onClick: () => void; name: string; sub: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px",
+        border: "none", borderBottom: "1px solid var(--border-subtle)", cursor: "pointer",
+        textAlign: "left", background: selected ? "var(--accent-dim)" : "transparent",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: "var(--text-primary)", fontWeight: 500 }}>{name}</div>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>
+      </div>
+      {selected && <span style={{ color: "var(--accent)", fontWeight: 700 }}>✓</span>}
+    </button>
+  );
+}
+
 export default function CuponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
+  const [apiError, setApiError] = useState("");
+
+  // Paginação server-driven
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 25;
+
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | number | null>(null);
 
-  // Create form
+  // Create/edit form
   const [formCode, setFormCode] = useState("");
   const [formType, setFormType] = useState("percentage");
   const [formValue, setFormValue] = useState(10);
   const [formMaxUses, setFormMaxUses] = useState(1);
   const [formLinkedUserId, setFormLinkedUserId] = useState("");
-  const [linkUsers, setLinkUsers] = useState<User[]>([]);
-  const [linkSearch, setLinkSearch] = useState("");
   const [formActive, setFormActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Send modal — v2 with three tabs (user/lead/manual) + live preview
+  // Send modal — três abas (membro/lead/manual) + preview ao vivo
   const [sendModal, setSendModal] = useState<{ code: string } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [leads, setLeads] = useState<User[]>([]);
@@ -97,25 +125,30 @@ export default function CuponsPage() {
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messageRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const [apiError, setApiError] = useState("");
-
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
 
-  const loadCoupons = async () => {
+  const loadCoupons = useCallback(() => {
     setLoading(true);
     setApiError("");
-    try {
-      const res = await fetch(`${API}/api/admin/cupons`, { headers: hdr() });
-      const data = await res.json();
-      if (data.error) setApiError(data.error);
-      setCoupons(Array.isArray(data.coupons) ? data.coupons : []);
-    } catch { setCoupons([]); setApiError("Erro de conexão com o servidor"); }
-    setLoading(false);
-  };
+    const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    fetch(`${API}/api/admin/cupons?${p}`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) setApiError(data.error);
+        setCoupons(Array.isArray(data.items) ? data.items : Array.isArray(data.coupons) ? data.coupons : []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+        if (data.metrics) setMetrics(data.metrics);
+      })
+      .catch(() => { setCoupons([]); setApiError("Erro de conexão com o servidor"); })
+      .finally(() => setLoading(false));
+  }, [page]);
+
+  useEffect(() => { loadCoupons(); }, [loadCoupons]);
 
   const loadUsers = async () => {
     try {
-      const res = await fetch(`${API}/api/admin/users?limit=500`, { headers: hdr() });
+      const res = await fetch(`${API}/api/admin/users?pageSize=100`, { headers: hdr() });
       const data = await res.json();
       setUsers(data.users || []);
     } catch {}
@@ -123,19 +156,16 @@ export default function CuponsPage() {
 
   const loadLeads = async () => {
     try {
-      // Leads endpoint already supports a `filter` param (unpaid = subscriptionStatus='lead')
-      const res = await fetch(`${API}/api/admin/leads?filter=unpaid`, { headers: hdr() });
+      // Leads endpoint suporta `filter=unpaid` (subscriptionStatus='lead'); paginado (máx 100/pág).
+      const res = await fetch(`${API}/api/admin/leads?filter=unpaid&pageSize=100`, { headers: hdr() });
       const data = await res.json();
-      setLeads(Array.isArray(data.leads) ? data.leads : Array.isArray(data) ? data : []);
+      setLeads(Array.isArray(data.leads) ? data.leads : Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : []);
     } catch {}
   };
-
-  useEffect(() => { loadCoupons(); }, []);
 
   const handleCreate = async () => {
     if (!formCode.trim()) return showToast("❌ Código obrigatório");
     if (!formValue || formValue <= 0) return showToast("❌ Valor inválido");
-
     setSaving(true);
     try {
       const res = await fetch(`${API}/api/admin/cupons`, {
@@ -147,6 +177,7 @@ export default function CuponsPage() {
         showToast("✅ Cupom criado com sucesso!");
         setShowCreate(false);
         resetForm();
+        setPage(1);
         loadCoupons();
       } else {
         showToast(`❌ ${data.error || "Erro ao criar"}`);
@@ -195,7 +226,7 @@ export default function CuponsPage() {
     } catch {}
   };
 
-  // Builds the recipient payload from the active tab.
+  // Monta o payload do destinatário a partir da aba ativa.
   const buildRecipient = useCallback(() => {
     if (recipientTab === "user") {
       if (!selectedUserId) return null;
@@ -214,16 +245,12 @@ export default function CuponsPage() {
     };
   }, [recipientTab, selectedUserId, selectedLeadId, manualName, manualPhone, manualEmail]);
 
-  // Debounced live preview against the backend (handles {{nome}} / {{cupom}}
-  // / {{link}} / {{desconto}} substitutions exactly the way the send
-  // endpoint will, so what you see is what gets delivered).
+  // Preview ao vivo (debounced) contra o backend — resolve {{nome}}/{{cupom}}/
+  // {{link}}/{{desconto}} exatamente como o endpoint de envio faz.
   const requestPreview = useCallback(() => {
     if (!sendModal) return;
     const recipient = buildRecipient();
-    if (!recipient) {
-      setPreviewText("");
-      return;
-    }
+    if (!recipient) { setPreviewText(""); return; }
     setPreviewLoading(true);
     fetch(`${API}/api/admin/cupons/preview`, {
       method: "POST",
@@ -239,28 +266,21 @@ export default function CuponsPage() {
       .finally(() => setPreviewLoading(false));
   }, [sendModal, buildRecipient, messageBody]);
 
-  // Trigger preview with debounce when any input changes
   useEffect(() => {
     if (!sendModal) return;
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(requestPreview, 400);
-    return () => {
-      if (previewTimer.current) clearTimeout(previewTimer.current);
-    };
+    return () => { if (previewTimer.current) clearTimeout(previewTimer.current); };
   }, [sendModal, requestPreview]);
 
-  // Insert a placeholder at the cursor position in the message textarea
+  // Insere um placeholder na posição do cursor do textarea.
   const insertPlaceholder = (token: string) => {
     const el = messageRef.current;
-    if (!el) {
-      setMessageBody((m) => `${m}${token}`);
-      return;
-    }
+    if (!el) { setMessageBody((m) => `${m}${token}`); return; }
     const start = el.selectionStart ?? messageBody.length;
     const end = el.selectionEnd ?? messageBody.length;
     const next = messageBody.slice(0, start) + token + messageBody.slice(end);
     setMessageBody(next);
-    // Restore cursor right after the inserted token
     requestAnimationFrame(() => {
       el.focus();
       const pos = start + token.length;
@@ -271,10 +291,7 @@ export default function CuponsPage() {
   const handleSendCoupon = async () => {
     if (!sendModal) return;
     const recipient = buildRecipient();
-    if (!recipient) {
-      showToast("❌ Preencha os dados do destinatário");
-      return;
-    }
+    if (!recipient) { showToast("❌ Preencha os dados do destinatário"); return; }
     setSendingCoupon(true);
     try {
       const res = await fetch(`${API}/api/admin/cupons/send`, {
@@ -334,130 +351,152 @@ export default function CuponsPage() {
   };
 
   const filteredUsers = searchUser
-    ? users.filter(u => u.name.toLowerCase().includes(searchUser.toLowerCase()) || u.email.toLowerCase().includes(searchUser.toLowerCase()))
+    ? users.filter((u) => u.name.toLowerCase().includes(searchUser.toLowerCase()) || u.email.toLowerCase().includes(searchUser.toLowerCase()))
     : users;
 
-  const activeCoupons = coupons.filter(c => c.active);
-  const inactiveCoupons = coupons.filter(c => !c.active);
+  const columns: Column<Coupon>[] = [
+    {
+      key: "cupom", header: "Cupom", primaryOnMobile: true,
+      render: (c) => (
+        <div className={k.cellStack}>
+          <span className={`${k.cellMain} ${k.cellMono}`}>{c.code}</span>
+          <span className={k.cellSub}>{c.type === "percentage" ? "Percentual" : "Valor fixo"}</span>
+        </div>
+      ),
+    },
+    {
+      key: "valor", header: "Valor", mobileLabel: "Valor",
+      render: (c) => <strong>{c.type === "percentage" ? `${c.value}%` : `${c.value} MT`}</strong>,
+    },
+    {
+      key: "usos", header: "Usos", mobileLabel: "Usos",
+      render: (c) => (
+        <span className={k.cellInline}>
+          <strong>{c.usesCount || 0}</strong>
+          <span className={k.cellMuted}>/ {c.maxUses || "∞"}</span>
+        </span>
+      ),
+    },
+    {
+      key: "vinculado", header: "Vinculado", hideOnMobile: true,
+      render: (c) => (c.linkedUserEmail ? <StatusBadge tone="accent" noDot>{c.linkedUserEmail}</StatusBadge> : <span className={k.cellMuted}>—</span>),
+    },
+    {
+      key: "status", header: "Status", mobileLabel: "Status",
+      render: (c) => <StatusBadge tone={c.active ? "good" : "neutral"} noDot>{c.active ? "Ativo" : "Inativo"}</StatusBadge>,
+    },
+    {
+      key: "criado", header: "Criado", muted: true, hideOnMobile: true,
+      render: (c) => (c.createdAt ? new Date(c.createdAt).toLocaleDateString("pt-BR") : "—"),
+    },
+  ];
+
+  const rowActions = (c: Coupon): ReactNode => {
+    const items: RowAction[] = [
+      { label: "Enviar via WhatsApp", onClick: () => openSendModal(c.code) },
+      { label: "Editar", onClick: () => startEdit(c) },
+      { label: c.active ? "Desativar" : "Ativar", onClick: () => handleToggle(c) },
+      { label: "Excluir", onClick: () => handleDelete(c.id, c.code), danger: true },
+    ];
+    return <RowActions items={items} />;
+  };
 
   return (
-    <div style={{ padding: 24 }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 500, letterSpacing: 1, textTransform: "uppercase" }}>Gestão</span>
-          <h1 className={styles.pageTitle} style={{ display: "flex", alignItems: "center", gap: 10 }}><I d={icons.ticket} size={22} color="#f59e0b" /> Cupons de Desconto</h1>
-          <p style={{ fontSize: 13, color: "#888", marginTop: 4 }}>
-            Gerencie cupons vinculados ao produto Código Zero. {coupons.length} cupons encontrados.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={loadCoupons} style={{
-            padding: "10px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)",
-            background: "none", color: "#aaa", fontSize: 13, cursor: "pointer",
-          }}><span style={{ display: "flex", alignItems: "center", gap: 6 }}><I d={icons.refresh} size={14} /> Atualizar</span></button>
-          <button onClick={() => { setShowCreate(true); setEditingId(null); resetForm(); }} style={{
-            padding: "10px 20px", borderRadius: 10, border: "none",
-            background: "linear-gradient(135deg, #f59e0b, #d97706)", color: "#0A0A0A",
-            fontWeight: 600, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
-          }}><span style={{ display: "flex", alignItems: "center", gap: 6 }}><I d={icons.plus} size={14} /> Novo Cupom</span></button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
-        {[
-          { label: "Total", value: coupons.length, icon: icons.ticket, color: "#f59e0b" },
-          { label: "Ativos", value: activeCoupons.length, icon: icons.check, color: "#22c55e" },
-          { label: "Inativos", value: inactiveCoupons.length, icon: icons.pause, color: "#888" },
-        ].map((s, i) => (
-          <div key={i} className={styles.statCard} style={{ textAlign: "center", padding: 16 }}>
-            <I d={s.icon} size={20} color={s.color} />
-            <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 11, color: "#888" }}>{s.label}</div>
+    <>
+      <AdminPage
+        title="Cupons"
+        actions={
+          <>
+            <button type="button" className={`${k.btn} ${k.btnSecondary}`} onClick={loadCoupons}>Atualizar</button>
+            <button type="button" className={`${k.btn} ${k.btnPrimary}`} onClick={() => { setShowCreate(true); setEditingId(null); resetForm(); }}>
+              ＋ Novo cupom
+            </button>
+          </>
+        }
+        kpis={
+          <StatRow>
+            <StatTile accent label="Ativos" loading={!metrics} value={metrics && fmt(metrics.active)} />
+            <StatTile label="Usos totais" loading={!metrics} value={metrics && fmt(metrics.totalUses)} />
+            <StatTile label="Total" loading={!metrics} value={metrics ? fmt(total) : undefined} />
+          </StatRow>
+        }
+      >
+        {apiError && (
+          <div
+            role="alert"
+            style={{
+              display: "flex", flexDirection: "column", gap: 4, marginBottom: "var(--space-4)",
+              padding: "12px 16px", borderRadius: "var(--radius-md)",
+              background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.28)",
+            }}
+          >
+            <strong style={{ fontSize: 13, color: "var(--color-error)" }}>Erro ao comunicar com a Lojou</strong>
+            <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>{apiError}</span>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+              Verifique os scopes da API key na Lojou: <strong>discounts.read</strong> e <strong>discounts.write</strong>.
+            </span>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* API Error Banner */}
-      {apiError && (
-        <div style={{
-          padding: "14px 18px", borderRadius: 10, marginBottom: 20,
-          background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)",
-        }}>
-          <p style={{ fontSize: 13, color: "#ef4444", fontWeight: 600, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}><I d={icons.warn} size={15} color="#ef4444" /> Erro ao comunicar com a Lojou</p>
-          <p style={{ fontSize: 12, color: "#f87171", lineHeight: 1.5 }}>{apiError}</p>
-          <p style={{ fontSize: 11, color: "#888", marginTop: 6 }}>
-            Verifique os scopes da API key no painel da Lojou. É necessário: <strong>discounts.read</strong> e <strong>discounts.write</strong>
-          </p>
-        </div>
-      )}
+        <DataTable
+          columns={columns}
+          rows={coupons}
+          getRowKey={(c) => String(c.id)}
+          loading={loading}
+          empty={{ title: "Nenhum cupom encontrado", desc: "Crie seu primeiro cupom de desconto." }}
+          rowActions={rowActions}
+          pagination={{ page, totalPages, total, pageSize, onChange: setPage }}
+        />
+      </AdminPage>
 
       {/* Create/Edit Modal */}
       {showCreate && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 28, maxWidth: 440, width: "100%" }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 20 }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 8 }}><I d={editingId ? icons.edit : icons.ticket} size={18} color="#f59e0b" /> {editingId ? "Editar Cupom" : "Novo Cupom"}</span>
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 4 }}>Código do Cupom</label>
-                <input className={styles.formInput} value={formCode} onChange={e => setFormCode(e.target.value.toUpperCase())}
-                  placeholder="Ex: DESCONTO10" style={{ textTransform: "uppercase" }} />
+        <div className={a.modalOverlay} onClick={() => { setShowCreate(false); resetForm(); }}>
+          <div className={a.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <h2 className={a.modalTitle}>{editingId ? "Editar cupom" : "Novo cupom"}</h2>
+            <div className={a.formGrid}>
+              <div className={`${a.formGroup} ${a.formGroupFull}`}>
+                <label className={a.formLabel}>Código do cupom</label>
+                <input className={a.formInput} value={formCode} onChange={(e) => setFormCode(e.target.value.toUpperCase())} placeholder="Ex: DESCONTO10" style={{ textTransform: "uppercase" }} />
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 4 }}>Tipo</label>
-                  <select className={styles.formInput} value={formType} onChange={e => setFormType(e.target.value)}>
-                    <option value="percentage">Percentual (%)</option>
-                    <option value="fixed">Valor Fixo (MT)</option>
-                  </select>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 4 }}>
-                    Valor ({formType === "percentage" ? "%" : "MT"})
-                  </label>
-                  <input className={styles.formInput} type="number" min={1}
-                    value={formValue} onChange={e => setFormValue(parseInt(e.target.value) || 0)} />
-                </div>
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Tipo</label>
+                <select className={a.formSelect} value={formType} onChange={(e) => setFormType(e.target.value)}>
+                  <option value="percentage">Percentual (%)</option>
+                  <option value="fixed">Valor fixo (MT)</option>
+                </select>
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 12, color: "#888", display: "block", marginBottom: 4 }}>Usos Máximos</label>
-                  <input className={styles.formInput} type="number" min={1}
-                    value={formMaxUses} onChange={e => setFormMaxUses(parseInt(e.target.value) || 1)} />
-                  <span style={{ fontSize: 10, color: "#666", marginTop: 2, display: "block" }}>1 = exclusivo para 1 pessoa</span>
-                </div>
-                <div style={{ flex: 1, display: "flex", alignItems: "center", paddingTop: 16 }}>
-                  <label style={{
-                    display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
-                    padding: "8px 12px", borderRadius: 8,
-                    background: formActive ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${formActive ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.06)"}`,
-                    fontSize: 13, color: formActive ? "#22c55e" : "#888",
-                  }}>
-                    <input type="checkbox" checked={formActive} onChange={e => setFormActive(e.target.checked)} style={{ accentColor: "#22c55e" }} />
-                    {formActive ? "Ativo" : "Inativo"}
-                  </label>
-                </div>
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Valor ({formType === "percentage" ? "%" : "MT"})</label>
+                <input className={a.formInput} type="number" min={1} value={formValue} onChange={(e) => setFormValue(parseInt(e.target.value) || 0)} />
               </div>
-
-              <div style={{ padding: 10, borderRadius: 8, background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.1)", fontSize: 11, color: "#f59e0b", display: "flex", alignItems: "center", gap: 6 }}>
-                <I d={icons.box} size={14} color="#f59e0b" /> Vinculado ao produto: <strong>Código Zero</strong> (PID: uoEHz)
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Usos máximos</label>
+                <input className={a.formInput} type="number" min={1} value={formMaxUses} onChange={(e) => setFormMaxUses(parseInt(e.target.value) || 1)} />
+                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>1 = exclusivo para 1 pessoa</span>
+              </div>
+              <div className={a.formGroup}>
+                <label className={a.formLabel}>Status</label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", minHeight: 40 }}>
+                  <input type="checkbox" checked={formActive} onChange={(e) => setFormActive(e.target.checked)} />
+                  <span style={{ fontSize: 14, color: formActive ? "var(--color-success)" : "var(--text-tertiary)" }}>{formActive ? "Ativo" : "Inativo"}</span>
+                </label>
+              </div>
+              <div
+                className={a.formGroupFull}
+                style={{
+                  padding: "10px 12px", borderRadius: "var(--radius-md)", fontSize: 12,
+                  background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent)",
+                }}
+              >
+                Vinculado ao produto <strong>Código Zero</strong> (PID: uoEHz)
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>
-              <button onClick={() => { setShowCreate(false); resetForm(); }} style={{
-                padding: "8px 18px", borderRadius: 8, fontSize: 13, background: "none",
-                border: "1px solid rgba(255,255,255,0.08)", color: "#888", cursor: "pointer",
-              }}>Cancelar</button>
-              <button onClick={() => editingId ? handleUpdate(editingId) : handleCreate()} disabled={saving} style={{
-                padding: "8px 22px", borderRadius: 8, fontSize: 13, fontWeight: 600,
-                background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none",
-                color: "#0A0A0A", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1,
-              }}>{saving ? "Salvando..." : editingId ? "Salvar" : "Criar Cupom"}</button>
+            <div className={a.btnRow}>
+              <button className={a.btnPrimary} onClick={() => (editingId ? handleUpdate(editingId) : handleCreate())} disabled={saving}>
+                {saving ? "Salvando…" : editingId ? "Salvar" : "Criar cupom"}
+              </button>
+              <button className={a.btnSecondary} onClick={() => { setShowCreate(false); resetForm(); }}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -475,311 +514,139 @@ export default function CuponsPage() {
                 (l.phone || "").includes(searchLead),
             )
           : leads;
-        const TabBtn = ({ tab, label }: { tab: RecipientTab; label: string }) => (
-          <button
-            type="button"
-            onClick={() => setRecipientTab(tab)}
-            style={{
-              flex: 1,
-              padding: "8px 12px",
-              border: "none",
-              background: recipientTab === tab ? "rgba(245,158,11,0.15)" : "transparent",
-              color: recipientTab === tab ? "#f59e0b" : "#888",
-              fontSize: 12,
-              fontWeight: 600,
-              borderRadius: 8,
-              cursor: "pointer",
-              transition: "color 0.15s, background 0.15s",
-            }}
-          >
-            {label}
-          </button>
-        );
         return (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, overflowY: "auto" }}>
-          <div style={{ background: "#0f0f0f", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 16, padding: 24, maxWidth: 720, width: "100%", maxHeight: "92vh", overflowY: "auto" }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
-              <I d={icons.send} size={18} color="#22c55e" /> Enviar cupom via WhatsApp
-            </h3>
-            <p style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
-              Cupom: <strong style={{ color: "#f59e0b", fontFamily: "monospace", letterSpacing: 1 }}>{sendModal.code}</strong>{" "}
-              · O link enviado é o checkout normal já com o cupom aplicado.
-            </p>
+          <div className={a.modalOverlay} onClick={() => setSendModal(null)}>
+            <div className={a.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 720 }}>
+              <h2 className={a.modalTitle}>Enviar cupom via WhatsApp</h2>
+              <p style={{ fontSize: 13, color: "var(--text-tertiary)", margin: "-8px 0 16px" }}>
+                Cupom{" "}
+                <strong style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", letterSpacing: 1 }}>{sendModal.code}</strong>
+                {" "}· o link enviado é o checkout normal já com o cupom aplicado.
+              </p>
 
-            {/* Tabs: user / lead / manual */}
-            <div style={{ display: "flex", gap: 4, padding: 4, background: "rgba(255,255,255,0.03)", borderRadius: 10, marginBottom: 16 }}>
-              <TabBtn tab="user" label="Membro" />
-              <TabBtn tab="lead" label="Lead" />
-              <TabBtn tab="manual" label="Manual" />
-            </div>
-
-            {/* Recipient picker by tab */}
-            {recipientTab === "user" && (
-              <>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Buscar membro</label>
-                  <input className={styles.formInput} value={searchUser} onChange={(e) => setSearchUser(e.target.value)} placeholder="Nome, email ou telefone…" />
-                </div>
-                <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, marginBottom: 16 }}>
-                  {filteredUsers.length === 0 ? (
-                    <p style={{ padding: 16, textAlign: "center", fontSize: 12, color: "#666" }}>
-                      {users.length === 0 ? "Carregando membros…" : "Nenhum resultado"}
-                    </p>
-                  ) : (
-                    filteredUsers.slice(0, 30).map((u) => (
-                      <button
-                        key={u.id}
-                        onClick={() => setSelectedUserId(u.id)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px",
-                          border: "none", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer",
-                          background: selectedUserId === u.id ? "rgba(245,158,11,0.08)" : "transparent",
-                          textAlign: "left",
-                        }}
-                      >
-                        <div style={{ width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: selectedUserId === u.id ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.04)", color: selectedUserId === u.id ? "#f59e0b" : "#888", fontSize: 11, fontWeight: 600 }}>{(u.name || "?")[0]}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, color: "#fff", fontWeight: 500 }}>{u.name}</div>
-                          <div style={{ fontSize: 11, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email} · {u.phone}</div>
-                        </div>
-                        {selectedUserId === u.id && <span style={{ marginLeft: "auto", color: "#f59e0b" }}>✓</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-
-            {recipientTab === "lead" && (
-              <>
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Buscar lead (não assinantes)</label>
-                  <input className={styles.formInput} value={searchLead} onChange={(e) => setSearchLead(e.target.value)} placeholder="Nome, email ou telefone…" />
-                </div>
-                <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8, marginBottom: 16 }}>
-                  {filteredLeads.length === 0 ? (
-                    <p style={{ padding: 16, textAlign: "center", fontSize: 12, color: "#666" }}>
-                      {leads.length === 0 ? "Carregando leads…" : "Nenhum lead encontrado"}
-                    </p>
-                  ) : (
-                    filteredLeads.slice(0, 30).map((l) => (
-                      <button
-                        key={l.id}
-                        onClick={() => setSelectedLeadId(l.id)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px",
-                          border: "none", borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer",
-                          background: selectedLeadId === l.id ? "rgba(245,158,11,0.08)" : "transparent",
-                          textAlign: "left",
-                        }}
-                      >
-                        <div style={{ width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: selectedLeadId === l.id ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.04)", color: selectedLeadId === l.id ? "#f59e0b" : "#888", fontSize: 11, fontWeight: 600 }}>{(l.name || "?")[0]}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, color: "#fff", fontWeight: 500 }}>{l.name || "(sem nome)"}</div>
-                          <div style={{ fontSize: 11, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.email} · {l.phone}</div>
-                        </div>
-                        {selectedLeadId === l.id && <span style={{ marginLeft: "auto", color: "#f59e0b" }}>✓</span>}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-
-            {recipientTab === "manual" && (
-              <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Nome *</label>
-                  <input className={styles.formInput} value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="Ex: Anderson Sevene" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>WhatsApp *</label>
-                  <input className={styles.formInput} value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} placeholder="Ex: +258 84 123 4567" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Email <span style={{ textTransform: "none", letterSpacing: 0, color: "#666" }}>(opcional)</span></label>
-                  <input className={styles.formInput} value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} placeholder="Ex: anderson@email.com" />
-                </div>
+              <div style={{ marginBottom: 16 }}>
+                <SegmentedControl<RecipientTab>
+                  value={recipientTab}
+                  onChange={setRecipientTab}
+                  options={[
+                    { value: "user", label: "Membro" },
+                    { value: "lead", label: "Lead" },
+                    { value: "manual", label: "Manual" },
+                  ]}
+                />
               </div>
-            )}
 
-            {/* Message editor with placeholder chips */}
-            <div style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 11, color: "#888", display: "block", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Mensagem</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                {["{{nome}}", "{{cupom}}", "{{link}}", "{{desconto}}"].map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => insertPlaceholder(t)}
-                    style={{
-                      padding: "3px 8px", borderRadius: 999, fontSize: 10, fontWeight: 600,
-                      background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
-                      color: "#f59e0b", cursor: "pointer", fontFamily: "monospace",
-                    }}
-                  >{t}</button>
-                ))}
+              {recipientTab === "user" && (
+                <>
+                  <div className={a.formGroup} style={{ marginBottom: 10 }}>
+                    <label className={a.formLabel}>Buscar membro</label>
+                    <input className={a.formInput} value={searchUser} onChange={(e) => setSearchUser(e.target.value)} placeholder="Nome, e-mail ou telefone…" />
+                  </div>
+                  <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", marginBottom: 16 }}>
+                    {filteredUsers.length === 0 ? (
+                      <p style={{ padding: 16, textAlign: "center", fontSize: 13, color: "var(--text-tertiary)" }}>
+                        {users.length === 0 ? "Carregando membros…" : "Nenhum resultado"}
+                      </p>
+                    ) : (
+                      filteredUsers.map((u) => (
+                        <PickRow key={u.id} selected={selectedUserId === u.id} onClick={() => setSelectedUserId(u.id)} name={u.name} sub={`${u.email} · ${u.phone}`} />
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+
+              {recipientTab === "lead" && (
+                <>
+                  <div className={a.formGroup} style={{ marginBottom: 10 }}>
+                    <label className={a.formLabel}>Buscar lead (não assinantes)</label>
+                    <input className={a.formInput} value={searchLead} onChange={(e) => setSearchLead(e.target.value)} placeholder="Nome, e-mail ou telefone…" />
+                  </div>
+                  <div style={{ maxHeight: 190, overflowY: "auto", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", marginBottom: 16 }}>
+                    {filteredLeads.length === 0 ? (
+                      <p style={{ padding: 16, textAlign: "center", fontSize: 13, color: "var(--text-tertiary)" }}>
+                        {leads.length === 0 ? "Carregando leads…" : "Nenhum lead encontrado"}
+                      </p>
+                    ) : (
+                      filteredLeads.map((l) => (
+                        <PickRow key={l.id} selected={selectedLeadId === l.id} onClick={() => setSelectedLeadId(l.id)} name={l.name || "(sem nome)"} sub={`${l.email} · ${l.phone}`} />
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+
+              {recipientTab === "manual" && (
+                <div className={a.formGrid} style={{ marginBottom: 16 }}>
+                  <div className={`${a.formGroup} ${a.formGroupFull}`}>
+                    <label className={a.formLabel}>Nome *</label>
+                    <input className={a.formInput} value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="Ex: Anderson Sevene" />
+                  </div>
+                  <div className={a.formGroup}>
+                    <label className={a.formLabel}>WhatsApp *</label>
+                    <input className={a.formInput} value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} placeholder="Ex: +258 84 123 4567" />
+                  </div>
+                  <div className={a.formGroup}>
+                    <label className={a.formLabel}>E-mail (opcional)</label>
+                    <input className={a.formInput} value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} placeholder="Ex: anderson@email.com" />
+                  </div>
+                </div>
+              )}
+
+              {/* Editor de mensagem com chips de placeholder */}
+              <div className={a.formGroup} style={{ marginBottom: 12 }}>
+                <label className={a.formLabel}>Mensagem</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                  {["{{nome}}", "{{cupom}}", "{{link}}", "{{desconto}}"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => insertPlaceholder(t)}
+                      style={{
+                        padding: "3px 9px", borderRadius: "var(--radius-full)", fontSize: 11, fontWeight: 600,
+                        background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+                        color: "var(--accent)", cursor: "pointer", fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <textarea ref={messageRef} className={a.formTextarea} value={messageBody} onChange={(e) => setMessageBody(e.target.value)} style={{ minHeight: 130 }} />
               </div>
-              <textarea
-                ref={messageRef}
-                value={messageBody}
-                onChange={(e) => setMessageBody(e.target.value)}
-                style={{
-                  width: "100%", minHeight: 130, padding: 10, borderRadius: 8,
-                  background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.06)",
-                  color: "#fff", fontSize: 13, lineHeight: 1.5, fontFamily: "inherit", resize: "vertical",
-                }}
-              />
-            </div>
 
-            {/* Live preview */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, color: "#888", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                <span>Preview</span>
-                <span style={{ textTransform: "none", letterSpacing: 0, color: "#555", fontSize: 10 }}>{previewLoading ? "atualizando…" : "exatamente como vai chegar"}</span>
-              </label>
-              <pre
-                style={{
-                  margin: 0, padding: 12, background: "#1a1a1a",
-                  border: "1px solid rgba(255,255,255,0.04)", borderRadius: 8,
-                  color: "#ddd", fontSize: 12.5, lineHeight: 1.55, whiteSpace: "pre-wrap",
-                  fontFamily: "inherit", minHeight: 90,
-                }}
-              >
-                {previewText || (canSend ? "(carregando preview…)" : "Selecione o destinatário pra ver o preview.")}
-              </pre>
-            </div>
+              {/* Preview ao vivo */}
+              <div className={a.formGroup} style={{ marginBottom: 16 }}>
+                <label className={a.formLabel} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>Preview</span>
+                  <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400, fontSize: 11, color: "var(--text-tertiary)" }}>
+                    {previewLoading ? "atualizando…" : "exatamente como vai chegar"}
+                  </span>
+                </label>
+                <pre
+                  style={{
+                    margin: 0, padding: 12, background: "var(--bg-surface)",
+                    border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)",
+                    color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.55,
+                    whiteSpace: "pre-wrap", fontFamily: "inherit", minHeight: 90,
+                  }}
+                >
+                  {previewText || (canSend ? "(carregando preview…)" : "Selecione o destinatário para ver o preview.")}
+                </pre>
+              </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setSendModal(null)}
-                style={{
-                  padding: "9px 18px", borderRadius: 8, fontSize: 13, background: "none",
-                  border: "1px solid rgba(255,255,255,0.08)", color: "#888", cursor: "pointer",
-                }}
-              >Cancelar</button>
-              <button
-                onClick={handleSendCoupon}
-                disabled={sendingCoupon || !canSend}
-                style={{
-                  padding: "9px 22px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-                  background: canSend ? "linear-gradient(135deg, #22c55e, #16a34a)" : "rgba(255,255,255,0.04)",
-                  border: "none", color: canSend ? "#fff" : "#666",
-                  cursor: !canSend || sendingCoupon ? "not-allowed" : "pointer",
-                  opacity: sendingCoupon ? 0.7 : 1,
-                }}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <I d={icons.send} size={14} /> {sendingCoupon ? "Enviando…" : "Enviar via WhatsApp"}
-                </span>
-              </button>
+              <div className={a.btnRow}>
+                <button className={a.btnPrimary} onClick={handleSendCoupon} disabled={sendingCoupon || !canSend}>
+                  {sendingCoupon ? "Enviando…" : "Enviar via WhatsApp"}
+                </button>
+                <button className={a.btnSecondary} onClick={() => setSendModal(null)}>Cancelar</button>
+              </div>
             </div>
           </div>
-        </div>
         );
       })()}
 
-      {/* Table */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: "#888" }}>Carregando cupons da Lojou...</div>
-      ) : coupons.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 60, color: "#666" }}>
-          <span style={{ display: "block", marginBottom: 12 }}><I d={icons.ticket} size={40} color="#666" /></span>
-          <p style={{ fontSize: 15, fontWeight: 500, color: "#aaa" }}>Nenhum cupom encontrado</p>
-          <p style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Crie seu primeiro cupom de desconto.</p>
-        </div>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                {["Status", "Código", "Tipo", "Valor", "Usos", "Vinculado", "Criado em", "Ações"].map(h => (
-                  <th key={h} style={{ padding: "10px 12px", fontSize: 11, color: "#888", fontWeight: 500, textAlign: "left", textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {coupons.map(c => (
-                <tr key={c.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", transition: "background 0.15s" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <td style={{ padding: "12px" }}>
-                    <button onClick={() => handleToggle(c)} style={{
-                      padding: "4px 10px", borderRadius: 20, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600,
-                      background: c.active ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.04)",
-                      color: c.active ? "#22c55e" : "#888",
-                    }}>
-                      {c.active ? "● Ativo" : "○ Inativo"}
-                    </button>
-                  </td>
-                  <td style={{ padding: "12px" }}>
-                    <span style={{
-                      padding: "4px 10px", borderRadius: 6, fontSize: 13, fontWeight: 600, fontFamily: "monospace",
-                      background: "rgba(245,158,11,0.08)", color: "#f59e0b", letterSpacing: 1,
-                    }}>{c.code}</span>
-                  </td>
-                  <td style={{ padding: "12px", fontSize: 12, color: "#aaa" }}>
-                    {c.type === "percentage" ? "Percentual" : "Fixo"}
-                  </td>
-                  <td style={{ padding: "12px", fontSize: 14, fontWeight: 600, color: "#fff" }}>
-                    {c.type === "percentage" ? `${c.value}%` : `${c.value} MT`}
-                  </td>
-                  <td style={{ padding: "12px", fontSize: 12, color: "#aaa" }}>
-                    <span style={{ color: "#fff", fontWeight: 600 }}>{c.usesCount || 0}</span>
-                    <span style={{ color: "#666" }}> / {c.maxUses || "∞"}</span>
-                  </td>
-                  <td style={{ padding: "12px", fontSize: 11, color: "#aaa" }}>
-                    {c.linkedUserEmail ? (
-                      <span style={{ padding: "2px 8px", borderRadius: 4, background: "rgba(245,158,11,0.06)", color: "#f59e0b", fontSize: 10 }}>{c.linkedUserEmail}</span>
-                    ) : (
-                      <span style={{ color: "#666" }}>—</span>
-                    )}
-                  </td>
-                  <td style={{ padding: "12px", fontSize: 11, color: "#666" }}>
-                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString("pt-BR") : "—"}
-                  </td>
-                  <td style={{ padding: "12px" }}>
-                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                      <button onClick={() => openSendModal(c.code)} title="Enviar via WhatsApp"
-                        style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(34,197,94,0.15)", background: "none", color: "#22c55e", fontSize: 11, cursor: "pointer" }}>
-                        <I d={icons.send} size={13} color="#22c55e" />
-                      </button>
-                      <button onClick={() => startEdit(c)} title="Editar"
-                        style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)", background: "none", color: "#aaa", fontSize: 11, cursor: "pointer" }}>
-                        <I d={icons.edit} size={13} />
-                      </button>
-                      <button onClick={() => handleDelete(c.id, c.code)} title="Excluir"
-                        style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(239,68,68,0.15)", background: "none", color: "#ef4444", fontSize: 11, cursor: "pointer" }}>
-                        <I d={icons.trash} size={13} color="#ef4444" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Toast */}
-      {toast && (() => {
-        const isSuccess = toast.startsWith("✅");
-        const isWarn = toast.startsWith("🗑️");
-        const bg = isSuccess ? "rgba(45,212,191,0.12)" : isWarn ? "rgba(245,158,11,0.12)" : "rgba(239,68,68,0.12)";
-        const border = isSuccess ? "rgba(45,212,191,0.25)" : isWarn ? "rgba(245,158,11,0.25)" : "rgba(239,68,68,0.25)";
-        const color = isSuccess ? "#2DD4BF" : isWarn ? "#f59e0b" : "#ef4444";
-        const icon = isSuccess ? icons.check : isWarn ? icons.trash : icons.warn;
-        const text = toast.replace(/^[✅🗑️❌]\s*/, "");
-        return (
-          <div style={{
-            position: "fixed", bottom: 24, right: 24, zIndex: 200,
-            padding: "12px 20px", borderRadius: 10, display: "flex", alignItems: "center", gap: 8,
-            background: bg, border: `1px solid ${border}`, color, fontSize: 13, fontWeight: 500,
-            backdropFilter: "blur(12px)",
-          }}><I d={icon} size={16} color={color} /> {text}</div>
-        );
-      })()}
-    </div>
+      {toast && <div className={a.toast}>{toast}</div>}
+    </>
   );
 }

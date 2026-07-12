@@ -13,6 +13,7 @@ import {
 import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
+import { pageArgs, paginated } from '../lib/pagination';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
@@ -114,16 +115,40 @@ router.get('/leads', async (req: AuthRequest, res: Response) => {
     const window = dateWindowFromQuery(period, req.query.from as string, req.query.to as string);
     if (window) where.createdAt = window;
 
-    const leads = await prisma.user.findMany({
-      where: { ...where, role: 'member' },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true, name: true, email: true, phone: true,
-        subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, leadSource: true, createdAt: true,
-      },
-    });
+    const { page, pageSize, skip, take } = pageArgs(req);
+    const listWhere = { ...where, role: 'member' as const };
 
-    res.json({ leads, total: leads.length });
+    // Page of rows + total matching the SAME filters (drives pagination).
+    const [items, total] = await Promise.all([
+      prisma.user.findMany({
+        where: listWhere,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true, name: true, email: true, phone: true,
+          subscriptionStatus: true, subscriptionEnd: true, lojouOrderId: true, leadSource: true, createdAt: true,
+        },
+      }),
+      prisma.user.count({ where: listWhere }),
+    ]);
+
+    // Header KPIs — global over the members base (independent of page/filters),
+    // pure COUNTs so we never load the list twice. "subscribers" mirrors this
+    // endpoint's own paid/subscriber definition (active + lojouOrderId set).
+    const todayWindow = dateWindowFromQuery('today');
+    const [totalLeads, subscribers, newToday] = await Promise.all([
+      prisma.user.count({ where: { role: 'member', subscriptionStatus: 'lead' } }),
+      prisma.user.count({ where: { role: 'member', subscriptionStatus: 'active', lojouOrderId: { not: null } } }),
+      prisma.user.count({ where: { role: 'member', ...(todayWindow ? { createdAt: todayWindow } : {}) } }),
+    ]);
+    const conversionDenom = totalLeads + subscribers;
+    const conversionRate = conversionDenom > 0 ? Math.round((subscribers / conversionDenom) * 1000) / 10 : 0;
+
+    const metrics = { totalLeads, subscribers, newToday, conversionRate };
+
+    // `leads` kept as an alias of `items` for backward compat with the old front.
+    res.json({ ...paginated(items, total, page, pageSize), leads: items, metrics });
   } catch (error) {
     console.error('[ADMIN] Leads error:', error);
     res.status(500).json({ error: 'Erro ao carregar leads' });
@@ -2541,10 +2566,27 @@ router.post('/platform-test-alert', async (req: AuthRequest, res: Response) => {
 // COUPON MANAGEMENT (Local DB + Lojou Sync)
 // ═══════════════════════════════════════
 
-router.get('/cupons', async (_req: AuthRequest, res: Response) => {
+router.get('/cupons', async (req: AuthRequest, res: Response) => {
   try {
-    const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: 'desc' } });
-    return res.json({ coupons });
+    const { page, pageSize, skip, take } = pageArgs(req);
+    const [items, total, activeCount, usesAgg] = await Promise.all([
+      prisma.coupon.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        select: {
+          id: true, code: true, type: true, value: true, maxUses: true, usesCount: true,
+          active: true, lojouId: true, linkedUserId: true, linkedUserEmail: true,
+          createdAt: true, updatedAt: true,
+        },
+      }),
+      prisma.coupon.count(),
+      prisma.coupon.count({ where: { active: true } }),
+      prisma.coupon.aggregate({ _sum: { usesCount: true } }),
+    ]);
+    const metrics = { active: activeCount, totalUses: usesAgg._sum.usesCount ?? 0 };
+    // `coupons` kept as an alias of `items` for backward compat with the old front.
+    return res.json({ ...paginated(items, total, page, pageSize), coupons: items, metrics });
   } catch (error) {
     console.error('[ADMIN] List coupons error:', error);
     return res.status(500).json({ error: 'Erro ao listar cupons' });
@@ -2904,15 +2946,23 @@ router.post('/cupons/preview', async (req: AuthRequest, res: Response) => {
  * Returns every affiliate account with rollup stats (referrals, commissions,
  * withdrawals).
  */
-router.get('/affiliates', async (_req: AuthRequest, res: Response) => {
+router.get('/affiliates', async (req: AuthRequest, res: Response) => {
   try {
-    const accounts = await prisma.affiliateAccount.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
-      },
-    });
+    const { page, pageSize, skip, take } = pageArgs(req);
+    const [accounts, total] = await Promise.all([
+      prisma.affiliateAccount.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, name: true, email: true, phone: true } },
+        },
+      }),
+      prisma.affiliateAccount.count(),
+    ]);
 
+    // Rollups are per-affiliate, so grouping over just this page's ids keeps
+    // every visible row's sales/valor/saldo intact.
     const ids = accounts.map((a) => a.id);
     const [referralCounts, commissionAggs, withdrawalAggs] = await Promise.all([
       prisma.affiliateReferral.groupBy({
@@ -2980,7 +3030,8 @@ router.get('/affiliates', async (_req: AuthRequest, res: Response) => {
       };
     });
 
-    return res.json({ affiliates });
+    // `affiliates` kept as an alias of `items` for backward compat with the old front.
+    return res.json({ ...paginated(affiliates, total, page, pageSize), affiliates });
   } catch (error) {
     console.error('[ADMIN] affiliates list error:', error);
     return res.status(500).json({ error: 'Erro ao carregar afiliados' });

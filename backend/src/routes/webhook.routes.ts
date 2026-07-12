@@ -165,9 +165,13 @@ const CLOSE_FRIENDS_EXTRA_DAYS = 60; // +2 months on top of the base month
 router.post('/lojou', async (req: Request, res: Response) => {
   try {
     // ── SECURITY LAYER 1: Webhook Secret ──
-    // Só via header. Aceitar por ?secret= gravava o segredo nos logs de acesso
-    // (pino-http/nginx logam a URL completa). Comparação constant-time.
-    const webhookSecret = req.headers['x-lojou-webhook-secret'];
+    // A Lojou ENVIA o segredo por QUERY (?secret=), não por header — aceitamos os
+    // DOIS (header preferencial). Aceitar só header quebrou TODOS os webhooks da
+    // Lojou (401) e travou a entrega de acesso pós-compra. Comparação constant-time.
+    // (Vazamento em log mitigado pela redação de query.secret no pino-http.)
+    const webhookSecret =
+      (req.headers['x-lojou-webhook-secret'] as string | undefined) ||
+      (req.query.secret as string | undefined);
     if (!env.LOJOU_WEBHOOK_SECRET || !safeSecretEqual(webhookSecret, env.LOJOU_WEBHOOK_SECRET)) {
       console.warn('[WEBHOOK] 🚨 REJECTED — invalid or missing webhook secret');
       return res.status(401).json({ error: 'Unauthorized' });

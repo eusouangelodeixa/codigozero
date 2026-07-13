@@ -4,8 +4,6 @@ import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
 import {
   ChevronDown as IconChevron,
-  Star as IconStar,
-  Shield as IconShield,
   Instagram as IconInstagram,
   Play as IconPlay,
 } from "lucide-react";
@@ -23,7 +21,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 // /public/founders keeping these exact names (see public/founders/README.md).
 const FOUNDER_GALLERY = {
   portrait: { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero" },
-  ig: { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram com 2.625 seguidores" },
+  ig: { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram" },
   pix: { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix — primeira parcela de R$ 3.330 do contrato da Mira" },
 };
 
@@ -406,13 +404,7 @@ export default function LandingPage({
 
 
   // Dynamic arrays with fallbacks (DB override via sec.* still wins).
-  const notLines = (sec.notLines || DEFAULTS.notLines) as string[];
-  const clinicParas = (sec.clinicParas || DEFAULTS.clinicParas) as string[];
   const founderCreds = (sec.founderCreds || DEFAULTS.founderCreds) as string[];
-  const ecoFeatures = (sec.ecoFeatures || DEFAULTS.ecoFeatures) as { emoji: string; title: string; desc: string }[];
-  const networkPillars = (sec.networkPillars || DEFAULTS.networkPillars) as { title: string; desc: string }[];
-  const radarSteps = (sec.radarSteps || DEFAULTS.radarSteps) as string[];
-  const flowSteps = (sec.flowSteps || DEFAULTS.flowSteps) as { num: string; title: string; desc: string }[];
   const faqItems = (sec.faqItems || DEFAULTS.faqItems) as { q: string; a: string }[];
 
   // FAQ toggle state — only one open at a time keeps the page tidy.
@@ -568,7 +560,6 @@ export default function LandingPage({
           <motion.div className={styles.heroContent} {...reveal}>
             <h1 className={styles.heroTitle}>{t("heroTitle")}</h1>
             <p className={styles.heroSubtitle}>{renderBold(t("heroSubtitle"))}</p>
-            <p className={styles.heroDesc}>{renderBold(t("heroDesc"))}</p>
             <div className={styles.heroCtaWrap}>
               <CtaLink className={styles.heroCta}>{t("heroCtaText")}</CtaLink>
               <p className={styles.heroSubCta}>{t("heroSubCta")}</p>
@@ -583,67 +574,23 @@ export default function LandingPage({
             viewport={{ once: true, margin: "-80px" }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className={styles.vslWrapper}>
-              <div className={styles.vslBar}>
-                <span className={`${styles.vslDot} ${styles.vslDotR}`} />
-                <span className={`${styles.vslDot} ${styles.vslDotY}`} />
-                <span className={`${styles.vslDot} ${styles.vslDotG}`} />
-                <span className={styles.vslBarTitle}>{t("vslTitle")}</span>
-              </div>
-
-              {(coproducerContext?.vslEmbedHtml || affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml) ? (
-                <div
-                  className={styles.vslEmbed}
-                  dangerouslySetInnerHTML={{
-                    __html: coproducerContext?.vslEmbedHtml || affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml,
-                  }}
-                />
-              ) : (
-                <div className={styles.vslPlaceholder}>
-                  <div className={styles.vslPlayBtn}>
-                    <IconPlay size={28} fill="currentColor" strokeWidth={0} />
-                  </div>
-                  <p className={styles.vslText}>{t("vslSubtitle")}</p>
-                  <p className={styles.vslHint}>{t("vslHint")}</p>
+            {/* VSL solta — sem o container/barra de "navegador" (modelo DR) */}
+            {(coproducerContext?.vslEmbedHtml || affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml) ? (
+              <div
+                className={styles.vslEmbed}
+                dangerouslySetInnerHTML={{
+                  __html: coproducerContext?.vslEmbedHtml || affiliateContext?.affiliateVslEmbedHtml || cfg.vslEmbedHtml,
+                }}
+              />
+            ) : (
+              <div className={styles.vslPlaceholder}>
+                <div className={styles.vslPlayBtn}>
+                  <IconPlay size={28} fill="currentColor" strokeWidth={0} />
                 </div>
-              )}
-            </div>
-          </motion.div>
-        </section>
-
-        {/* O QUE ISSO NÃO É */}
-        <section className={styles.section}>
-          <motion.div {...reveal} className={styles.notBlock}>
-            <span className={styles.sectionLabel}>{t("notLabel")}</span>
-            <h2 className={styles.sectionTitle}>{t("notTitle")}</h2>
-            <div className={styles.notLines}>
-              {notLines.map((line, i) => (
-                <p key={i} className={styles.notLine}>{renderBold(line)}</p>
-              ))}
-            </div>
-          </motion.div>
-        </section>
-
-        {/* COMO ISSO VIRA DINHEIRO DE VERDADE (clinic story) */}
-        <section className={styles.section}>
-          <motion.div {...reveal} className={styles.clinicBlock}>
-            <span className={styles.sectionLabel}>{t("clinicLabel")}</span>
-            <h2 className={styles.clinicTitle}>{t("clinicTitle")}</h2>
-            <div className={styles.clinicParas}>
-              {clinicParas.map((p, i) => (
-                <p key={i} className={styles.clinicPara}>{renderBold(p)}</p>
-              ))}
-            </div>
-          </motion.div>
-        </section>
-
-        {/* OS NÚMEROS, SEM INFLAR */}
-        <section className={styles.section}>
-          <motion.div {...reveal} className={styles.numbersCard}>
-            <span className={styles.sectionLabel}>{t("numbersLabel")}</span>
-            <h2 className={styles.numbersTitle}>{t("numbersTitle")}</h2>
-            <p className={styles.numbersLine}>{renderBold(t("numbersLine1"))}</p>
-            <p className={styles.numbersLineHi}>{renderBold(t("numbersLine2"))}</p>
+                <p className={styles.vslText}>{t("vslSubtitle")}</p>
+                <p className={styles.vslHint}>{t("vslHint")}</p>
+              </div>
+            )}
           </motion.div>
         </section>
 
@@ -673,9 +620,6 @@ export default function LandingPage({
                     height={747}
                     className={styles.founderProofImg}
                   />
-                  <figcaption className={styles.founderProofCap}>
-                    Meu Instagram — <strong>@eusouangelodeixa</strong>, 2.625 seguidores.
-                  </figcaption>
                 </figure>
               </div>
             </div>
@@ -700,193 +644,11 @@ export default function LandingPage({
                 className={styles.founderProofImg}
               />
               <figcaption className={styles.founderProofCap}>
-                Comprovante da primeira parcela do contrato da Mira — <strong>R$ 3.330</strong>.
+                Comprovante da 1ª parcela — <strong>R$ 3.330</strong> (contrato da Mira).
               </figcaption>
             </figure>
 
             <p className={styles.founderClosing}>{t("founderClosing")}</p>
-          </motion.div>
-        </section>
-
-        {/* O ECOSSISTEMA POR DENTRO — 5 features (substitui StackScrolly) */}
-        <section id="ferramentas" className={styles.section}>
-          <motion.div {...reveal} className={styles.sectionHead}>
-            <span className={styles.sectionLabel}>{t("stackLabel")}</span>
-            <h2 className={styles.sectionTitle} style={{ marginLeft: "auto", marginRight: "auto" }}>
-              {t("stackTitle")}{" "}
-              <span className={styles.sectionTitleHighlight}>{t("stackTitleHighlight")}</span>
-            </h2>
-            <p className={styles.sectionDesc}>{t("stackDesc")}</p>
-          </motion.div>
-
-          <div className={styles.ecoGrid}>
-            {ecoFeatures.map((f, i) => (
-              <motion.div
-                key={i}
-                className={styles.ecoCard}
-                initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.5, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <div className={styles.ecoEmoji} aria-hidden>{f.emoji}</div>
-                <h3 className={styles.ecoTitle}>{f.title}</h3>
-                <p className={styles.ecoDesc}>{renderBold(f.desc)}</p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* A NETWORK */}
-        <section id="network" className={styles.networkSection}>
-          <motion.div {...reveal} className={styles.networkInner}>
-            <div className={styles.networkText}>
-              <span className={styles.sectionLabel}>{t("networkLabel")}</span>
-              <h2 className={styles.sectionTitle}>
-                {t("networkTitle")}{" "}
-                <span className={styles.sectionTitleHighlight}>{t("networkTitleHighlight")}</span>
-              </h2>
-              <p className={styles.sectionDesc}>{renderBold(t("networkDesc"))}</p>
-
-              <div className={styles.networkCount}>
-                <span className={styles.networkCountValue}>{t("networkMembersCount")}</span>
-                <span className={styles.networkCountLabel}>{t("networkMembersLabel")}</span>
-                <span className={styles.networkLiveDot} />
-                <span className={styles.networkLiveText}>ao vivo agora</span>
-              </div>
-
-              <ul className={styles.networkPillars}>
-                {networkPillars.map((p, i) => (
-                  <li key={i} className={styles.networkPillar}>
-                    <span className={styles.networkPillarNum}>0{i + 1}</span>
-                    <div>
-                      <h4 className={styles.networkPillarTitle}>{p.title}</h4>
-                      <p className={styles.networkPillarDesc}>{p.desc}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <motion.div
-              className={styles.networkImageWrap}
-              initial={reduceMotion ? false : { opacity: 0, x: 32 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-80px" }}
-              transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <div className={styles.networkImageGlow} aria-hidden />
-              <Image
-                src="/comunidade-upgrade.png"
-                alt="Network privada do Código Zero: 222 membros ativos"
-                width={1179}
-                height={885}
-                className={styles.networkImage}
-                priority={false}
-              />
-            </motion.div>
-          </motion.div>
-        </section>
-
-        {/* COMO O RADAR FUNCIONA (na prática) */}
-        <section className={styles.section}>
-          <motion.div {...reveal} className={styles.sectionHead}>
-            <span className={styles.sectionLabel}>{t("radarLabel")}</span>
-            <h2 className={styles.sectionTitle} style={{ marginLeft: "auto", marginRight: "auto" }}>{t("radarTitle")}</h2>
-          </motion.div>
-
-          <ol className={styles.radarSteps}>
-            {radarSteps.map((step, i) => (
-              <motion.li
-                key={i}
-                className={styles.radarStep}
-                initial={reduceMotion ? false : { opacity: 0, x: -16 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.45, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <span className={styles.radarStepNum}>{i + 1}</span>
-                <span className={styles.radarStepText}>{renderBold(step)}</span>
-              </motion.li>
-            ))}
-          </ol>
-
-          <motion.p {...reveal} className={styles.radarClosing}>{renderBold(t("radarClosing"))}</motion.p>
-        </section>
-
-        {/* A OFERTA — PRICING + CLOSE FRIENDS */}
-        <section id="preco" className={styles.pricingSection}>
-          <motion.div {...reveal} className={styles.scarcityBlock}>
-            <span className={styles.sectionLabel}>{t("scarcityLabel")}</span>
-            <h3 className={styles.scarcityTitle}>{t("scarcityTitle")}</h3>
-            <p className={styles.scarcityText}>{renderBold(t("scarcityDesc"))}</p>
-          </motion.div>
-
-          <motion.div
-            className={styles.pricingCard}
-            initial={reduceMotion ? false : { opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <div className={styles.priceBig}>
-              {t("priceAmount")} <span className={styles.priceAccent}>{t("pricePeriod")}</span>
-            </div>
-            <p className={styles.priceSub}>{renderBold(t("priceSub"))}</p>
-            <CtaLink className={styles.priceCta}>{t("priceCtaText")}</CtaLink>
-
-            <div className={styles.cfCallout}>
-              <span className={styles.cfBadge}>
-                <IconStar size={12} fill="currentColor" strokeWidth={0} />
-                {t("closeFriendsLabel")}
-              </span>
-              <h4 className={styles.cfTitle}>{t("closeFriendsTitle")}</h4>
-              <p className={styles.cfDesc}>{renderBold(t("closeFriendsDesc"))}</p>
-            </div>
-          </motion.div>
-        </section>
-
-        {/* COMO FUNCIONA — DO PAGAMENTO À PRIMEIRA CALL (FLOW) */}
-        <section className={styles.section}>
-          <motion.div {...reveal} className={styles.sectionHead}>
-            <span className={styles.sectionLabel}>{t("flowLabel")}</span>
-            <h2 className={styles.sectionTitle} style={{ marginLeft: "auto", marginRight: "auto" }}>
-              {t("flowTitle")}{" "}
-              <span className={styles.sectionTitleHighlight}>{t("flowTitleHighlight")}</span>
-            </h2>
-          </motion.div>
-
-          <div className={styles.flowGrid}>
-            {flowSteps.map((step, i) => (
-              <motion.div
-                key={i}
-                className={styles.flowStep}
-                initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.5, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <span className={styles.flowNum}>{step.num}</span>
-                <h3 className={styles.flowTitle}>{step.title}</h3>
-                <p className={styles.flowDesc}>{step.desc}</p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-
-        {/* GARANTIA */}
-        <section className={styles.guaranteeSection}>
-          <motion.div {...reveal} className={styles.guaranteeCard}>
-            <div className={styles.guaranteeShield}>
-              <IconShield size={40} strokeWidth={1.5} />
-            </div>
-            <span className={styles.guaranteeLabel}>{t("guaranteeLabel")}</span>
-            <h2 className={styles.guaranteeTitle}>{t("guaranteeTitle")}</h2>
-            {t("guaranteeText1") && <p className={styles.guaranteeText}>{renderBold(t("guaranteeText1"))}</p>}
-            {t("guaranteeText2") && <p className={styles.guaranteeText}>{renderBold(t("guaranteeText2"))}</p>}
-            <p className={styles.guaranteeHighlight}>{renderBold(t("guaranteeHighlight"))}</p>
-            <p className={styles.guaranteeConclusion}>{t("guaranteeConclusion")}</p>
-            <CtaLink className={styles.guaranteeCta}>{t("guaranteeCtaText")}</CtaLink>
           </motion.div>
         </section>
 
@@ -936,33 +698,19 @@ export default function LandingPage({
           </motion.div>
         </section>
 
-        {/* FOOTER */}
+        {/* FOOTER — minimalista */}
         <footer className={styles.footer}>
-          <div className={styles.footerInner}>
-            <div>
-              <div className={styles.footerLogo}><Logo size={24} /></div>
-              <p className={styles.footerDesc}>{t("footerDesc")}</p>
-              <a href="https://www.instagram.com/ocodigozero_/" target="_blank" rel="noopener noreferrer" className={styles.footerLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                <IconInstagram size={16} strokeWidth={1.5} />
-                @ocodigozero_
+          <div className={styles.footerMinimal}>
+            <Logo size={22} />
+            <nav className={styles.footerLinksRow}>
+              <a href="/login" className={styles.footerLink}>Área de Membros</a>
+              <a href="/termos" className={styles.footerLink}>Termos</a>
+              <a href="/privacidade" className={styles.footerLink}>Privacidade</a>
+              <a href="https://www.instagram.com/ocodigozero_/" target="_blank" rel="noopener noreferrer" className={styles.footerLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <IconInstagram size={15} strokeWidth={1.5} />@ocodigozero_
               </a>
-            </div>
-            <div>
-              <h4 className={styles.footerColTitle}>Links</h4>
-              <div className={styles.footerLinks}>
-                <a href="/login" className={styles.footerLink}>Área de Membros</a>
-              </div>
-            </div>
-            <div>
-              <h4 className={styles.footerColTitle}>Legal</h4>
-              <div className={styles.footerLinks}>
-                <a href="/termos" className={styles.footerLink}>Termos de Uso</a>
-                <a href="/privacidade" className={styles.footerLink}>Privacidade</a>
-              </div>
-            </div>
-          </div>
-          <div className={styles.footerBottom}>
-            © {new Date().getFullYear()} Código Zero. Todos os direitos reservados.
+            </nav>
+            <span className={styles.footerCopy}>© {new Date().getFullYear()} Código Zero</span>
           </div>
         </footer>
       </div>

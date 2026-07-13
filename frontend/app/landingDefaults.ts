@@ -9,7 +9,7 @@ export const LANDING_DEFAULTS = {
   heroSubtitle: "Sem código. Sem gastar um metical em anúncio. Sem promessa furada.",
   heroDesc: "O ecossistema que te entrega a ferramenta que **acha os clientes**, os **scripts que fecham** e a **comunidade que te ensina a construir** — pra você prestar serviço pra empresas em Moçambique e fechar o seu primeiro contrato.",
   heroCtaText: "Quero entrar no Código Zero (497 MT/mês)",
-  heroSubCta: "M-Pesa · e-Mola · Cartão · Acesso na hora, direto no teu WhatsApp.",
+  heroSubCta: "Plataforma de ensino · assinatura mensal · M-Pesa, e-Mola ou Cartão · acesso na hora no teu WhatsApp.",
   ctaText: "Entrar no Código Zero",
 
   // ── VSL ──────────────────────────────────────────────────────────────
@@ -46,10 +46,10 @@ export const LANDING_DEFAULTS = {
   founderLabel: "Quem está falando com você",
   founderIntro: "Eu sou o **Ângelo Deixa.** Moçambicano, 20 anos, morando no Brasil, apaixonado por engenharia da computação. No digital eu já construí coisas que mexeram com o negócio de vários empreendedores moçambicanos:",
   founderCreds: [
-    "**CMO e sócio da Lojou** — plataforma de venda de infoprodutos que já processou **mais de 2 milhões de meticais.**",
-    "**CEO da Kilax** — plataforma de hospedagem de VSLs (vídeos de vendas).",
-    "**COO da Klick Builder** — plataforma de domínio e hospedagem, fundada pelo Gastene Felipe, sócio e amigo, empreendedor que você talvez já conheça.",
-    "**Sócio da Mira** — startup que tenho com um sócio brasileiro, onde usamos tecnologia pra resolver problema de empresa. O último contrato que fechamos foi de **R$ 20 mil pra desenvolver um e-commerce** — a primeira parcela paga foi de **3.330 reais, mais de 40 mil meticais.**",
+    "**CMO e sócio da Lojou** — infoprodutos; já processou **+2 milhões de MT.**",
+    "**CEO da Kilax** — hospedagem de VSLs (vídeos de venda).",
+    "**COO da Klick Builder** — domínios e hospedagem (do Gastene Felipe, meu sócio).",
+    "**Sócio da Mira** — tecnologia pra empresas; último contrato de **R$ 20 mil** (1ª parcela: **R$ 3.330 ≈ +40 mil MT**).",
   ],
   founderClosing: "Eu não vou te ensinar nada que eu não faça todo dia.",
 

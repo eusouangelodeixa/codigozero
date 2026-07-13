@@ -527,6 +527,22 @@
 
 /* ═══ FOOTER ═══ */
 .footer { border-top: 1px solid var(--border-subtle); padding: var(--space-10) var(--space-6); }
+.footerMinimal {
+  max-width: var(--content-max-width, 1200px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+.footerLinksRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) var(--space-5);
+}
+.footerCopy { font-size: var(--type-small); color: var(--text-tertiary); }
 .footerInner {
   max-width: 1200px; margin: 0 auto;
   display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--space-10);
@@ -1325,19 +1341,19 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 .founderCred {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-glass);
   border: 1px solid var(--border-default);
-  border-radius: 12px;
-  font-size: var(--type-body);
+  border-radius: 10px;
+  font-size: var(--type-small);
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.5;
   transition: border-color 0.2s ease;
 }
 .founderCred:hover { border-color: var(--accent-border); }

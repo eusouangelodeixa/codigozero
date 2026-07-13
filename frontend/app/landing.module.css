@@ -236,7 +236,7 @@
   padding: var(--space-12) var(--space-6) var(--space-10);
 }
 .heroContent {
-  max-width: 680px; animation: slideUp 0.5s ease forwards;
+  max-width: 760px; animation: slideUp 0.5s ease forwards;
   margin: 0 auto var(--space-10); text-align: center;
 }
 .heroTags { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-6); }
@@ -252,8 +252,8 @@
   animation: pulse 2s ease-in-out infinite;
 }
 .heroTitle {
-  font-size: clamp(1.6rem, 3.4vw, 2.35rem); font-weight: 800; color: var(--text-primary);
-  line-height: 1.18; letter-spacing: -0.03em; margin-bottom: var(--space-3);
+  font-size: clamp(1.5rem, 2.6vw, 2.05rem); font-weight: 800; color: var(--text-primary);
+  line-height: 1.2; letter-spacing: -0.02em; margin-bottom: var(--space-3);
 }
 .heroHighlight { color: var(--accent); font-style: italic; }
 .heroSubtitle {

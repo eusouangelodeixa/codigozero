@@ -690,14 +690,13 @@ export default function LandingPage({
           <div className={styles.footerMinimal}>
             <Logo size={22} />
             <nav className={styles.footerLinksRow}>
-              <a href="/login" className={styles.footerLink}>Área de Membros</a>
               <a href="/termos" className={styles.footerLink}>Termos</a>
               <a href="/privacidade" className={styles.footerLink}>Privacidade</a>
               <a href="https://www.instagram.com/ocodigozero_/" target="_blank" rel="noopener noreferrer" className={styles.footerLink} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                 <IconInstagram size={15} strokeWidth={1.5} />@ocodigozero_
               </a>
+              <span className={styles.footerCopy}>© {new Date().getFullYear()} Código Zero</span>
             </nav>
-            <span className={styles.footerCopy}>© {new Date().getFullYear()} Código Zero</span>
           </div>
         </footer>
       </div>

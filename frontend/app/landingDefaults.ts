@@ -132,17 +132,18 @@ export const LANDING_DEFAULTS = {
   faqLabel: "Perguntas frequentes",
   faqTitle: "O que costumam perguntar.",
   faqItems: [
-    { q: "Preciso saber programar?", a: "Não. O Código Zero foi feito pra quem nunca abriu uma IDE. O Radar é por botão, o Disparador é por botão, as aulas te ensinam a usar IAs visuais. Quando aparece código, é só copiar e colar." },
-    { q: "Quanto tempo até o primeiro resultado?", a: "Depende de você executar. Quem entra, usa o Radar, dispara os scripts e aparece nas calls, costuma ter conversa real com cliente nos primeiros dias. Fechar contrato é questão de volume e de seguir o método — eu não prometo prazo mágico, prometo o caminho." },
-    { q: "O número de WhatsApp que vou usar bloqueia?", a: "Nas aulas eu te mostro exatamente como disparar com segurança pra reduzir esse risco — aquecimento de número, volume certo e abordagem que não parece spam. Feito do jeito que ensino, o risco é baixo." },
-    { q: "Cancelar é fácil?", a: "É. É uma assinatura. Se quiser sair, cancela e pronto — sem fidelidade, sem multa, sem ligação de retenção." },
-    { q: "Já tentei vender curso de IA e não funcionou. Aqui é diferente?", a: "Aqui você não está comprando \"curso\". Você está entrando num ecossistema que te dá a **ferramenta que acha o cliente**, os **scripts que fecham** e a **comunidade que destrava** quando você trava. A diferença é que aqui tem execução, não só teoria." },
+    { q: "O Código Zero é uma assinatura mensal? E se eu parar de pagar?", a: "Sim, é uma assinatura de **497 MT por mês**. Enquanto está ativa, você acessa tudo: plataforma, ferramentas, aulas e comunidade. Se parar de pagar, o acesso pausa e você volta quando quiser — sem fidelidade, sem multa, cancela num clique." },
+    { q: "Preciso saber programar pra criar e vender SaaS ou automações?", a: "Não. A plataforma te ensina a montar SaaS e automações com ferramentas visuais e de IA, do zero e passo a passo. Quando aparece código, é copiar e colar. O objetivo é você entregar uma solução que funciona — não virar programador." },
+    { q: "Como eu consigo os primeiros clientes?", a: "Dentro da plataforma você tem o **Radar**, que acha empresas com telefone, Instagram e site prontas pra abordar, e os **scripts** de prospecção já testados. A abordagem é por WhatsApp, sem gastar em anúncio, e as aulas mostram como conduzir a call e fechar a primeira venda." },
+    { q: "Em quanto tempo dá pra faturar meus primeiros R$ 10 mil?", a: "Depende de você executar. Quem usa o Radar, dispara os scripts e aparece nas calls costuma ter conversa real com cliente nos primeiros dias. Chegar aos R$ 10 mil é questão de volume e de seguir o método — não prometo prazo mágico, prometo o caminho e as ferramentas." },
+    { q: "Funciona pra mim, que estou em Moçambique (ou no Brasil)?", a: "Sim. O pagamento é por **M-Pesa, e-Mola ou cartão** e o acesso cai na hora no teu WhatsApp. O método serve pra vender pra empresas em Moçambique, no Brasil ou em qualquer lugar — muda só quem você prospecta." },
+    { q: "Já tentei infoproduto, dropshipping ou curso de IA e não deu certo. Aqui é diferente?", a: "É. Aqui você não compra \"mais um curso\": entra numa plataforma que te dá a **ferramenta que acha o cliente**, os **scripts que fecham** e a **comunidade que destrava** quando você trava. É execução de verdade, vendendo software que resolve problema real de empresa." },
   ],
 
   // ── CTA final ────────────────────────────────────────────────────────
   finalCtaTitle: "O acesso é imediato. A próxima call é no domingo.",
   finalCtaDesc: "Foi um prazer ter você até aqui. Agora é clicar e dar o próximo passo — eu te espero do outro lado.",
-  finalCtaText: "Garantir minha vaga (497 MT/mês)",
+  finalCtaText: "Assinar agora (497 MT/mês)",
 
   // ── Footer ───────────────────────────────────────────────────────────
   footerDesc: "Código Zero — o ecossistema de tecnologia pra criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",

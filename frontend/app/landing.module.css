@@ -252,13 +252,13 @@
   animation: pulse 2s ease-in-out infinite;
 }
 .heroTitle {
-  font-size: clamp(2rem, 4.5vw, 3.2rem); font-weight: 800; color: var(--text-primary);
-  line-height: 1.1; letter-spacing: -0.04em; margin-bottom: var(--space-3);
+  font-size: clamp(1.6rem, 3.4vw, 2.35rem); font-weight: 800; color: var(--text-primary);
+  line-height: 1.18; letter-spacing: -0.03em; margin-bottom: var(--space-3);
 }
 .heroHighlight { color: var(--accent); font-style: italic; }
 .heroSubtitle {
-  font-size: var(--type-h3); color: var(--text-secondary); font-weight: 500;
-  margin-bottom: var(--space-5); font-style: italic;
+  font-size: clamp(0.95rem, 1.6vw, 1.1rem); color: var(--text-secondary); font-weight: 500;
+  margin-bottom: var(--space-5); font-style: italic; line-height: 1.55;
 }
 .heroDesc {
   font-size: var(--type-body); color: var(--text-tertiary); line-height: 1.7;

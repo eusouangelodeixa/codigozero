@@ -546,24 +546,11 @@ export default function LandingPage({
       {/* Main Landing */}
       {gateOpen === false && (
       <div>
-        {/* NAV */}
-        <nav className={styles.nav}>
-          <div className={styles.navInner}>
-            <div className={styles.navLogo}>
-              <Logo size={26} />
-            </div>
-          </div>
-        </nav>
-
         {/* HERO */}
         <section className={styles.hero}>
           <motion.div className={styles.heroContent} {...reveal}>
             <h1 className={styles.heroTitle}>{t("heroTitle")}</h1>
             <p className={styles.heroSubtitle}>{renderBold(t("heroSubtitle"))}</p>
-            <div className={styles.heroCtaWrap}>
-              <CtaLink className={styles.heroCta}>{t("heroCtaText")}</CtaLink>
-              <p className={styles.heroSubCta}>{t("heroSubCta")}</p>
-            </div>
           </motion.div>
 
           {/* VSL */}

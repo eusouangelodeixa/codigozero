@@ -5,8 +5,8 @@
 
 export const LANDING_DEFAULTS = {
   // ── Hero ─────────────────────────────────────────────────────────────
-  heroTitle: "Aprende a criar e vender soluções de IA pra empresas.",
-  heroSubtitle: "Sem código. Sem gastar um metical em anúncio. Sem promessa furada.",
+  heroTitle: "Construa e venda SaaS e automações — mesmo começando do absoluto zero.",
+  heroSubtitle: "O caminho pra sair da estaca zero e faturar seus primeiros R$ 10 mil vendendo software que resolve problema real.",
   heroDesc: "O ecossistema que te entrega a ferramenta que **acha os clientes**, os **scripts que fecham** e a **comunidade que te ensina a construir** — pra você prestar serviço pra empresas em Moçambique e fechar o seu primeiro contrato.",
   heroCtaText: "Quero entrar no Código Zero (497 MT/mês)",
   heroSubCta: "Plataforma de ensino · assinatura mensal · M-Pesa, e-Mola ou Cartão · acesso na hora no teu WhatsApp.",

@@ -15,7 +15,7 @@ export const AFFILIATE_RULES = {
   platformFixed: 10,              // ...+ 10 MZN, deducted from gross commission
   withdrawalPercent: 0.03,        // withdrawal fee = 3% of requested...
   withdrawalFixed: 45,            // ...+ 45 MZN
-  minWithdrawal: 1000,
+  minWithdrawal: 100,
   availableAfterDays: 7,          // commissions become withdrawable D+7
 };
 

@@ -337,9 +337,9 @@ export default function AfiliacaoPage() {
             <span className={styles.statLabel}>Disponível para saque</span>
             <span className={styles.statValueAccent}>{fmtMzn(balance?.available ?? 0)} MT</span>
             <span className={styles.statHint}>
-              {(balance?.available ?? 0) >= (rules?.minWithdrawal ?? 1000)
+              {(balance?.available ?? 0) >= (rules?.minWithdrawal ?? 100)
                 ? "Você pode solicitar agora"
-                : `Mínimo: ${fmtMzn(rules?.minWithdrawal ?? 1000)} MT`}
+                : `Mínimo: ${fmtMzn(rules?.minWithdrawal ?? 100)} MT`}
             </span>
           </div>
         </Card>
@@ -370,13 +370,13 @@ export default function AfiliacaoPage() {
         <Button
           variant="primary"
           onClick={() => setShowWithdraw((v) => !v)}
-          disabled={(balance?.available ?? 0) < (rules?.minWithdrawal ?? 1000)}
+          disabled={(balance?.available ?? 0) < (rules?.minWithdrawal ?? 100)}
         >
           {showWithdraw ? "Fechar saque" : "Solicitar saque"}
         </Button>
-        {(balance?.available ?? 0) < (rules?.minWithdrawal ?? 1000) && (
+        {(balance?.available ?? 0) < (rules?.minWithdrawal ?? 100) && (
           <span className={styles.fineprint}>
-            Saldo abaixo do mínimo de {fmtMzn(rules?.minWithdrawal ?? 1000)} MT.
+            Saldo abaixo do mínimo de {fmtMzn(rules?.minWithdrawal ?? 100)} MT.
           </span>
         )}
       </div>
@@ -388,17 +388,17 @@ export default function AfiliacaoPage() {
             <h3 className={styles.sectionTitle}>Solicitar saque</h3>
             <p className={styles.fineprint}>
               Taxa: {rules ? `${(rules.withdrawalPercent * 100).toFixed(0)}% + ${rules.withdrawalFixed} MT` : "—"} por saque ·
-              mínimo {fmtMzn(rules?.minWithdrawal ?? 1000)} MT.
+              mínimo {fmtMzn(rules?.minWithdrawal ?? 100)} MT.
             </p>
             <div className={styles.formRow}>
               <Input
                 label={`Valor a sacar (MT) · disponível ${fmtMzn(balance?.available ?? 0)}`}
                 type="number"
-                min={rules?.minWithdrawal ?? 1000}
+                min={rules?.minWithdrawal ?? 100}
                 step={1}
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
-                placeholder={String(rules?.minWithdrawal ?? 1000)}
+                placeholder={String(rules?.minWithdrawal ?? 100)}
               />
               <div>
                 <span className={styles.label}>Método</span>

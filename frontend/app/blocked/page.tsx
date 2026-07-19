@@ -26,6 +26,27 @@ const ArrowRight = (p: { size?: number }) => (
 export default function BlockedPage() {
   const router = useRouter();
   const [reason, setReason] = useState<BlockedReason | null>(null);
+  // Affiliate commission is the user's own money, so the saque screen stays
+  // open with an expired subscription (see affiliate.routes.ts). This page is
+  // where an expired affiliate lands, so it must offer the way back in —
+  // otherwise the balance is reachable only by typing the URL by hand.
+  const [affiliateBalance, setAffiliateBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("cz_token");
+    if (!token) return;
+    const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    // Raw fetch, not the api() helper: that one turns a 403 into a redirect
+    // back to this very page.
+    fetch(`${API}/api/affiliate/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.enrolled && (d.balance?.available ?? 0) > 0) {
+          setAffiliateBalance(d.balance.available);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Defensive redirect: coproducers and admins should never see this
@@ -111,6 +132,23 @@ export default function BlockedPage() {
             Sair da conta
           </Button>
         </div>
+
+        {affiliateBalance !== null && (
+          <p className={styles.help}>
+            Você tem{" "}
+            <strong>
+              {affiliateBalance.toLocaleString("pt-MZ", { maximumFractionDigits: 0 })} MT
+            </strong>{" "}
+            de comissão disponível.{" "}
+            <a
+              className={styles.helpLink}
+              onClick={() => router.push("/afiliacao")}
+              style={{ cursor: "pointer" }}
+            >
+              Solicitar saque
+            </a>
+          </p>
+        )}
 
         <p className={styles.help}>
           Precisa de ajuda?{" "}

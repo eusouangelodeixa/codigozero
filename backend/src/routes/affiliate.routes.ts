@@ -54,7 +54,26 @@ router.use(authMiddleware);
 // withdraw-only sócio guard runs here (after auth, so req.user is set) instead
 // of at the mount — the mount must stay open for the PUBLIC /resolve route above.
 router.use(blockWithdrawOnly);
-router.use(subscriptionMiddleware);
+
+// Commission already earned is the affiliate's money, not a subscription perk.
+// So the saque surface (balance, history, payout target, withdrawal request)
+// stays reachable with an expired/canceled subscription — otherwise the money
+// gets trapped and the affiliate has to renew just to cash out. Everything
+// else (notably /enroll — no point signing up a new affiliate with no plan)
+// still requires an active subscription. Whitelist, not blacklist: any route
+// added later is blocked by default until explicitly listed here.
+const WITHDRAWAL_PATHS = new Set([
+  '/me',                  // account + balance — the saque screen can't render without it
+  '/withdrawals',         // GET history + POST request
+  '/withdrawals/quote',   // fee preview
+  '/payout-method',       // where to send the money
+  '/referrals',           // read-only history that justifies the balance
+]);
+
+router.use((req, res, next) => {
+  if (WITHDRAWAL_PATHS.has(req.path)) return next();
+  return subscriptionMiddleware(req as AuthRequest, res, next);
+});
 
 const PUBLIC_LINK_BASE = (process.env.FRONTEND_URL || 'https://app.czero.sbs').replace(/\/$/, '');
 // The affiliate-landing public URL — kept on the marketing root, not the app

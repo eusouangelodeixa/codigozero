@@ -14,7 +14,7 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'https://app.czero.sbs';
 export const PARTNER_RULES = {
   withdrawalPercent: 0.03, // 3% of the requested amount...
   withdrawalFixed: 35, // ...+ 35 MZN
-  minWithdrawal: 1000, // minimum per withdrawal request
+  minWithdrawal: 100, // minimum per withdrawal request
   availableAfterDays: 3, // pending → available window (D+3)
 };
 

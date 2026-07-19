@@ -160,7 +160,7 @@ export default function SociosPage() {
     );
   }
 
-  const minW = rules?.minWithdrawal ?? 1000;
+  const minW = rules?.minWithdrawal ?? 100;
   const canWithdraw = (balance?.available ?? 0) >= minW;
 
   return (

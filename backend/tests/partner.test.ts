@@ -53,6 +53,6 @@ describe('partner quoteWithdrawal', () => {
 
   it('uses the partner-specific fixed fee (35), distinct from affiliates (45)', () => {
     expect(PARTNER_RULES.withdrawalFixed).toBe(35);
-    expect(PARTNER_RULES.minWithdrawal).toBe(1000);
+    expect(PARTNER_RULES.minWithdrawal).toBe(100);
   });
 });

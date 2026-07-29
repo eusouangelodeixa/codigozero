@@ -310,8 +310,10 @@ export function startCronJobs() {
   });
 
   // ── Landing/checkout remarketing (a cada 15 min, PACED anti-ban) ──
-  // Contata leads via Komunika SDR (visitante = abandonou a landing; checkout =
-  // tentou pagar e não concluiu). SEGURANÇA MÁXIMA: cap pequeno por execução +
+  // Contata leads via Komunika SDR (visitante = abandonou a landing DE VENDAS;
+  // checkout = tentou pagar e não concluiu). Público restrito ao funil de venda:
+  // leads de isca grátis (LP dos Reels, páginas de conteúdo) e ex-clientes NÃO
+  // entram aqui — cada um tem seu próprio contato. SEGURANÇA MÁXIMA: cap por execução +
   // gaps GRANDES e RANDÔMICOS (2–5 min) entre envios — nunca em segundos.
   // Disparar em rajada no número compartilhado da Komunika é o que causa ban.
   //
@@ -371,6 +373,11 @@ export function startCronJobs() {
       if (checkoutAssistantId) {
         const checkouts = await prisma.user.findMany({
           where: {
+            // Aqui a janela é mais larga de propósito: quem chegou a 'checkout_pending'
+            // TENTOU pagar (inclusive um ex-cliente 'overdue' renovando), então é
+            // público legítimo. Só o role fica travado em 'member' para nunca abordar
+            // admin/coprodutor/sócio.
+            role: 'member',
             subscriptionStatus: { not: 'active' },
             updatedAt: { lt: new Date(now.getTime() - 15 * 60 * 1000), gt: windowStart },
             remarketingStage: 'checkout_pending',
@@ -383,7 +390,22 @@ export function startCronJobs() {
       if (visitorAssistantId && tasks.length < REMKT_PER_RUN) {
         const visitors = await prisma.user.findMany({
           where: {
-            subscriptionStatus: { not: 'active' },
+            // Público do SDR "Visitante" = SÓ quem preencheu o formulário da
+            // landing de VENDAS e não comprou. O filtro antigo (`subscriptionStatus
+            // != 'active'` + stage 'none') varria a base inteira e abordava:
+            //  • leads da isca grátis (leadSource 'lp:reels') — nunca viram checkout;
+            //  • leads das páginas de conteúdo ('content:*') — já recebem o welcome
+            //    da newsletter, viravam mensagem dupla;
+            //  • ex-clientes 'overdue'/'canceled' — gente que PAGOU recebendo
+            //    "você abandonou a landing";
+            //  • qualquer role (admin/coprodutor/sócio/afiliado) fora de 'active'.
+            // Ver [[broadcast-audience-gate]]: status != 'active' NÃO é público.
+            role: 'member',
+            subscriptionStatus: 'lead',
+            // Leads da landing de vendas não carregam leadSource (null); os demais
+            // funis sempre marcam o seu ('lp:reels', 'content:<slug>'), então a
+            // ausência de source é justamente o que identifica este público.
+            OR: [{ leadSource: null }, { leadSource: '' }],
             updatedAt: { lt: new Date(now.getTime() - 30 * 60 * 1000), gt: windowStart },
             remarketingStage: 'none',
           },

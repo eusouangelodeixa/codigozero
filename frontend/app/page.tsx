@@ -1,9 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
 import {
-  ChevronDown as IconChevron,
   Instagram as IconInstagram,
   Play as IconPlay,
 } from "lucide-react";
@@ -13,17 +11,6 @@ import { LANDING_DEFAULTS as DEFAULTS } from "./landingDefaults";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-
-// Founder credibility shots (square portrait on the left; Instagram + Pix
-// stacked on the right; single column on mobile). These are SCREENSHOTS, so each
-// tile's aspect-ratio in CSS matches the image's real proportions — they show in
-// FULL, no cropping, no black bars. Replace the placeholder files under
-// /public/founders keeping these exact names (see public/founders/README.md).
-const FOUNDER_GALLERY = {
-  portrait: { src: "/founders/angelo.jpg", alt: "Ângelo Deixa, fundador do Código Zero" },
-  ig: { src: "/founders/instagram.jpg", alt: "Perfil @eusouangelodeixa no Instagram" },
-  pix: { src: "/founders/pix-3330.jpg", alt: "Comprovante de Pix — primeira parcela de R$ 3.330 do contrato da Mira" },
-};
 
 /**
  * Renders a copy string with **bold** markers as real <strong> spans (instead
@@ -73,7 +60,6 @@ export default function LandingPage({
   const [gateOpen, setGateOpen] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({ name: "", phone: "", whatsapp: "", email: "", phoneCode: "+258", whatsappCode: "+258" });
   const [submitting, setSubmitting] = useState(false);
-  const [checkoutUrl, setCheckoutUrl] = useState("#preco");
   const [cfg, setCfg] = useState<any>({});
   const [sec, setSec] = useState<any>({});
   
@@ -178,7 +164,9 @@ export default function LandingPage({
         const lead = JSON.parse(saved);
         if (lead.name && lead.email) {
           if (lead._v !== LEAD_VERSION || !lead.checkoutUrl) {
-            // Re-fetch checkout URL — DON'T close gate until we have it
+            // Re-registra o lead pra (re)criar o link de checkout no backend —
+            // ninguém renderiza esse link na página (o CTA vive dentro do VSL),
+            // mas o remarketing manda ele por WhatsApp. Fecha o gate no final.
             fetch(`${API_URL}/api/landing/lead`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -199,29 +187,11 @@ export default function LandingPage({
                   lead._v = LEAD_VERSION;
                   // Não atualiza o savedAt aqui para manter a data do primeiro cadastro
                   localStorage.setItem("cz_lead", JSON.stringify(lead));
-                  setCheckoutUrl(data.checkoutUrl);
                 }
               })
               .catch(() => {})
               .finally(() => setGateOpen(false));
           } else {
-            // Check if 4 hours have passed since the lead was saved
-            const savedTime = new Date(lead.savedAt || Date.now()).getTime();
-            const hoursPassed = (Date.now() - savedTime) / (1000 * 60 * 60);
-
-            if (hoursPassed >= 4) {
-              const fallbackBase = affiliateContext?.checkoutUrl
-                || coproducerContext?.checkoutUrl
-                || "https://pay.lojou.app/p/uoEHz";
-              const fallbackUrl = new URL(fallbackBase);
-              fallbackUrl.searchParams.append("name", lead.name);
-              fallbackUrl.searchParams.append("email", lead.email);
-              if (lead.whatsapp) fallbackUrl.searchParams.append("number", lead.whatsapp.replace(/\D/g, ''));
-
-              setCheckoutUrl(fallbackUrl.toString());
-            } else {
-              setCheckoutUrl(lead.checkoutUrl);
-            }
             setGateOpen(false);
           }
           return;
@@ -310,7 +280,6 @@ export default function LandingPage({
         leadRecord.leadId = data.leadId;
         leadRecord.checkoutUrl = data.checkoutUrl;
         localStorage.setItem("cz_lead", JSON.stringify(leadRecord));
-        setCheckoutUrl(data.checkoutUrl);
       }
     } catch (err) {
       console.warn("[Landing] API call failed, lead saved locally:", err);
@@ -327,12 +296,6 @@ export default function LandingPage({
       setSurveyStep(prev => prev + 1);
     }, 250);
   };
-
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const hasCheckout = !!checkoutUrl && checkoutUrl !== "#preco" && checkoutUrl !== "#";
 
   // Diagnóstico copy personalized by the lead's main objection (Q4 `objection`).
   // surveyAnswers.objection holds the full option TEXT, so we match it back to
@@ -366,49 +329,6 @@ export default function LandingPage({
   const objectionLetter = SURVEY_STEPS.find(s => s.id === 'objection')
     ?.options.find(o => o.text === surveyAnswers.objection)?.id;
   const diagnosis = (objectionLetter && DIAGNOSIS_BY_OBJECTION[objectionLetter]) || DIAGNOSIS_DEFAULT;
-
-  const trackAndOpen = () => {
-    // Mark checkout_pending in backend (fire & forget)
-    try {
-      const saved = localStorage.getItem("cz_lead");
-      if (saved) {
-        const lead = JSON.parse(saved);
-        if (lead.leadId) {
-          fetch(`${API_URL}/api/landing/checkout-click`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ leadId: lead.leadId }),
-          }).catch(() => {});
-        }
-      }
-    } catch {}
-  };
-
-  // Renders the CTA correctly: real link when we have a checkout URL, scroll button otherwise.
-  // NÃO usar target="_blank": navegadores in-app (Instagram/WhatsApp/Facebook) — de onde vem
-  // a maior parte do tráfego mobile — frequentemente ignoram a abertura de nova aba, e o clique
-  // "não faz nada". Navegar na mesma aba funciona em todos (incluindo webviews in-app) e mantém
-  // o histórico (botão voltar) intacto.
-  const CtaLink = ({ className, children }: { className: string; children: React.ReactNode }) =>
-    hasCheckout ? (
-      <a href={checkoutUrl} className={className}
-         onClick={trackAndOpen} style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-        {children}
-      </a>
-    ) : (
-      <button className={className} onClick={() => scrollTo("preco")}
-              style={{ display: 'block', width: '100%', textAlign: 'center', cursor: 'pointer', border: 'none' }}>
-        {children}
-      </button>
-    );
-
-
-  // Dynamic arrays with fallbacks (DB override via sec.* still wins).
-  const founderCreds = (sec.founderCreds || DEFAULTS.founderCreds) as string[];
-  const faqItems = (sec.faqItems || DEFAULTS.faqItems) as { q: string; a: string }[];
-
-  // FAQ toggle state — only one open at a time keeps the page tidy.
-  const [faqOpen, setFaqOpen] = useState<number | null>(0);
 
   // Respect prefers-reduced-motion: motion lib gives null on SSR, so we
   // gate all animations through this and fall back to fully-visible state.
@@ -581,109 +501,7 @@ export default function LandingPage({
           </motion.div>
         </section>
 
-        {/* QUEM ESTÁ FALANDO COM VOCÊ — founder + galeria */}
-        <section className={styles.founderSection}>
-          <motion.div {...reveal} className={styles.founderInner}>
-            <span className={styles.sectionLabel}>{t("founderLabel")}</span>
-
-            {/* Identidade — retrato + apresentação (logo abaixo do título) */}
-            <div className={styles.founderHeader}>
-              <figure className={styles.founderPhoto}>
-                <Image
-                  src={FOUNDER_GALLERY.portrait.src}
-                  alt={FOUNDER_GALLERY.portrait.alt}
-                  width={886}
-                  height={886}
-                  className={styles.founderPhotoImg}
-                />
-              </figure>
-              <div className={styles.founderHeaderText}>
-                <p className={styles.founderIntro}>{renderBold(t("founderIntro"))}</p>
-                <figure className={styles.founderProof}>
-                  <Image
-                    src={FOUNDER_GALLERY.ig.src}
-                    alt={FOUNDER_GALLERY.ig.alt}
-                    width={1179}
-                    height={747}
-                    className={styles.founderProofImg}
-                  />
-                </figure>
-              </div>
-            </div>
-
-            {/* Credenciais */}
-            <ul className={styles.founderCreds}>
-              {founderCreds.map((c, i) => (
-                <li key={i} className={styles.founderCred}>
-                  <span className={styles.founderCredDot} aria-hidden />
-                  <span>{renderBold(c)}</span>
-                </li>
-              ))}
-            </ul>
-
-            {/* Prova do contrato da Mira — citado na última credencial (R$ 3.330) */}
-            <figure className={`${styles.founderProof} ${styles.founderProofWide}`}>
-              <Image
-                src={FOUNDER_GALLERY.pix.src}
-                alt={FOUNDER_GALLERY.pix.alt}
-                width={996}
-                height={388}
-                className={styles.founderProofImg}
-              />
-              <figcaption className={styles.founderProofCap}>
-                Comprovante da 1ª parcela — <strong>R$ 3.330</strong> (contrato da Mira).
-              </figcaption>
-            </figure>
-
-            <p className={styles.founderClosing}>{t("founderClosing")}</p>
-          </motion.div>
-        </section>
-
-        {/* FAQ */}
-        <section className={styles.section}>
-          <motion.div {...reveal} className={styles.sectionHead}>
-            <span className={styles.sectionLabel}>{t("faqLabel")}</span>
-            <h2 className={styles.sectionTitle}>{t("faqTitle")}</h2>
-          </motion.div>
-
-          <div className={styles.faqList}>
-            {faqItems.map((item, i) => {
-              const open = faqOpen === i;
-              return (
-                <div key={i} className={`${styles.faqItem} ${open ? styles.faqItemOpen : ""}`}>
-                  <button
-                    type="button"
-                    className={styles.faqQ}
-                    onClick={() => setFaqOpen(open ? null : i)}
-                    aria-expanded={open}
-                  >
-                    <span>{item.q}</span>
-                    <span className={styles.faqChev} aria-hidden>
-                      <IconChevron size={14} strokeWidth={2} />
-                    </span>
-                  </button>
-                  <motion.div
-                    initial={false}
-                    animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
-                    transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-                    style={{ overflow: "hidden" }}
-                  >
-                    <p className={styles.faqA}>{item.a}</p>
-                  </motion.div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* CTA FINAL */}
-        <section className={styles.finalCta}>
-          <motion.div {...reveal}>
-            <h2 className={styles.finalCtaTitle}>{t("finalCtaTitle")}</h2>
-            <p className={styles.finalCtaDesc}>{t("finalCtaDesc")}</p>
-            <CtaLink className={styles.heroCta}>{t("finalCtaText")}</CtaLink>
-          </motion.div>
-        </section>
+        {/* Nada entre o VSL e o footer: o próprio player mostra o CTA. */}
 
         {/* FOOTER — minimalista */}
         <footer className={styles.footer}>

@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { coproducerMiddleware } from '../middlewares/coproducer.middleware';
 import { notifyCoproducer } from '../services/coproducer.service';
+import { resolveWindow, InvalidPeriodError } from '../lib/period';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -183,33 +184,15 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const limit = Math.min(200, Math.max(5, parseInt((req.query.limit as string) || '25', 10)));
 
     const now = new Date();
-    let startDate = new Date(now);
-    let endDate = new Date(now);
-
-    if (period === 'today') {
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === '7d') {
-      startDate.setDate(now.getDate() - 7);
-    } else if (period === '30d') {
-      startDate.setDate(now.getDate() - 30);
-    } else if (period === '12m') {
-      startDate.setMonth(now.getMonth() - 12);
-    } else if (period === 'custom') {
-      const from = req.query.from as string;
-      const to = req.query.to as string;
-      if (!from || !to) return res.status(400).json({ error: 'period=custom requer from e to' });
-      startDate = new Date(from);
-      endDate = new Date(to);
-      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-        return res.status(400).json({ error: 'datas inválidas' });
-      }
-      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) endDate.setHours(23, 59, 59, 999);
-    } else {
-      startDate.setDate(now.getDate() - 30);
-    }
-    const windowMs = endDate.getTime() - startDate.getTime();
-    const prevStart = new Date(startDate.getTime() - windowMs);
-    const prevEnd = new Date(startDate);
+    // Calendar-aligned (CAT) window + buckets — identical semantics to
+    // /admin/finance, so the two screens always agree. See lib/period.ts.
+    const win = resolveWindow({
+      period,
+      from: req.query.from as string,
+      to: req.query.to as string,
+      now,
+    });
+    const { startDate, endDate, previousStartDate: prevStart, previousEndDate: prevEnd } = win;
 
     const searchClause = search
       ? {
@@ -263,38 +246,19 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const renewalRate = expectedRenewals === 0 ? null : Math.min(100, (renTx.length / expectedRenewals) * 100);
     const churnRate = renewalRate == null ? null : Math.max(0, 100 - renewalRate);
 
-    // Chart
-    const days = Math.ceil(windowMs / (24 * 60 * 60 * 1000));
-    const groupByMonth = period === '12m' || days > 90;
+    // Chart — pre-zero-filled buckets; unexpected keys get a slot instead of
+    // being dropped (a dropped sale shows up as total ≠ plotted sum).
     const chartMap = new Map<string, { new: number; renewal: number }>();
-    if (groupByMonth) {
-      const monthsBack = Math.min(24, Math.max(2, Math.ceil(days / 30)));
-      for (let i = monthsBack - 1; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        chartMap.set(d.toLocaleString('pt-MZ', { month: 'short', year: '2-digit' }), { new: 0, renewal: 0 });
+    win.buckets.forEach((k) => chartMap.set(k, { new: 0, renewal: 0 }));
+    current.forEach((t) => {
+      const k = win.bucketOf(new Date(t.createdAt));
+      let s = chartMap.get(k);
+      if (!s) {
+        s = { new: 0, renewal: 0 };
+        chartMap.set(k, s);
       }
-      current.forEach((t) => {
-        const k = new Date(t.createdAt).toLocaleString('pt-MZ', { month: 'short', year: '2-digit' });
-        if (chartMap.has(k)) {
-          const s = chartMap.get(k)!;
-          if (t.isRenewal) s.renewal += t.amount; else s.new += t.amount;
-        }
-      });
-    } else {
-      for (let i = Math.max(0, days - 1); i >= 0; i--) {
-        const d = new Date(endDate);
-        d.setDate(d.getDate() - i);
-        const k = d.toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        chartMap.set(k, { new: 0, renewal: 0 });
-      }
-      current.forEach((t) => {
-        const k = new Date(t.createdAt).toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        if (chartMap.has(k)) {
-          const s = chartMap.get(k)!;
-          if (t.isRenewal) s.renewal += t.amount; else s.new += t.amount;
-        }
-      });
-    }
+      if (t.isRenewal) s.renewal += t.amount; else s.new += t.amount;
+    });
     const chartData = Array.from(chartMap.entries()).map(([date, v]) => ({
       date, amount: v.new + v.renewal, new: v.new, renewal: v.renewal,
     }));
@@ -345,6 +309,9 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       transactions: { total: txTotal, page, limit, items: txItems },
     });
   } catch (error) {
+    if (error instanceof InvalidPeriodError) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('[COPRODUCER] /finance error:', error);
     res.status(500).json({ error: 'Erro ao carregar finanças' });
   }

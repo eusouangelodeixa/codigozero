@@ -14,6 +14,7 @@ import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { pageArgs, paginated } from '../lib/pagination';
+import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
@@ -296,37 +297,16 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const txStatus = ((req.query.txStatus as string) || 'all').trim(); // all | approved | failed | refunded | pending
 
     const now = new Date();
-    let startDate = new Date(now);
-    let endDate = new Date(now);
-
-    if (period === 'today') {
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === '7d') {
-      startDate.setDate(now.getDate() - 7);
-    } else if (period === '30d') {
-      startDate.setDate(now.getDate() - 30);
-    } else if (period === '12m') {
-      startDate.setMonth(now.getMonth() - 12);
-    } else if (period === 'custom') {
-      const from = req.query.from as string;
-      const to = req.query.to as string;
-      if (!from || !to) {
-        return res.status(400).json({ error: 'period=custom requer from e to em ISO' });
-      }
-      startDate = new Date(from);
-      endDate = new Date(to);
-      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-        return res.status(400).json({ error: 'datas inválidas (ISO esperado)' });
-      }
-      // Inclusive end-of-day if `to` looked like a bare date
-      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) endDate.setHours(23, 59, 59, 999);
-    } else {
-      startDate.setDate(now.getDate() - 30);
-    }
-
-    const windowMs = endDate.getTime() - startDate.getTime();
-    const previousStartDate = new Date(startDate.getTime() - windowMs);
-    const previousEndDate = new Date(startDate);
+    // Calendar-aligned (CAT) window + its chart buckets — see lib/period.ts.
+    // Every transaction inside [startDate, endDate] is guaranteed a bucket,
+    // so the headline total always equals the sum of the plotted points.
+    const win = resolveWindow({
+      period,
+      from: req.query.from as string,
+      to: req.query.to as string,
+      now,
+    });
+    const { startDate, endDate, previousStartDate, previousEndDate } = win;
 
     // Search clause shared by both windows
     const searchClause = search
@@ -466,44 +446,22 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const churnRate = renewalRate == null ? null : Math.max(0, 100 - renewalRate);
 
     // ── Chart data ─────────────────────────────────────────────────────
-    const days = Math.ceil(windowMs / (24 * 60 * 60 * 1000));
-    const groupByMonth = period === '12m' || days > 90;
+    // Buckets come pre-zero-filled from the window, so the series covers the
+    // whole period. Nothing is discarded: an unexpected key still gets a slot
+    // (appended, therefore visible) instead of vanishing from the chart while
+    // remaining in the total — that mismatch was the old bug.
     const chartDataMap = new Map<string, { new: number; renewal: number; newCount: number; renewalCount: number }>();
-
-    if (groupByMonth) {
-      const monthsBack = Math.min(24, Math.max(2, Math.ceil(days / 30)));
-      for (let i = monthsBack - 1; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        chartDataMap.set(
-          d.toLocaleString('pt-MZ', { month: 'short', year: '2-digit' }),
-          { new: 0, renewal: 0, newCount: 0, renewalCount: 0 },
-        );
+    win.buckets.forEach((key) => chartDataMap.set(key, { new: 0, renewal: 0, newCount: 0, renewalCount: 0 }));
+    currentTransactions.forEach((t) => {
+      const key = win.bucketOf(new Date(t.createdAt));
+      let slot = chartDataMap.get(key);
+      if (!slot) {
+        slot = { new: 0, renewal: 0, newCount: 0, renewalCount: 0 };
+        chartDataMap.set(key, slot);
       }
-      currentTransactions.forEach((t) => {
-        const key = new Date(t.createdAt).toLocaleString('pt-MZ', { month: 'short', year: '2-digit' });
-        if (chartDataMap.has(key)) {
-          const slot = chartDataMap.get(key)!;
-          if (t.isRenewal) { slot.renewal += t.amount; slot.renewalCount += 1; }
-          else { slot.new += t.amount; slot.newCount += 1; }
-        }
-      });
-    } else {
-      // Group by day, walking back from `endDate` so custom ranges line up
-      for (let i = Math.max(0, days - 1); i >= 0; i--) {
-        const d = new Date(endDate);
-        d.setDate(d.getDate() - i);
-        const key = d.toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        chartDataMap.set(key, { new: 0, renewal: 0, newCount: 0, renewalCount: 0 });
-      }
-      currentTransactions.forEach((t) => {
-        const key = new Date(t.createdAt).toLocaleDateString('pt-MZ', { day: '2-digit', month: '2-digit' });
-        if (chartDataMap.has(key)) {
-          const slot = chartDataMap.get(key)!;
-          if (t.isRenewal) { slot.renewal += t.amount; slot.renewalCount += 1; }
-          else { slot.new += t.amount; slot.newCount += 1; }
-        }
-      });
-    }
+      if (t.isRenewal) { slot.renewal += t.amount; slot.renewalCount += 1; }
+      else { slot.new += t.amount; slot.newCount += 1; }
+    });
     const chartData = Array.from(chartDataMap.entries()).map(([date, v]) => ({
       date,
       amount: v.new + v.renewal,
@@ -626,6 +584,9 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       recentTransactions: txItems,
     });
   } catch (error) {
+    if (error instanceof InvalidPeriodError) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('[ADMIN] Finance error:', error);
     res.status(500).json({ error: 'Erro ao carregar dados financeiros' });
   }
@@ -3333,33 +3294,13 @@ router.get('/finance/export', async (req: AuthRequest, res: Response) => {
     const txType = ((req.query.txType as string) || 'all').trim();
     const txStatus = ((req.query.txStatus as string) || 'all').trim();
 
-    const now = new Date();
-    let startDate = new Date(now);
-    let endDate = new Date(now);
-
-    if (period === 'today') {
-      startDate.setHours(0, 0, 0, 0);
-    } else if (period === '7d') {
-      startDate.setDate(now.getDate() - 7);
-    } else if (period === '30d') {
-      startDate.setDate(now.getDate() - 30);
-    } else if (period === '12m') {
-      startDate.setMonth(now.getMonth() - 12);
-    } else if (period === 'custom') {
-      const from = req.query.from as string;
-      const to = req.query.to as string;
-      if (!from || !to) {
-        return res.status(400).json({ error: 'period=custom requer from e to em ISO' });
-      }
-      startDate = new Date(from);
-      endDate = new Date(to);
-      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-        return res.status(400).json({ error: 'datas inválidas (ISO esperado)' });
-      }
-      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) endDate.setHours(23, 59, 59, 999);
-    } else {
-      startDate.setDate(now.getDate() - 30);
-    }
+    // Same calendar-aligned window the finance screen uses, so the CSV and
+    // the on-screen list can't disagree about what "30d" means.
+    const { startDate, endDate } = resolveWindow({
+      period,
+      from: req.query.from as string,
+      to: req.query.to as string,
+    });
 
     const searchClause = search
       ? {
@@ -3440,6 +3381,9 @@ router.get('/finance/export', async (req: AuthRequest, res: Response) => {
     ]);
     sendCsv(res, 'financeiro', buildCsv(headers, rows));
   } catch (error) {
+    if (error instanceof InvalidPeriodError) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('[ADMIN] Finance export error:', error);
     res.status(500).json({ error: 'Erro ao exportar transações' });
   }

@@ -311,14 +311,14 @@
    `padding-top: calc(56.25% + Npx)` no `_aspect`. Um `height: 100% !important`
    aqui matava esse crescimento — o player espremia vídeo + CTA dentro de um
    16:9 travado, o vídeo encolhia e sobrava a página do player em volta: era
-   daí que vinha o "retângulo branco". Deixamos o embed se dimensionar. */
+   daí que vinha o "retângulo branco".
+
+   Por isso não há NENHUMA regra de tamanho aqui — nem fallback de proporção.
+   O embed manda no próprio tamanho. Se um dia colarem um <iframe> solto no
+   admin, ele precisa trazer a proporção dele. */
 .vslEmbed { width: 100%; background: transparent; }
 .vslEmbed div,
 .vslEmbed iframe { background: transparent !important; }
-/* Embed sem wrapper de proporção próprio (iframe solto) ganha 16:9 por conta. */
-.vslEmbed > iframe {
-  display: block; width: 100%; aspect-ratio: 16 / 9; border: none;
-}
 .vslPlaceholder {
   aspect-ratio: 16/9; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: var(--space-3);

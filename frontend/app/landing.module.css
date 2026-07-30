@@ -1177,8 +1177,6 @@
   .networkPillar { padding: var(--space-2) 0; }
   .networkPillarTitle { font-size: 0.95rem; }
   .networkPillarDesc { font-size: 0.82rem; }
-  .vslWrapper { border-radius: 10px; }
-  .vslBarTitle { font-size: 0.7rem; }
   .pricingCard { padding: var(--space-4); border-radius: 14px; }
   .guaranteeCard { padding: var(--space-5); }
   .guaranteeTitle { font-size: clamp(1.4rem, 6vw, 1.85rem); }

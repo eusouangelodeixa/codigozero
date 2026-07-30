@@ -305,19 +305,19 @@
   max-width: 800px; margin: 0 auto; width: 100%; position: relative; z-index: 10;
   background: transparent;
 }
-.vslEmbed {
-  width: 100%; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;
-  background: transparent;
-}
-/* Wrappers que a Kilax injeta (`_wrapper` → `_aspect` → iframe). */
+/* NÃO enjaular o player. O embed da Kilax traz o próprio wrapper de proporção
+   (`_wrapper` → `_aspect` → iframe, todos com style inline) e CRESCE sozinho:
+   quando o CTA aparece, o player manda um postMessage e o kilax-embed.js faz
+   `padding-top: calc(56.25% + Npx)` no `_aspect`. Um `height: 100% !important`
+   aqui matava esse crescimento — o player espremia vídeo + CTA dentro de um
+   16:9 travado, o vídeo encolhia e sobrava a página do player em volta: era
+   daí que vinha o "retângulo branco". Deixamos o embed se dimensionar. */
+.vslEmbed { width: 100%; background: transparent; }
 .vslEmbed div,
-.vslEmbed iframe {
-  background: transparent !important;
-}
-.vslEmbed iframe,
-.vslEmbed > div > iframe,
-.vslEmbed > div {
-  position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; border: none !important;
+.vslEmbed iframe { background: transparent !important; }
+/* Embed sem wrapper de proporção próprio (iframe solto) ganha 16:9 por conta. */
+.vslEmbed > iframe {
+  display: block; width: 100%; aspect-ratio: 16 / 9; border: none;
 }
 .vslPlaceholder {
   aspect-ratio: 16/9; display: flex; flex-direction: column;

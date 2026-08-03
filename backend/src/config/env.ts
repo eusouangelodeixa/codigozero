@@ -56,6 +56,12 @@ export const env = {
   MAX_DAILY_SEARCHES: parseInt(process.env.MAX_DAILY_SEARCHES || '50', 10),
   KOMUNIKA_API_URL: process.env.KOMUNIKA_API_URL || 'https://api.komunika.site',
   KOMUNIKA_ADMIN_API_KEY: process.env.KOMUNIKA_ADMIN_API_KEY || '',
+  // HMAC secret (whsec_…) of the CZ endpoint registered in the Komunika
+  // dashboard → Webhooks (verifies X-Komunika-Signature on poll.vote /
+  // message.received). Usually set via /admin/config (SystemConfig) — this
+  // env var is the fallback. If set here, it MUST also be allowlisted in
+  // infrastructure/docker-compose.prod.yml or it never reaches the container.
+  KOMUNIKA_WEBHOOK_SECRET: process.env.KOMUNIKA_WEBHOOK_SECRET || '',
   KOMUNIKA_SDR_VISITOR_ASSISTANT_ID: process.env.KOMUNIKA_SDR_VISITOR_ASSISTANT_ID || '', // SDR outbound agent — visitantes (landing abandonada)
   KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID: process.env.KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID || '', // SDR outbound agent — checkout abandonado
   // ── Komunika EMBEDDED MODULE (provision + SSO) ────────────────────

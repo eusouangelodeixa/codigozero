@@ -12,6 +12,7 @@ import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
+import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -932,6 +933,38 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Onboarding nudge tick (every 6h)');
+
+  // ── Feedback pós-compra: enrollment (a cada 30min, NUNCA envia) ──
+  // Enfileira compradores no D+14/D+21 com dueAts pré-escalonados 30–60min.
+  cron.schedule('7,37 * * * *', async () => {
+    try {
+      await feedbackEnrollTick();
+    } catch (error) {
+      console.error('[CRON] ❌ Feedback enroll tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Feedback enrollment tick (every 30min)');
+
+  // ── Feedback pós-compra: envio (a cada 2min) ──
+  // Driver da máquina de estados: expira sessões velhas, avança sessões em
+  // andamento (votou → 1–2min; silêncio → 30–60min; 2 silêncios → pausa) e
+  // inicia NO MÁXIMO 1 sessão nova por tick com gap global de 30–60min entre
+  // usuários (anti-ban, [[cron-whatsapp-send-safety]]). Janela diurna CAT e
+  // kill switch (feedbackEnabled) são checados DENTRO do tick. O guard de
+  // reentrância evita ticks sobrepostos (os envios são sequenciais).
+  let feedbackRunning = false;
+  cron.schedule('*/2 * * * *', async () => {
+    if (feedbackRunning) return;
+    feedbackRunning = true;
+    try {
+      await feedbackSendTick();
+    } catch (error) {
+      console.error('[CRON] ❌ Feedback send tick failed:', error);
+    } finally {
+      feedbackRunning = false;
+    }
+  });
+  console.log('[CRON] ⏰ Feedback send tick (every 2min, daytime CAT only)');
 
   // ── Recover orphaned dispatches on boot ──
   // Any 'running' rows left over from a previous process crash, plus any

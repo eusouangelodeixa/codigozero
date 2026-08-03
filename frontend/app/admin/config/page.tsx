@@ -28,6 +28,8 @@ interface SystemConfig {
   resendWebhookSecret?: string;
   newsletterWelcomeEnabled?: boolean;
   newsletterWelcomeMessage?: string;
+  feedbackEnabled?: boolean;
+  komunikaWebhookSecret?: string;
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
@@ -737,6 +739,43 @@ export default function AdminConfig() {
             placeholder={"Olá {nome}! 👋 Aqui é do Código Zero.\n\nObrigado por pegar o conteúdo! Você entrou na nossa lista..."}
             value={config.newsletterWelcomeMessage || ""}
             onChange={(e) => setField("newsletterWelcomeMessage", e.target.value)}
+          />
+        </Field>
+      </Section>
+
+      {/* ── Pesquisa de satisfação (feedback pós-compra) ── */}
+      <Section
+        title="Pesquisa de satisfação"
+        subtitle="Sondagens no WhatsApp 14 dias após a compra + pedido de sugestões no dia 21 (fallback por e-mail). KPIs em /admin/feedback."
+        icon={<IconKomunika />}
+        defaultOpen={false}
+        actions={
+          <span className={config.feedbackEnabled === false ? styles.statusEmpty : styles.statusOk}>
+            {config.feedbackEnabled === false ? "Desligada" : "Ligada"}
+          </span>
+        }
+      >
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={config.feedbackEnabled !== false}
+            onChange={(e) => setField("feedbackEnabled", e.target.checked)}
+          />
+          <span>Enviar pesquisas de satisfação automaticamente (desligar pausa os envios; a fila fica guardada)</span>
+        </label>
+        <SecretField
+          label="Webhook secret (Komunika)"
+          value={config.komunikaWebhookSecret || ""}
+          onChange={(v) => setField("komunikaWebhookSecret", v)}
+          placeholder="whsec_xxxxxxxxxxxxxxxx"
+          hint="No painel do Komunika → Webhooks, crie um endpoint apontando para a URL abaixo com os eventos poll.vote e message.received, e cole aqui o secret (whsec_…) exibido na criação."
+        />
+        <Field label="URL do webhook (cole no Komunika)">
+          <input
+            className={styles.input}
+            readOnly
+            value={`${API}/api/webhooks/komunika`}
+            onFocus={(e) => e.target.select()}
           />
         </Field>
       </Section>

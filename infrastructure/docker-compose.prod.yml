@@ -50,6 +50,9 @@ services:
       - KOMUNIKA_ADMIN_API_KEY=${KOMUNIKA_ADMIN_API_KEY:-}
       - KOMUNIKA_SDR_VISITOR_ASSISTANT_ID=${KOMUNIKA_SDR_VISITOR_ASSISTANT_ID:-}
       - KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID=${KOMUNIKA_SDR_CHECKOUT_ASSISTANT_ID:-}
+      # Segredo do webhook de developer da Komunika (poll.vote/message.received
+      # → feedback pós-compra). Normalmente vem do /admin/config; env é fallback.
+      - KOMUNIKA_WEBHOOK_SECRET=${KOMUNIKA_WEBHOOK_SECRET:-}
       # Komunika embedded module (provision + SSO)
       - KOMUNIKA_HMAC_SECRET=${KOMUNIKA_HMAC_SECRET:-}
       - KOMUNIKA_SSO_JWT_SECRET=${KOMUNIKA_SSO_JWT_SECRET:-}

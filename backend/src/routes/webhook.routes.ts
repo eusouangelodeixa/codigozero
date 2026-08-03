@@ -34,6 +34,7 @@ import {
   updateKomunikaSubscription,
   deprovisionKomunika,
 } from '../services/komunika.service';
+import { ingestPollVote, ingestInboundText } from '../services/feedback.service';
 import type Stripe from 'stripe';
 
 const router = Router();
@@ -150,6 +151,79 @@ router.post('/resend', async (req: Request, res: Response) => {
     console.error('[RESEND-WEBHOOK] error:', error);
     // Return 200 so Resend doesn't retry-storm on a payload we simply couldn't parse.
     return res.status(200).json({ ok: false });
+  }
+});
+
+// ── Komunika developer webhook (poll votes + inbound texts) ──────────────────
+// POST /api/webhooks/komunika — registered in the Komunika dashboard (Webhooks)
+// for the events `poll.vote` and `message.received`. Envelope is
+// { event, timestamp, data }; signature header is X-Komunika-Signature = raw
+// hex HMAC-SHA256 of the exact body bytes (NO "sha256=" prefix). Komunika does
+// NOT retry failed deliveries, so after a valid signature we ACK 200
+// immediately and process async — the ingestion functions are idempotent
+// (unique whatsappMessageId constraints), so a rare double-delivery is a no-op.
+router.post('/komunika', async (req: Request, res: Response) => {
+  try {
+    const rawBuf = Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}), 'utf8');
+
+    const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+    const secret = cfg?.komunikaWebhookSecret || env.KOMUNIKA_WEBHOOK_SECRET;
+    if (!secret) {
+      // Misconfig, not an auth failure — 503 shows up in Komunika's delivery
+      // log so the missing secret is visible.
+      console.error('[KOMUNIKA-WEBHOOK] no secret configured — rejecting (set SystemConfig.komunikaWebhookSecret or KOMUNIKA_WEBHOOK_SECRET)');
+      return res.status(503).json({ error: 'webhook secret not configured' });
+    }
+
+    const expected = crypto.createHmac('sha256', secret).update(rawBuf).digest('hex');
+    if (!safeSecretEqual(req.header('x-komunika-signature'), expected)) {
+      console.warn('[KOMUNIKA-WEBHOOK] invalid signature — rejected');
+      return res.status(401).json({ error: 'invalid signature' });
+    }
+
+    let payload: any;
+    try {
+      payload = JSON.parse(rawBuf.toString('utf8'));
+    } catch {
+      return res.status(200).json({ ok: false }); // signed but unparseable — ack, don't crash
+    }
+
+    const event = String(payload?.event || '');
+    const data = payload?.data || {};
+
+    // ACK first (Komunika has a 10s timeout and no retry), process after.
+    res.json({ ok: true });
+
+    setImmediate(async () => {
+      try {
+        if (event === 'poll.vote') {
+          await ingestPollVote({
+            phone: data.phone,
+            pollMessageId: data.pollMessageId,
+            selectedOptions: data.selectedOptions,
+          });
+        } else if (event === 'message.received') {
+          // Only contact-sent text matters; agent/system messages are ours.
+          if (data.senderType === 'agent' || data.fromMe) return;
+          await ingestInboundText({
+            phone: data.phone,
+            content: data.content,
+            whatsappMessageId: data.whatsappMessageId,
+          });
+        } else if (event === 'webhook.test') {
+          console.log('[KOMUNIKA-WEBHOOK] ✅ test event received');
+        }
+        // anything else: registered-but-unused event — ignore silently
+      } catch (e: any) {
+        console.error(`[KOMUNIKA-WEBHOOK] processing ${event} failed:`, e?.message || e);
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[KOMUNIKA-WEBHOOK] error:', error);
+    if (!res.headersSent) return res.status(200).json({ ok: false });
   }
 });
 

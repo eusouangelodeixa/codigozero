@@ -125,6 +125,10 @@ model User {
   // Independent of CoproducerAccount (which is per-product / Lojou-split).
   partnerAccount       PartnerAccount?
 
+  // Post-purchase satisfaction survey (D+14 polls / D+21 suggestion).
+  // One per user EVER — renewals never re-trigger it.
+  feedbackSurvey       FeedbackSurvey?
+
   leads              Lead[]
   lessonProgress     LessonProgress[]
   chatMessages       ChatMessage[]      @relation("ChatSender")
@@ -304,6 +308,12 @@ model SystemConfig {
   // message supports a {nome} placeholder (replaced with the lead's first name).
   newsletterWelcomeEnabled Boolean @default(true)
   newsletterWelcomeMessage String?
+  // Post-purchase feedback surveys — kill switch (send tick idles when false;
+  // enrollment keeps running so nothing is lost, only delayed).
+  feedbackEnabled          Boolean @default(true)
+  // HMAC secret (whsec_…) of the CZ endpoint registered in the Komunika
+  // dashboard → Webhooks. Verifies X-Komunika-Signature on inbound events.
+  komunikaWebhookSecret    String?
 }
 
 // Delivery events streamed in by the Resend webhook (sent/delivered/bounced/…),
@@ -970,4 +980,86 @@ model ContentPage {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+// ── Post-purchase feedback (D+14 WhatsApp polls / D+21 suggestion ask) ──
+// One row per user EVER (userId unique) holding BOTH sessions, because they
+// share the channel lock: exactly ONE channel per user — 'whatsapp' (native
+// polls via Komunika send-poll) or 'email' (link to the /pesquisa web form)
+// — decided at first successful send and never flipped afterwards.
+model FeedbackSurvey {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anchorTxnId String? // first approved non-renewal Transaction (audit trail)
+  anchorAt    DateTime // that Transaction.createdAt — D+14/D+21 anchor
+  channel     String? // null until first successful send: whatsapp | email
+
+  // D+14 feedback session (4 native WhatsApp polls, adaptive pacing:
+  // voted → next in 1–2min; silent → next after 30–60min; 2 silent in a
+  // row → paused; paused 48h → expired).
+  feedbackStatus      String    @default("scheduled") // scheduled | in_progress | paused | awaiting_web | completed | expired | skipped
+  feedbackDueAt       DateTime // anchor+14d, pre-staggered 30–60min apart across users
+  feedbackStartedAt   DateTime?
+  feedbackCompletedAt DateTime?
+  currentQuestion     Int       @default(0) // index of the NEXT poll to send (0..3)
+  unansweredStreak    Int       @default(0)
+  nextActionAt        DateTime? // when the send tick may act on this session again
+  pausedAt            DateTime?
+
+  // D+21 suggestion session (free-text ask; replies within 72h are stored).
+  suggestionStatus       String    @default("scheduled") // scheduled | awaiting_reply | awaiting_web | completed | expired | skipped
+  suggestionDueAt        DateTime
+  suggestionSentAt       DateTime?
+  suggestionWindowEndsAt DateTime? // sentAt + 72h
+  thankYouSentAt         DateTime?
+
+  emailSentAt DateTime? // when the fallback email (web link) went out
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  responses   FeedbackResponse[]
+  suggestions FeedbackSuggestion[]
+
+  @@index([feedbackStatus, feedbackDueAt])
+  @@index([suggestionStatus, suggestionDueAt])
+  @@index([feedbackStatus, nextActionAt])
+}
+
+// One row per question per survey, created AT SEND TIME with score null —
+// the whatsappMessageId (send-poll's data.key.id) is what correlates the
+// poll.vote webhook back to the question. Unique constraint doubles as
+// idempotency against duplicate webhook deliveries (Komunika has no retry,
+// but re-votes/vote-changes overwrite the same row harmlessly).
+model FeedbackResponse {
+  id                String         @id @default(uuid())
+  surveyId          String
+  survey            FeedbackSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  questionKey       String // satisfaction | expectation | value | support
+  channel           String // whatsapp | web
+  whatsappMessageId String?        @unique // poll message id; null for web answers
+  optionText        String? // raw option label as voted
+  score             Int? // 1–4 (Abaixo do esperado → Excelente); null until answered
+  sentAt            DateTime       @default(now())
+  answeredAt        DateTime?
+
+  @@unique([surveyId, questionKey])
+  @@index([questionKey, score])
+  @@index([answeredAt])
+}
+
+// Free-text improvement suggestions (D+21 WhatsApp replies or the /pesquisa
+// textarea), listed in /admin/feedback with a read/unread flag.
+model FeedbackSuggestion {
+  id                String         @id @default(uuid())
+  surveyId          String
+  survey            FeedbackSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  channel           String // whatsapp | web
+  content           String
+  whatsappMessageId String?        @unique // inbound msg id — dedupes webhook re-deliveries
+  isRead            Boolean        @default(false)
+  createdAt         DateTime       @default(now())
+
+  @@index([isRead, createdAt])
+  @@index([surveyId])
 }

@@ -26,6 +26,8 @@ import komunikaRoutes from './routes/komunika.routes';
 import contentPageAdminRoutes from './routes/contentPage.admin.routes';
 import contentPublicRoutes from './routes/contentPage.routes';
 import lpRoutes from './routes/lp.routes';
+import feedbackRoutes from './routes/feedback.routes';
+import feedbackAdminRoutes from './routes/feedback.admin.routes';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { blockWithdrawOnly } from './middlewares/withdrawOnly.guard';
 import { startCronJobs } from './jobs/cron';
@@ -141,6 +143,11 @@ app.use('/api/content', contentPublicRoutes);
 // Reels LP (lp.czero.sbs): public config + free lead capture. No checkout.
 app.use('/api/lp', lpRoutes);
 app.use('/api/admin/content-pages', contentPageAdminRoutes);
+// Pesquisa de satisfação pós-compra: rotas públicas (/pesquisa web form —
+// token assinado É a auth) + dashboard admin. O admin router roda auth+admin
+// internamente.
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/admin/feedback', feedbackAdminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/coproducers', coproducerAdminRoutes);
 app.use('/api/coproducer', coproducerRoutes);

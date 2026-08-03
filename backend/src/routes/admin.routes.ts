@@ -16,7 +16,7 @@ import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { pageArgs, paginated } from '../lib/pagination';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
-import { deprovisionKomunika } from '../services/komunika.service';
+import { deprovisionKomunika, syncKomunikaOnApprovedOrder } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
@@ -821,6 +821,14 @@ router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
       .catch((e) => console.error('[ADMIN] grant-trial email failed:', e?.message || e));
     void sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
       .catch((e) => console.error('[ADMIN] grant-trial whatsapp failed:', e?.message || e));
+
+    // Provisiona/actualiza o tenant Komunika com a MESMA janela de acesso
+    // concedida aqui. Sem isto o acesso manual ficava so no Codigo Zero e a
+    // pessoa entrava no Komunika sem plano — ou nem existia la.
+    // Idempotente (provision ou update, conforme o estado) e fire-and-forget,
+    // como os envios de credenciais acima: nunca bloqueia a resposta ao admin.
+    void syncKomunikaOnApprovedOrder(user.id)
+      .catch((e) => console.error('[ADMIN] grant-trial komunika failed:', e?.message || e));
 
     return res.json({
       user: {

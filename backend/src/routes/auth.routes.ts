@@ -16,6 +16,7 @@ import { getActivePrice } from '../lib/pricing';
 import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
 import { sendFirstAccessWelcome } from '../services/onboarding.service';
+import { signMembersSsoCode } from '../lib/membersSso';
 import { generateUserPassword, sendCredentialsEmail, sendPasswordResetEmail } from '../services/payment.service';
 import {
   sendPushToUser,
@@ -207,6 +208,20 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[AUTH] Get me error:', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// POST /api/auth/members-sso — minta o código de uso único (60s) que o botão
+// "Área de Membros" usa para entrar logado em members.czero.sbs (outra
+// origem — localStorage não cruza). O app navega para
+// https://members.czero.sbs/sso#code=… e a página /sso troca o código pelo
+// JWT via POST /api/members/sso/exchange.
+router.post('/members-sso', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    return res.json({ code: signMembersSsoCode(req.user!.id) });
+  } catch (error) {
+    console.error('[AUTH] members-sso mint error:', error);
+    return res.status(500).json({ error: 'Erro ao gerar acesso' });
   }
 });
 

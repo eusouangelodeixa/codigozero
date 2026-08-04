@@ -28,6 +28,8 @@ import contentPublicRoutes from './routes/contentPage.routes';
 import lpRoutes from './routes/lp.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import feedbackAdminRoutes from './routes/feedback.admin.routes';
+import membersRoutes from './routes/members.routes';
+import membersAdminRoutes from './routes/members.admin.routes';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { blockWithdrawOnly } from './middlewares/withdrawOnly.guard';
 import { startCronJobs } from './jobs/cron';
@@ -111,6 +113,7 @@ app.use(cors({
       'https://www.czero.sbs',    // www variant
       'https://lp.czero.sbs',     // reels LP (lp.czero.sbs → /lp)
       'https://central.czero.sbs',// Central de Material (future)
+      'https://members.czero.sbs',// Área de membros multi-curso
     ].filter(Boolean);
     if (allowed.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -148,6 +151,11 @@ app.use('/api/admin/content-pages', contentPageAdminRoutes);
 // internamente.
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/admin/feedback', feedbackAdminRoutes);
+// Área de membros multi-curso (members.czero.sbs): rotas do aluno têm auth
+// POR ROTA (login-config e sso/exchange são públicas); o admin roda
+// auth+admin internamente.
+app.use('/api/members', membersRoutes);
+app.use('/api/admin/members', membersAdminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/coproducers', coproducerAdminRoutes);
 app.use('/api/coproducer', coproducerRoutes);

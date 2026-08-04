@@ -1130,8 +1130,18 @@ router.get('/modules', async (_req: AuthRequest, res: Response) => {
 router.post('/modules', async (req: AuthRequest, res: Response) => {
   try {
     const { title, description, icon, sortOrder } = req.body;
+    // PROVISÓRIO (fase 1 da área de membros): o CRUD antigo de /admin/aulas
+    // não conhece cursos — módulos criados aqui caem no curso legado
+    // "Código Zero" (mesmo uuid do backfill da migração members_courses).
+    // Este bloco inteiro é substituído pelo members.admin.routes na fase 4.
     const mod = await prisma.module.create({
-      data: { title, description, icon, sortOrder: sortOrder || 0 },
+      data: {
+        title,
+        description,
+        icon,
+        sortOrder: sortOrder || 0,
+        courseId: 'c0000000-0000-4000-8000-000000000001',
+      },
     });
     res.json({ module: mod });
   } catch (error) {

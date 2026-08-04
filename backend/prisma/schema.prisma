@@ -190,28 +190,55 @@ model Script {
   @@index([folderId])
 }
 
+// ── Área de membros multi-curso (members.czero.sbs) ─────────────────────
+// Um Course agrupa Modules→Lessons e carrega TODA a personalização visual
+// (tema, menu, login, home) em `config` Json — mesclado no frontend com
+// MEMBER_DEFAULTS (frontend/lib/members/defaults.ts), mesmo padrão do
+// LandingConfig.sections. Todo assinante ativo vê todos os cursos
+// published (sem entitlements por curso na v1). O curso legado da Forja é
+// o uuid fixo c0000000-0000-4000-8000-000000000001 (slug codigo-zero),
+// criado pela migração members_courses com backfill dos módulos.
+model Course {
+  id        String   @id @default(uuid())
+  slug      String   @unique // members.czero.sbs/{slug} — proibidos: login|sso|cursos
+  name      String
+  coverUrl  String?  // capa 640x360 da grade "Meus Cursos" (espelho de config.branding.coverUrl)
+  status    String   @default("draft") // draft | published
+  sortOrder Int      @default(0)
+  config    Json?    // { theme, branding, menu, home } — ver MemberConfig no frontend
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  modules   Module[]
+}
+
 model Module {
   id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title       String
   description String?
-  icon        String?
+  icon        String?  // legado (emoji) — a UI nova usa coverUrl
+  coverUrl    String?  // poster vertical do carrossel de módulos
   sortOrder   Int      @default(0)
   lessons     Lesson[]
+
+  @@index([courseId])
 }
 
 model Lesson {
-  id          String   @id @default(uuid())
-  moduleId    String
-  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  videoUrl    String
-  duration    Int?     // seconds
-  sortOrder   Int      @default(0)
-  tools       Json?    // recommended tools
-  content     String?  // lesson text content (markdown)
-  materials   Json?    // [{name, url, type}] — links, PDFs, resources
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  moduleId     String
+  module       Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  videoUrl     String
+  duration     Int?     // seconds
+  sortOrder    Int      @default(0)
+  thumbnailUrl String?  // miniatura na lista de aulas / drawer do player
+  tools        Json?    // recommended tools
+  content      String?  // lesson text content (markdown)
+  materials    Json?    // [{name, url, type}] — links, PDFs, resources
+  createdAt    DateTime @default(now())
 
   progress LessonProgress[]
 
@@ -219,16 +246,19 @@ model Lesson {
 }
 
 model LessonProgress {
-  id          String    @id @default(uuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lessonId    String
-  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  completed   Boolean   @default(false)
-  completedAt DateTime?
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  rating       Int?      // 1..5 — avaliação (estrelas) do usuário nesta aula
+  lastViewedAt DateTime? // última abertura da aula — alimenta "Continuar assistindo"
 
   @@unique([userId, lessonId])
   @@index([userId])
+  @@index([userId, lastViewedAt])
 }
 
 model Transaction {

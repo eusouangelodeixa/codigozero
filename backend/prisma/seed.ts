@@ -165,11 +165,20 @@ async function main() {
     },
   ];
 
+  // Curso legado da área de membros — mesmo uuid fixo usado pela migração
+  // members_courses em produção, para dev e prod ficarem consistentes.
+  const LEGACY_COURSE_ID = 'c0000000-0000-4000-8000-000000000001';
+  await prisma.course.upsert({
+    where: { id: LEGACY_COURSE_ID },
+    update: {},
+    create: { id: LEGACY_COURSE_ID, slug: 'codigo-zero', name: 'Código Zero', status: 'published', sortOrder: 0 },
+  });
+
   for (const moduleData of modulesData) {
     const { lessons, ...moduleFields } = moduleData;
 
     const module = await prisma.module.create({
-      data: moduleFields,
+      data: { ...moduleFields, courseId: LEGACY_COURSE_ID },
     });
 
     for (const lesson of lessons) {

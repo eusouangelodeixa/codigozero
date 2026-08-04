@@ -6,7 +6,7 @@ import { AuthRequest } from './auth.middleware';
  * Users in 'active' status pass through. All others get blocked.
  *
  * EXCEPTION: admin + coproducer roles bypass the check entirely. They
- * don't consume the member subscription (don't access /forja, /radar
+ * don't consume the member subscription (don't access os cursos, /radar
  * etc.), so a `subscriptionStatus='lead'` on a coprodutor account is
  * normal — coproducers are typically promoted from a lead/member row
  * without ever having paid. Blocking them sent legit coprodutoras

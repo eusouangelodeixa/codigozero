@@ -40,9 +40,9 @@
       "icons": [{ "src": "/icons/icon-192.png?v=6", "sizes": "192x192" }]
     },
     {
-      "name": "Forja",
-      "short_name": "Aulas",
-      "description": "Continuar aulas",
+      "name": "Cursos",
+      "short_name": "Cursos",
+      "description": "Abrir a área de membros",
       "url": "/forja",
       "icons": [{ "src": "/icons/icon-192.png?v=6", "sizes": "192x192" }]
     },

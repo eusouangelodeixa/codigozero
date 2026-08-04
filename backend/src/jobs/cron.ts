@@ -669,7 +669,7 @@ export function startCronJobs() {
         sendPushToUser(user.id, {
           title: '👋 Sentimos sua falta!',
           body: randomMsg,
-          url: '/forja',
+          url: '/dashboard',
         }, 'system').catch(() => {});
       }
 

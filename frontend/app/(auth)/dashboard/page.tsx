@@ -128,7 +128,7 @@ export default function DashboardPage() {
     if (total > 0 && progress < 100) {
       return {
         eyebrow: "Ação do dia",
-        title: "Continue de onde parou na Forja.",
+        title: "Continue de onde parou nos cursos.",
         desc: `Você já concluiu ${progress}% das aulas. Avance mais uma hoje para dominar o método.`,
         button: "Continuar aulas",
         href: "/forja",
@@ -147,7 +147,7 @@ export default function DashboardPage() {
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
     { href: "/cofre", icon: <CofreIcon size={20} />, title: "Cofre", desc: "Scripts prontos para vender" },
-    { href: "/forja", icon: <ForjaIcon size={20} />, title: "Forja", desc: "Aulas e materiais de domínio" },
+    { href: "/forja", icon: <ForjaIcon size={20} />, title: "Cursos", desc: "Área de membros e aulas" },
     { href: "/qg", icon: <QGIcon size={20} />, title: "QG", desc: "Comunidade e mentorias ao vivo" },
   ];
 
@@ -269,7 +269,7 @@ export default function DashboardPage() {
         <div className={styles.progressCard}>
           <div className={styles.progressHead}>
             <div className={styles.progressTitle}>
-              <span className={styles.progressTitleMain}>Progresso na Forja</span>
+              <span className={styles.progressTitleMain}>Progresso nos cursos</span>
               <span className={styles.progressTitleSub}>{completed} de {total} aulas concluídas</span>
             </div>
             <span className={styles.progressPercent}>{progress}%</span>

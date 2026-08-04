@@ -11,7 +11,6 @@ import authRoutes from './routes/auth.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import radarRoutes from './routes/radar.routes';
 import cofreRoutes from './routes/cofre.routes';
-import forjaRoutes from './routes/forja.routes';
 import qgRoutes from './routes/qg.routes';
 import webhookRoutes from './routes/webhook.routes';
 import landingRoutes from './routes/landing.routes';
@@ -137,7 +136,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/dashboard', authMiddleware, blockWithdrawOnly, dashboardRoutes);
 app.use('/api/radar', authMiddleware, blockWithdrawOnly, radarRoutes);
 app.use('/api/cofre', authMiddleware, blockWithdrawOnly, cofreRoutes);
-app.use('/api/forja', authMiddleware, blockWithdrawOnly, forjaRoutes);
 app.use('/api/qg', authMiddleware, blockWithdrawOnly, qgRoutes);
 app.use('/api/landing', landingRoutes);
 // Content / lead-magnet pages: public read+capture (/api/content) and admin

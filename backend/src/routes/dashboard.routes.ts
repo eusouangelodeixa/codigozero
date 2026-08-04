@@ -44,6 +44,24 @@ router.get('/metrics', authMiddleware, subscriptionMiddleware, async (req: AuthR
       ? Math.round((completedLessons / totalLessons) * 100)
       : 0;
 
+    // Progresso POR CURSO (área de membros) — alimenta as barras do card
+    // "Cursos" no dashboard do aluno.
+    const publishedCourses = await prisma.course.findMany({
+      where: { status: 'published' },
+      orderBy: { sortOrder: 'asc' },
+      select: { slug: true, name: true, modules: { select: { lessons: { select: { id: true } } } } },
+    });
+    const doneRows = await prisma.lessonProgress.findMany({
+      where: { userId, completed: true },
+      select: { lessonId: true },
+    });
+    const doneSet = new Set(doneRows.map((r) => r.lessonId));
+    const courses = publishedCourses.map((c) => {
+      const ids = c.modules.flatMap((m) => m.lessons.map((l) => l.id));
+      const done = ids.filter((lid) => doneSet.has(lid)).length;
+      return { slug: c.slug, name: c.name, totalLessons: ids.length, completedLessons: done, pct: ids.length ? Math.round((done / ids.length) * 100) : 0 };
+    });
+
     // Get user info for subscription
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -67,6 +85,7 @@ router.get('/metrics', authMiddleware, subscriptionMiddleware, async (req: AuthR
         searchesRemaining: getRemainingSearches(user),
         dailySearchLimit: env.MAX_DAILY_SEARCHES,
       },
+      courses,
       user: {
         name: user?.name,
         subscriptionStatus: user?.subscriptionStatus,

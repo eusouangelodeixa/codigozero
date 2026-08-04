@@ -96,13 +96,6 @@ export const apiClient = {
 
   getScript: (id: string) => api(`/api/cofre/scripts/${id}`),
 
-  // Forja
-  getModules: () => api('/api/forja/modules'),
-
-  updateProgress: (lessonId: string, completed: boolean) =>
-    api('/api/forja/progress', { method: 'POST', body: JSON.stringify({ lessonId, completed }) }),
-
-  getProgress: () => api('/api/forja/progress'),
 
   // QG
   getQGInfo: () => api('/api/qg/info'),

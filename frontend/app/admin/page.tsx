@@ -242,7 +242,7 @@ export default function AdminDashboard() {
           suffix={stats ? `· ${stats.totalModules} módulos` : undefined}
           loading={!stats}
           icon={<IconLessons />}
-          sub="conteúdo na Forja"
+          sub="conteúdo nos cursos"
         />
         <MetricCard
           label="Scripts no Cofre"

@@ -55,7 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Arsenal",
     items: [
       { href: "/cofre", label: "Cofre", icon: CofreIcon },
-      { href: "/forja", label: "Forja", icon: ForjaIcon },
+      { href: "/forja", label: "Cursos", icon: ForjaIcon },
     ],
   },
   {
@@ -104,7 +104,7 @@ const CloseIcon = ({ size = 18, className }: { size?: number; className?: string
 const BOTTOM_NAV: NavItem[] = [
   { href: "/dashboard", label: "Início", icon: DashboardIcon },
   { href: "/radar", label: "Radar", icon: RadarIcon },
-  { href: "/forja", label: "Forja", icon: ForjaIcon },
+  { href: "/forja", label: "Cursos", icon: ForjaIcon },
   { href: "/cofre", label: "Cofre", icon: CofreIcon },
 ];
 
@@ -114,7 +114,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/radar": "Radar",
   "/disparador": "Disparador",
   "/cofre": "Cofre",
-  "/forja": "Forja",
+  "/forja": "Cursos",
   "/qg": "QG",
   "/chat": "Chat",
   "/afiliacao": "Afiliação",

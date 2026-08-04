@@ -70,6 +70,9 @@ function CourseContentInner({ params }: { params: Promise<{ slug: string }> }) {
             {data.continue && (
               <div className={k.courseHeroOverlay}>
                 <span className={k.heroLessonTitle}>{data.continue.title}</span>
+                <div className={k.heroProgress}>
+                  <div className={k.heroProgressFill} />
+                </div>
                 <button type="button" className={k.resumeBtn} onClick={() => openLesson(data.continue!.lessonId)}>
                   <Play size={17} fill="currentColor" /> Retomar
                 </button>

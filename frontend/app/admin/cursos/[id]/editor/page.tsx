@@ -1,27 +1,31 @@
 "use client";
-// Editor WYSIWYG da área de membros (nível Kiwify): preview central AO VIVO
-// usando os componentes REAIS do aluno (ThemeVars/MembersShell/widgets/
-// LoginCard em previewMode) + painéis por aba (Início/Menu/Login/
-// Configurações) e alternância desktop/mobile. Salvar = um PATCH com
-// {name, coverUrl, config}.
+// Editor WYSIWYG da área de membros — chrome CLARO fiel ao editor da Kiwify:
+// header branco (abas com ícone, toggles de dispositivo, Salvar azul), canvas
+// cinza com preview AO VIVO dos componentes REAIS do aluno (desktop em cartão
+// / mobile em moldura de celular com notch) e painel direito branco com dicas
+// amarelas de tamanho. Salvar = um PATCH {name, coverUrl, config}.
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Monitor, Smartphone, GripVertical, X, Plus } from "lucide-react";
+import {
+  ArrowLeft,
+  House,
+  KeyRound,
+  Menu as MenuIcon,
+  Monitor,
+  Plus,
+  Settings,
+  Smartphone,
+  GripVertical,
+  X,
+} from "lucide-react";
 import { useToast } from "@/components/ui";
 import { ThemeVars } from "@/components/members/ThemeVars";
 import { MembersShell } from "@/components/members/MembersShell";
 import { LoginCard } from "@/components/members/LoginCard";
 import { BannerCarousel, ContinueRow, ModuleCarousel, type MemberModule } from "@/components/members/widgets";
-import k from "@/components/members/kit.module.css";
 import { MEMBER_ICONS, memberIcon } from "@/lib/members/icons";
-import {
-  MEMBER_DEFAULTS,
-  mergeMemberConfig,
-  type MemberConfig,
-  type MemberMenuItem,
-  type MemberHomeSection,
-} from "@/lib/members/defaults";
-import styles from "../../../admin.module.css";
+import { mergeMemberConfig, type MemberConfig } from "@/lib/members/defaults";
+import e from "./editor.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({
@@ -31,25 +35,25 @@ const hdr = () => ({
 const uid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2));
 
 type TabId = "inicio" | "menu" | "login" | "config";
-const TABS: { id: TabId; label: string }[] = [
-  { id: "inicio", label: "Início" },
-  { id: "menu", label: "Menu" },
-  { id: "login", label: "Login" },
-  { id: "config", label: "Configurações" },
+const TABS: { id: TabId; label: string; icon: typeof House }[] = [
+  { id: "inicio", label: "Início", icon: House },
+  { id: "menu", label: "Menu", icon: MenuIcon },
+  { id: "login", label: "Login", icon: KeyRound },
+  { id: "config", label: "Configurações", icon: Settings },
 ];
 
-function Upload({ label, onDone }: { label: string; onDone: (url: string) => void }) {
+function Upload({ label, onDone, small }: { label: string; onDone: (url: string) => void; small?: boolean }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   return (
-    <label className={styles.btnSecondary} style={{ cursor: "pointer", display: "inline-block", fontSize: 12.5 }}>
+    <label className={e.smallBtn} style={{ cursor: "pointer", display: "inline-block" }}>
       {busy ? "Enviando…" : label}
       <input
         type="file"
         accept="image/*"
         style={{ display: "none" }}
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
+        onChange={async (ev) => {
+          const file = ev.target.files?.[0];
           if (!file) return;
           setBusy(true);
           try {
@@ -67,7 +71,7 @@ function Upload({ label, onDone }: { label: string; onDone: (url: string) => voi
             toast.error(err?.message || "Falha no upload");
           } finally {
             setBusy(false);
-            e.target.value = "";
+            ev.target.value = "";
           }
         }}
       />
@@ -87,20 +91,22 @@ function ImgField({
   onChange: (url?: string) => void;
 }) {
   return (
-    <div className={styles.formGroup}>
-      <label className={styles.formLabel}>{label}</label>
+    <div className={e.group}>
+      <label className={e.label}>{label}</label>
       {value && (
-        <img src={value} alt="" style={{ maxWidth: "100%", maxHeight: 90, objectFit: "contain", borderRadius: 8, background: "#000", padding: 4, marginBottom: 8, display: "block" }} />
+        <div className={e.imgPreview}>
+          <img src={value} alt="" />
+        </div>
       )}
       <div style={{ display: "flex", gap: 8 }}>
-        <Upload label={value ? "Trocar" : "Enviar imagem"} onDone={(url) => onChange(url)} />
+        <Upload label={value ? "Trocar" : "Selecione do computador"} onDone={(url) => onChange(url)} />
         {value && (
-          <button type="button" className={styles.btnSecondary} style={{ fontSize: 12.5 }} onClick={() => onChange(undefined)}>
+          <button type="button" className={e.smallBtn} onClick={() => onChange(undefined)}>
             Remover
           </button>
         )}
       </div>
-      {hint && <span style={{ fontSize: 11.5, color: "var(--text-tertiary)", display: "block", marginTop: 6 }}>💡 {hint}</span>}
+      {hint && <div className={e.hint}>💡 {hint}</div>}
     </div>
   );
 }
@@ -131,7 +137,7 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
         setSlug(d.course.slug);
         setCoverUrl(d.course.coverUrl || undefined);
         setCfg(mergeMemberConfig(d.course.config));
-        // Preview usa o conteúdo real com progresso simulado (~40%).
+        // Preview usa o conteúdo real com progresso simulado (~1/3).
         setModules(
           (d.course.modules || []).map((m: any) => {
             const lessons = (m.lessons || []).map((l: any, i: number) => ({
@@ -172,8 +178,8 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
       if (!r.ok) throw new Error((await r.json()).error);
       toast.success("Área de membros salva");
       setDirty(false);
-    } catch (e: any) {
-      toast.error(e?.message || "Falha ao salvar");
+    } catch (err: any) {
+      toast.error(err?.message || "Falha ao salvar");
     } finally {
       setSaving(false);
     }
@@ -185,11 +191,11 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
   }, [modules]);
 
   if (!cfg) {
-    return <div style={{ padding: 40, color: "var(--text-tertiary)" }}>Carregando editor…</div>;
+    return <div className={e.page} style={{ display: "grid", placeItems: "center", color: "#6b7280" }}>Carregando editor…</div>;
   }
 
   // ── Preview central (componentes reais do aluno) ──────────────────────────
-  const preview =
+  const previewInner =
     tab === "login" ? (
       <ThemeVars config={cfg}>
         <LoginCard config={cfg} courseName={name} previewMode />
@@ -216,7 +222,6 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
       </ThemeVars>
     );
 
-  // ── Painéis ────────────────────────────────────────────────────────────────
   const slides = cfg.home.banner.slides;
   const sections = cfg.home.sections;
   const menu = cfg.menu;
@@ -229,126 +234,153 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "var(--bg-base)", display: "flex", flexDirection: "column" }}>
+    <div className={e.page}>
       {/* Header */}
-      <header style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 16px", borderBottom: "1px solid var(--border-subtle)", flexWrap: "wrap" }}>
-        <button type="button" className={styles.btnSecondary} onClick={() => router.push(`/admin/cursos/${id}`)}>
-          ← Voltar
+      <header className={e.header}>
+        <button type="button" className={e.backBtn} onClick={() => router.push(`/admin/cursos/${id}`)} aria-label="Voltar">
+          <ArrowLeft size={18} />
         </button>
-        <strong style={{ fontSize: 14 }}>{name}</strong>
-        <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
-          {TABS.map((t) => (
-            <button key={t.id} type="button" className={tab === t.id ? styles.filterBtnActive : styles.filterBtn} onClick={() => setTab(t.id)}>
-              {t.label}
-            </button>
-          ))}
+        <span className={e.title}>{name.toUpperCase()}</span>
+
+        <div className={e.tabs}>
+          {TABS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button key={t.id} type="button" className={`${e.tab} ${tab === t.id ? e.tabActive : ""}`} onClick={() => setTab(t.id)}>
+                <Icon size={15} /> {t.label}
+              </button>
+            );
+          })}
         </div>
-        <div style={{ display: "flex", gap: 4, background: "var(--bg-elevated)", borderRadius: 9, padding: 3 }}>
-          <button type="button" className={styles.actionBtn} style={device === "desktop" ? { background: "var(--accent-dim)" } : undefined} onClick={() => setDevice("desktop")} aria-label="Desktop">
+
+        <div className={e.deviceGroup}>
+          <button
+            type="button"
+            className={`${e.deviceBtn} ${device === "desktop" ? e.deviceBtnActive : ""}`}
+            onClick={() => setDevice("desktop")}
+            aria-label="Desktop"
+          >
             <Monitor size={16} />
           </button>
-          <button type="button" className={styles.actionBtn} style={device === "mobile" ? { background: "var(--accent-dim)" } : undefined} onClick={() => setDevice("mobile")} aria-label="Mobile">
+          <button
+            type="button"
+            className={`${e.deviceBtn} ${device === "mobile" ? e.deviceBtnActive : ""}`}
+            onClick={() => setDevice("mobile")}
+            aria-label="Mobile"
+          >
             <Smartphone size={16} />
           </button>
         </div>
-        <button type="button" className={styles.btnPrimary} onClick={save} disabled={saving || !dirty}>
-          {saving ? "Salvando…" : dirty ? "Salvar" : "Salvo ✓"}
+
+        <button type="button" className={e.saveBtn} onClick={save} disabled={saving || !dirty}>
+          {saving ? "Salvando…" : "Salvar"}
         </button>
       </header>
 
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 360px", minHeight: 0 }}>
-        {/* Preview */}
-        <div style={{ overflow: "auto", background: "#0c1512", padding: 18, display: "flex", justifyContent: "center", alignItems: "flex-start" }}>
-          <div
-            className={k.previewViewport}
-            style={{
-              width: device === "mobile" ? 375 : "100%",
-              maxWidth: device === "mobile" ? 375 : 1280,
-              minHeight: 620,
-              borderRadius: 14,
-              border: "1px solid var(--border-subtle)",
-              overflow: "hidden",
-              boxShadow: "0 20px 60px rgba(0,0,0,.45)",
-              background: "#0a0a0a",
-            }}
-          >
-            {preview}
-          </div>
+      <div className={e.body}>
+        {/* Canvas */}
+        <div className={e.canvas}>
+          {device === "mobile" && tab !== "login" ? (
+            <div className={e.phone}>
+              <div className={e.phoneNotch} />
+              <div className={e.phoneScreen}>{previewInner}</div>
+            </div>
+          ) : (
+            <div className={e.desktopFrame} style={device === "mobile" ? { maxWidth: 420 } : undefined}>
+              {previewInner}
+            </div>
+          )}
         </div>
 
         {/* Painel direito */}
-        <aside style={{ borderLeft: "1px solid var(--border-subtle)", overflow: "auto", padding: 16 }}>
+        <aside className={e.panel}>
           {tab === "inicio" && (
             <>
-              <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Banner</h3>
-              {slides.map((s, i) => (
-                <div key={s.id} style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: 10, marginBottom: 10 }}>
-                  <img src={s.imageUrl} alt="" style={{ width: "100%", borderRadius: 6, aspectRatio: "32/11", objectFit: "cover" }} />
-                  <input
-                    className={styles.formInput}
-                    style={{ marginTop: 8 }}
-                    placeholder="Link do slide (opcional)"
-                    value={s.linkUrl || ""}
-                    onChange={(e) =>
-                      patch((c) => ({
-                        ...c,
-                        home: { ...c.home, banner: { slides: slides.map((x, xi) => (xi === i ? { ...x, linkUrl: e.target.value || undefined } : x)) } },
-                      }))
-                    }
-                  />
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <Upload label="Trocar imagem" onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: slides.map((x, xi) => (xi === i ? { ...x, imageUrl: url } : x)) } } }))} />
-                    <button type="button" className={styles.actionBtnDanger} onClick={() => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: slides.filter((_, xi) => xi !== i) } } }))}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {slides.length < 3 && (
-                <Upload
-                  label={`+ Adicionar slide (${slides.length}/3)`}
-                  onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: [...slides, { id: uid(), imageUrl: url }] } } }))}
-                />
-              )}
-              <p style={{ fontSize: 11.5, color: "var(--text-tertiary)", marginTop: 6 }}>💡 Tamanho recomendado: 1920×660 px</p>
-
-              <h3 style={{ margin: "20px 0 12px", fontSize: 15 }}>Seções</h3>
-              {sections.map((sec, i) => (
-                <div
-                  key={sec.id}
-                  draggable
-                  onDragStart={() => setDragIdx(i)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragIdx !== null && dragIdx !== i) patch((c) => ({ ...c, home: { ...c.home, sections: moveItem(sections, dragIdx, i) } }));
-                    setDragIdx(null);
-                  }}
-                  style={{ display: "flex", alignItems: "center", gap: 8, border: "1px solid var(--border-subtle)", borderRadius: 10, padding: "8px 10px", marginBottom: 8 }}
-                >
-                  <GripVertical size={14} style={{ cursor: "grab", color: "var(--text-tertiary)" }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: ".05em" }}>
-                      {sec.type === "continue" ? "Continuar assistindo" : "Módulos"}
+              <h3 className={e.h3}>Início</h3>
+              <div className={e.group}>
+                <label className={e.label}>Banner</label>
+                {slides.map((s, i) => (
+                  <div key={s.id} className={e.itemCard}>
+                    <div className={e.imgPreview} style={{ marginBottom: 8 }}>
+                      <img src={s.imageUrl} alt="" />
                     </div>
                     <input
-                      className={styles.formInput}
-                      style={{ marginTop: 4, padding: "6px 10px", fontSize: 13 }}
-                      placeholder={sec.type === "continue" ? "Continuar assistindo" : "Título da seção (ex.: Bem-vindo)"}
-                      value={sec.title || ""}
-                      onChange={(e) => patch((c) => ({ ...c, home: { ...c.home, sections: sections.map((x, xi) => (xi === i ? { ...x, title: e.target.value || undefined } : x)) } }))}
+                      className={e.input}
+                      placeholder="Link do slide (opcional)"
+                      value={s.linkUrl || ""}
+                      onChange={(ev) =>
+                        patch((c) => ({
+                          ...c,
+                          home: { ...c.home, banner: { slides: slides.map((x, xi) => (xi === i ? { ...x, linkUrl: ev.target.value || undefined } : x)) } },
+                        }))
+                      }
                     />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                      <Upload label="Trocar imagem" onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: slides.map((x, xi) => (xi === i ? { ...x, imageUrl: url } : x)) } } }))} />
+                      <button
+                        type="button"
+                        className={e.removeBtn}
+                        style={{ marginLeft: "auto" }}
+                        aria-label="Remover slide"
+                        onClick={() => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: slides.filter((_, xi) => xi !== i) } } }))}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
                   </div>
-                  <button type="button" className={styles.actionBtnDanger} onClick={() => patch((c) => ({ ...c, home: { ...c.home, sections: sections.filter((_, xi) => xi !== i) } }))}>
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className={styles.btnSecondary} style={{ fontSize: 12.5 }} onClick={() => patch((c) => ({ ...c, home: { ...c.home, sections: [...sections, { id: uid(), type: "modules" }] } }))}>
-                  <Plus size={13} /> Módulos
+                ))}
+                {slides.length < 3 && (
+                  <Upload
+                    label={`+ Adicionar slide (${slides.length}/3)`}
+                    onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: [...slides, { id: uid(), imageUrl: url }] } } }))}
+                  />
+                )}
+                <div className={e.hint}>💡 Tamanho recomendado: 1920×550 pixels</div>
+              </div>
+
+              <div className={e.group}>
+                <label className={e.label}>Seções</label>
+                {sections.map((sec, i) => (
+                  <div
+                    key={sec.id}
+                    className={e.itemCard}
+                    draggable
+                    onDragStart={() => setDragIdx(i)}
+                    onDragOver={(ev) => ev.preventDefault()}
+                    onDrop={() => {
+                      if (dragIdx !== null && dragIdx !== i) patch((c) => ({ ...c, home: { ...c.home, sections: moveItem(sections, dragIdx, i) } }));
+                      setDragIdx(null);
+                    }}
+                  >
+                    <div className={e.itemRow}>
+                      <GripVertical size={14} className={e.dragHandle} />
+                      <div style={{ flex: 1 }}>
+                        <span className={e.subtle}>{sec.type === "continue" ? "Continuar assistindo" : "Módulos"}</span>
+                        <input
+                          className={e.input}
+                          style={{ marginTop: 5 }}
+                          placeholder={sec.type === "continue" ? "Continuar assistindo" : "Título da seção (ex.: Bem-vindo)"}
+                          value={sec.title || ""}
+                          onChange={(ev) => patch((c) => ({ ...c, home: { ...c.home, sections: sections.map((x, xi) => (xi === i ? { ...x, title: ev.target.value || undefined } : x)) } }))}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className={e.removeBtn}
+                        aria-label="Remover seção"
+                        onClick={() => patch((c) => ({ ...c, home: { ...c.home, sections: sections.filter((_, xi) => xi !== i) } }))}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button type="button" className={e.linkBtn} onClick={() => patch((c) => ({ ...c, home: { ...c.home, sections: [...sections, { id: uid(), type: "modules" }] } }))}>
+                  <Plus size={14} /> Adicionar seção de módulos
                 </button>
-                <button type="button" className={styles.btnSecondary} style={{ fontSize: 12.5 }} onClick={() => patch((c) => ({ ...c, home: { ...c.home, sections: [...sections, { id: uid(), type: "continue" }] } }))}>
-                  <Plus size={13} /> Continuar
+                <br />
+                <button type="button" className={e.linkBtn} onClick={() => patch((c) => ({ ...c, home: { ...c.home, sections: [...sections, { id: uid(), type: "continue" }] } }))}>
+                  <Plus size={14} /> Adicionar "Continuar assistindo"
                 </button>
               </div>
             </>
@@ -356,60 +388,59 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
 
           {tab === "menu" && (
             <>
-              <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Menu</h3>
+              <h3 className={e.h3}>Menu</h3>
               {menu.map((item, i) => {
                 const Icon = memberIcon(item.icon);
                 return (
                   <div
                     key={item.id}
+                    className={e.itemCard}
                     draggable
                     onDragStart={() => setDragIdx(i)}
-                    onDragOver={(e) => e.preventDefault()}
+                    onDragOver={(ev) => ev.preventDefault()}
                     onDrop={() => {
                       if (dragIdx !== null && dragIdx !== i) patch((c) => ({ ...c, menu: moveItem(menu, dragIdx, i) }));
                       setDragIdx(null);
                     }}
-                    style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: 10, marginBottom: 8, position: "relative" }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <GripVertical size={14} style={{ cursor: "grab", color: "var(--text-tertiary)" }} />
+                    <div className={e.itemRow}>
+                      <GripVertical size={14} className={e.dragHandle} />
                       <button
                         type="button"
-                        className={styles.actionBtn}
+                        className={e.iconBtn}
                         onClick={() => setIconPickerFor(iconPickerFor === item.id ? null : item.id)}
                         aria-label="Escolher ícone"
                       >
                         <Icon size={16} />
                       </button>
                       <input
-                        className={styles.formInput}
-                        style={{ flex: 1, padding: "7px 10px", fontSize: 13 }}
+                        className={e.input}
                         value={item.label}
-                        onChange={(e) => patch((c) => ({ ...c, menu: menu.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)) }))}
+                        onChange={(ev) => patch((c) => ({ ...c, menu: menu.map((x, xi) => (xi === i ? { ...x, label: ev.target.value } : x)) }))}
                       />
                       {item.type === "link" && (
-                        <button type="button" className={styles.actionBtnDanger} onClick={() => patch((c) => ({ ...c, menu: menu.filter((_, xi) => xi !== i) }))}>
-                          <X size={14} />
+                        <button type="button" className={e.removeBtn} aria-label="Remover" onClick={() => patch((c) => ({ ...c, menu: menu.filter((_, xi) => xi !== i) }))}>
+                          <X size={12} />
                         </button>
                       )}
                     </div>
                     {item.type === "link" && (
                       <input
-                        className={styles.formInput}
-                        style={{ marginTop: 8, padding: "7px 10px", fontSize: 12.5 }}
+                        className={e.input}
+                        style={{ marginTop: 8 }}
                         placeholder="https://…"
                         value={item.url || ""}
-                        onChange={(e) => patch((c) => ({ ...c, menu: menu.map((x, xi) => (xi === i ? { ...x, url: e.target.value } : x)) }))}
+                        onChange={(ev) => patch((c) => ({ ...c, menu: menu.map((x, xi) => (xi === i ? { ...x, url: ev.target.value } : x)) }))}
                       />
                     )}
                     {iconPickerFor === item.id && (
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4, marginTop: 10, background: "var(--bg-elevated)", borderRadius: 10, padding: 8 }}>
+                      <div className={e.iconGrid}>
                         {Object.entries(MEMBER_ICONS).map(([key, Ic]) => (
                           <button
                             key={key}
                             type="button"
-                            className={styles.actionBtn}
-                            style={item.icon === key ? { background: "var(--accent-dim)" } : undefined}
+                            className={`${e.iconBtn} ${item.icon === key ? e.iconBtnActive : ""}`}
+                            style={{ width: "100%", height: 32 }}
                             onClick={() => {
                               patch((c) => ({ ...c, menu: menu.map((x, xi) => (xi === i ? { ...x, icon: key } : x)) }));
                               setIconPickerFor(null);
@@ -425,8 +456,7 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
               })}
               <button
                 type="button"
-                className={styles.btnPrimary}
-                style={{ width: "100%" }}
+                className={e.addBtn}
                 onClick={() => patch((c) => ({ ...c, menu: [...menu, { id: uid(), type: "link", icon: "link", label: "Novo link", url: "" }] }))}
               >
                 Adicionar
@@ -436,36 +466,35 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
 
           {tab === "login" && (
             <>
-              <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Login</h3>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Layout</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {(
-                    [
-                      ["sidebar", "Barra lateral"],
-                      ["fullscreen", "Toda a tela"],
-                    ] as const
-                  ).map(([v, label]) => (
-                    <button
-                      key={v}
-                      type="button"
-                      className={cfg.branding.loginLayout === v ? styles.filterBtnActive : styles.filterBtn}
-                      onClick={() => patch((c) => ({ ...c, branding: { ...c.branding, loginLayout: v } }))}
-                    >
-                      {label}
-                    </button>
-                  ))}
+              <h3 className={e.h3}>Login</h3>
+              <div className={e.group}>
+                <label className={e.label}>Layout</label>
+                <div className={e.optionRow}>
+                  <button
+                    type="button"
+                    className={`${e.optionBox} ${cfg.branding.loginLayout === "sidebar" ? e.optionBoxActive : ""}`}
+                    onClick={() => patch((c) => ({ ...c, branding: { ...c.branding, loginLayout: "sidebar" } }))}
+                  >
+                    ▯ Barra lateral
+                  </button>
+                  <button
+                    type="button"
+                    className={`${e.optionBox} ${cfg.branding.loginLayout === "fullscreen" ? e.optionBoxActive : ""}`}
+                    onClick={() => patch((c) => ({ ...c, branding: { ...c.branding, loginLayout: "fullscreen" } }))}
+                  >
+                    ▭ Toda a tela
+                  </button>
                 </div>
               </div>
               <ImgField
                 label="Imagem de fundo"
-                hint="Tamanho recomendado: 1920×1080 px"
+                hint="Tamanho recomendado: 1920×1080 pixels"
                 value={cfg.branding.loginBgUrl}
                 onChange={(url) => patch((c) => ({ ...c, branding: { ...c.branding, loginBgUrl: url } }))}
               />
               <ImgField
                 label="Logo"
-                hint="Tamanho recomendado: 720×128 px"
+                hint="Tamanho recomendado: 720×128 pixels"
                 value={cfg.branding.logoUrl}
                 onChange={(url) => patch((c) => ({ ...c, branding: { ...c.branding, logoUrl: url } }))}
               />
@@ -474,65 +503,71 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
 
           {tab === "config" && (
             <>
-              <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>Configurações gerais</h3>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Nome da área de membros</label>
-                <input className={styles.formInput} value={name} onChange={(e) => { setName(e.target.value); setDirty(true); }} />
-                <span style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>members.czero.sbs/{slug}</span>
+              <h3 className={e.h3}>Configurações gerais</h3>
+              <div className={e.group}>
+                <label className={e.label}>Nome da área de membros</label>
+                <input
+                  className={e.input}
+                  value={name}
+                  onChange={(ev) => {
+                    setName(ev.target.value);
+                    setDirty(true);
+                  }}
+                />
+                <span className={e.subtle}>members.czero.sbs/{slug}</span>
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Tema</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {(
-                    [
-                      ["light", "☀️ Claro"],
-                      ["dark", "🌙 Escuro"],
-                    ] as const
-                  ).map(([v, label]) => (
-                    <button
-                      key={v}
-                      type="button"
-                      className={cfg.theme.mode === v ? styles.filterBtnActive : styles.filterBtn}
-                      onClick={() => patch((c) => ({ ...c, theme: { ...c.theme, mode: v } }))}
-                    >
-                      {label}
-                    </button>
-                  ))}
+              <div className={e.group}>
+                <label className={e.label}>Tema</label>
+                <div className={e.optionRow}>
+                  <button
+                    type="button"
+                    className={`${e.optionBox} ${cfg.theme.mode === "light" ? e.optionBoxActive : ""}`}
+                    onClick={() => patch((c) => ({ ...c, theme: { ...c.theme, mode: "light" } }))}
+                  >
+                    ☀️ Claro
+                  </button>
+                  <button
+                    type="button"
+                    className={`${e.optionBox} ${cfg.theme.mode === "dark" ? e.optionBoxActive : ""}`}
+                    onClick={() => patch((c) => ({ ...c, theme: { ...c.theme, mode: "dark" } }))}
+                  >
+                    🌙 Escuro
+                  </button>
                 </div>
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Cor primária</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className={e.group}>
+                <label className={e.label}>Cor primária</label>
+                <div className={e.colorRow}>
                   <input
                     type="color"
+                    className={e.colorSwatch}
                     value={cfg.theme.primaryColor}
-                    onChange={(e) => patch((c) => ({ ...c, theme: { ...c.theme, primaryColor: e.target.value } }))}
-                    style={{ width: 44, height: 34, border: "none", borderRadius: 8, background: "none", cursor: "pointer" }}
+                    onChange={(ev) => patch((c) => ({ ...c, theme: { ...c.theme, primaryColor: ev.target.value } }))}
                   />
-                  <code style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>{cfg.theme.primaryColor}</code>
+                  <code className={e.code}>{cfg.theme.primaryColor}</code>
                 </div>
               </div>
               <ImgField
                 label="Logotipo"
-                hint="Tamanho recomendado: 720×128 px"
+                hint="Tamanho recomendado: 720×128 pixels"
                 value={cfg.branding.logoUrl}
                 onChange={(url) => patch((c) => ({ ...c, branding: { ...c.branding, logoUrl: url } }))}
               />
               <ImgField
                 label="Favicon"
-                hint="Tamanho recomendado: 64×64 px"
+                hint="Tamanho recomendado: 64×64 pixels"
                 value={cfg.branding.faviconUrl}
                 onChange={(url) => patch((c) => ({ ...c, branding: { ...c.branding, faviconUrl: url } }))}
               />
               <ImgField
-                label="Imagem para compartilhamento (OG)"
-                hint="Tamanho recomendado: 1200×630 px"
+                label="Imagem para compartilhamento"
+                hint="Tamanho recomendado: 1200×630 pixels"
                 value={cfg.branding.ogImageUrl}
                 onChange={(url) => patch((c) => ({ ...c, branding: { ...c.branding, ogImageUrl: url } }))}
               />
               <ImgField
-                label="Imagem de capa (grade Meus Cursos)"
-                hint="Tamanho recomendado: 640×360 px"
+                label="Imagem de capa"
+                hint="Tamanho recomendado: 640×360 pixels"
                 value={coverUrl}
                 onChange={(url) => {
                   setCoverUrl(url);

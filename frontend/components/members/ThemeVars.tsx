@@ -18,6 +18,9 @@ export function themeStyle(config: MemberConfig): CSSProperties {
     "--m-surface": light ? "#ffffff" : "#161616",
     "--m-text": light ? "#18181b" : "#f4f4f5",
     "--m-text-dim": light ? "#71717a" : "#9ca3af",
+    // Barras de progresso de aula/módulo são VERMELHO fixo (como a
+    // referência Kiwify), independente da cor primária do curso.
+    "--m-progress": "#f75555",
   } as CSSProperties;
 }
 

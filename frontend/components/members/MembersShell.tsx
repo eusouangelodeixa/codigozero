@@ -4,9 +4,10 @@
 // drawer no mobile — fiel aos prints da Kiwify. Puro/props-driven: também é
 // o preview do editor (previewMode desativa navegação real).
 import { useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Menu as MenuIcon, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronUp, Menu as MenuIcon, X } from "lucide-react";
 import k from "./kit.module.css";
 import { memberIcon } from "@/lib/members/icons";
+import { absMediaUrl } from "@/lib/members/api";
 import type { MemberConfig, MemberMenuItem } from "@/lib/members/defaults";
 
 export type ShellUser = { name?: string; avatarUrl?: string } | null;
@@ -84,9 +85,10 @@ export function MembersShell({
         <nav className={k.nav}>{items}</nav>
         <div className={k.userFoot}>
           <span className={k.avatar}>
-            {user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user?.name)}
+            {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : initials(user?.name)}
           </span>
           <span className={k.userName}>{user?.name || "Aluno"}</span>
+          <ChevronUp size={15} style={{ marginLeft: "auto", opacity: 0.7 }} />
         </div>
       </aside>
 
@@ -97,7 +99,13 @@ export function MembersShell({
         {config.menu.slice(0, 3).map((item) => {
           const Icon = memberIcon(item.icon);
           return (
-            <button key={item.id} type="button" className={k.bottomBtn} onClick={() => click(item)} aria-label={item.label}>
+            <button
+              key={item.id}
+              type="button"
+              className={`${k.bottomBtn} ${item.id === activeItemId ? k.bottomBtnActive : ""}`}
+              onClick={() => click(item)}
+              aria-label={item.label}
+            >
               <Icon size={22} strokeWidth={2} />
             </button>
           );
@@ -116,7 +124,7 @@ export function MembersShell({
           <nav className={k.nav}>{items}</nav>
           <div className={k.userFoot}>
             <span className={k.avatar}>
-              {user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials(user?.name)}
+              {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : initials(user?.name)}
             </span>
             <span>{user?.name || "Aluno"}</span>
           </div>

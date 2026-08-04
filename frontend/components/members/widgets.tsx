@@ -120,7 +120,7 @@ export function ModuleCarousel({
   );
 }
 
-// ── Continuar assistindo ───────────────────────────────────────────────────
+// ── Continuar assistindo (card vertical: thumb 16:9 + legenda) ─────────────
 export function ContinueRow({
   title = "Continuar assistindo",
   item,
@@ -143,15 +143,19 @@ export function ContinueRow({
         onClick={() => !previewMode && onOpen?.(item.lessonId)}
         onKeyDown={(e) => e.key === "Enter" && !previewMode && onOpen?.(item.lessonId)}
       >
-        {item.thumbnailUrl ? (
-          <img className={k.continueThumb} src={item.thumbnailUrl} alt="" />
-        ) : (
-          <div className={`${k.continueThumb} ${k.lessonThumbFallback}`}>{item.title}</div>
-        )}
+        <div className={k.continueThumbWrap}>
+          {item.thumbnailUrl ? (
+            <img className={k.continueThumb} src={item.thumbnailUrl} alt="" />
+          ) : (
+            <div className={k.continueThumb} style={{ display: "grid", placeItems: "center", color: "var(--m-text-dim)", fontSize: 13, fontWeight: 700, padding: 12, textAlign: "center" }}>
+              {item.title}
+            </div>
+          )}
+          <div className={k.continueBar}>
+            <div className={k.continueBarFill} />
+          </div>
+        </div>
         <div className={k.continueTitle}>{item.title}</div>
-        <span className={k.continuePlay}>
-          <Play size={18} fill="currentColor" />
-        </span>
       </div>
     </section>
   );
@@ -202,7 +206,7 @@ export function LessonList({
               <div className={k.lessonThumbFallback}>{l.title}</div>
             )}
             <div className={k.lessonThumbBar}>
-              <div className={k.pbarFill} style={{ width: l.completed ? "100%" : "0%" }} />
+              <div className={k.lessonThumbBarFill} style={{ width: l.completed ? "100%" : "0%" }} />
             </div>
           </div>
           <div className={k.lessonTitle}>

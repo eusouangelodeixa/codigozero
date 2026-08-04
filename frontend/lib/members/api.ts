@@ -48,3 +48,14 @@ export function membersUser(): { id: string; name: string; email: string; avatar
     return null;
   }
 }
+
+/**
+ * Absolutiza URLs relativas de mídia (ex.: /uploads/avatars/… do avatar).
+ * No domínio members uma URL relativa apontaria para members.czero.sbs, mas
+ * os arquivos são servidos pelo host do backend (app.czero.sbs).
+ */
+export function absMediaUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${MEMBERS_API}${url.startsWith("/") ? "" : "/"}${url}`;
+}

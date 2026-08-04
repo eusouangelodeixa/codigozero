@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/Logo";
 import k from "@/components/members/kit.module.css";
 import { CourseCard } from "@/components/members/widgets";
-import { membersFetch, membersUser, requireMembersAuth } from "@/lib/members/api";
+import { absMediaUrl, membersFetch, membersUser, requireMembersAuth } from "@/lib/members/api";
 import { memberGo } from "@/lib/members/nav";
 
 type CourseRow = {
@@ -50,7 +50,7 @@ export default function MembersHome() {
       <header className={k.gridHeader}>
         <Logo size={30} />
         <span className={k.avatar} title={user?.name || ""}>
-          {user?.avatarUrl ? <img src={user.avatarUrl} alt="" /> : (user?.name || "A").slice(0, 1).toUpperCase()}
+          {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : (user?.name || "A").slice(0, 1).toUpperCase()}
         </span>
       </header>
 

@@ -13,7 +13,7 @@
 }
 
 .sidebar {
-  width: 248px;
+  width: 280px;
   flex-shrink: 0;
   background: var(--accent);
   color: var(--accent-fg);
@@ -29,46 +29,48 @@
 
 .collapseBtn {
   align-self: flex-end;
-  margin: 10px 12px 0;
-  background: rgba(0, 0, 0, 0.18);
+  margin: 8px 10px 0;
+  background: none;
   border: none;
   color: var(--accent-fg);
+  opacity: 0.75;
   width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  height: 26px;
   cursor: pointer;
   display: grid;
   place-items: center;
 }
+.collapseBtn:hover { opacity: 1; }
 
 .sidebarLogo {
-  margin: 10px 0 14px;
+  margin: 6px 0 0;
   background: #000;
-  min-height: 56px;
+  min-height: 68px;
   display: grid;
   place-items: center;
   overflow: hidden;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
 }
-.sidebarLogo img { max-width: 100%; max-height: 56px; object-fit: contain; display: block; }
+.sidebarLogo img { max-width: 82%; max-height: 52px; object-fit: contain; display: block; }
 .sidebarLogoText { color: #fff; font-weight: 800; font-size: 15px; letter-spacing: 0.02em; padding: 8px 10px; text-align: center; }
 
-.nav { flex: 1; padding: 8px 0; overflow-y: auto; }
+.nav { flex: 1; padding: 14px 0 8px; overflow-y: auto; }
 .navItem {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  padding: 12px 18px;
+  padding: 14px 22px;
   background: none;
   border: none;
   color: var(--accent-fg);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
   text-align: left;
   border-radius: 0;
-  opacity: 0.92;
+  opacity: 0.95;
 }
 .navItem:hover { background: rgba(0, 0, 0, 0.12); opacity: 1; }
 .navItemActive { background: rgba(0, 0, 0, 0.18); opacity: 1; }
@@ -117,7 +119,8 @@
   justify-content: space-around;
   align-items: center;
 }
-.bottomBtn { background: none; border: none; color: var(--accent-fg); display: grid; place-items: center; padding: 6px 14px; cursor: pointer; }
+.bottomBtn { background: none; border: none; color: var(--accent-fg); display: grid; place-items: center; gap: 5px; padding: 6px 14px; cursor: pointer; position: relative; }
+.bottomBtnActive::after { content: ""; position: absolute; bottom: -4px; left: 18%; right: 18%; height: 3px; border-radius: 2px; background: rgba(0, 0, 0, 0.45); }
 @media (max-width: 899px) {
   .sidebar { display: none; }
   .bottomBar { display: flex; }
@@ -145,8 +148,9 @@
 .drawerClose { align-self: flex-end; margin: 4px 16px 8px; background: none; border: none; color: var(--accent-fg); font-size: 22px; cursor: pointer; }
 
 /* ── Banner ────────────────────────────────────────────────────────────── */
-.banner { position: relative; width: 100%; aspect-ratio: 32 / 11; background: #000; overflow: hidden; }
-@media (max-width: 899px) { .banner { aspect-ratio: 16 / 9; } }
+.banner { position: relative; width: 100%; aspect-ratio: 7 / 2; background: #000; overflow: hidden; }
+@media (max-width: 899px) { .banner { aspect-ratio: 8 / 5; } }
+.forceMobile .banner { aspect-ratio: 8 / 5; }
 .bannerSlide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; }
 .bannerSlideActive { opacity: 1; }
 .bannerSlide img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -161,14 +165,14 @@
 
 .carousel {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   overflow-x: auto;
   padding-bottom: 14px;
   scroll-snap-type: x mandatory;
   scrollbar-width: thin;
 }
 .posterCard {
-  flex: 0 0 172px;
+  flex: 0 0 clamp(190px, 16vw, 292px);
   scroll-snap-align: start;
   border-radius: 10px;
   overflow: hidden;
@@ -180,7 +184,7 @@
   position: relative;
   transition: transform 0.18s ease;
 }
-.posterCard:hover { transform: translateY(-3px); }
+.posterCard:hover { transform: translateY(-4px) scale(1.015); }
 .posterImg { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; display: block; background: #101010; }
 .posterFallback {
   width: 100%;
@@ -194,36 +198,28 @@
   color: var(--m-text);
   background: linear-gradient(160deg, var(--accent-dim), #101010 70%);
 }
-.posterBar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.14); }
-.posterBarFill { height: 100%; background: var(--accent); }
+.posterBar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.16); }
+.posterBarFill { height: 100%; background: var(--m-progress); }
 
-/* Continuar assistindo */
+/* Continuar assistindo — card vertical (thumb + legenda), fiel à referência */
 .continueCard {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: block;
+  width: clamp(240px, 24vw, 330px);
   background: var(--m-surface);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 10px;
+  overflow: hidden;
   cursor: pointer;
-  max-width: 520px;
   text-decoration: none;
   color: var(--m-text);
+  transition: transform 0.18s ease;
 }
-.continueThumb { width: 150px; aspect-ratio: 16 / 9; border-radius: 8px; object-fit: cover; background: #101010; flex-shrink: 0; }
-.continueTitle { font-weight: 700; font-size: 14.5px; line-height: 1.4; }
-.continuePlay {
-  margin-left: auto;
-  flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-fg);
-  display: grid;
-  place-items: center;
-}
+.continueCard:hover { transform: translateY(-3px); }
+.continueThumbWrap { position: relative; }
+.continueThumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #101010; }
+.continueBar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255, 255, 255, 0.16); }
+.continueBarFill { height: 100%; background: var(--m-progress); width: 35%; }
+.continueTitle { font-weight: 700; font-size: 14px; line-height: 1.45; padding: 12px 14px; }
 
 /* ── Página do curso / lista de aulas ──────────────────────────────────── */
 .courseHero { position: relative; }
@@ -253,11 +249,13 @@
   width: fit-content;
   text-decoration: none;
 }
-.heroLessonTitle { color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+.heroLessonTitle { color: #fff; font-weight: 700; font-size: 17px; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+.heroProgress { width: min(420px, 60%); height: 4px; border-radius: 3px; background: rgba(255,255,255,.28); overflow: hidden; }
+.heroProgressFill { height: 100%; background: var(--m-progress); width: 30%; }
 
 .courseMeta { padding: 18px 28px 0; }
 @media (max-width: 899px) { .courseMeta { padding: 14px 16px 0; } }
-.courseName { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
+.courseName { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
 .courseCounts { color: var(--m-text-dim); font-size: 13.5px; margin: 6px 0 0; }
 
 .moduleSelect {
@@ -339,9 +337,9 @@
   cursor: pointer;
   flex-shrink: 0;
 }
-.lessonCheckDone { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.lessonCheckDone { background: var(--accent); border-color: var(--accent); color: #fff; }
 .lessonThumbWrap { position: relative; flex-shrink: 0; }
-.lessonThumb { width: 132px; aspect-ratio: 16 / 9; border-radius: 8px; object-fit: cover; display: block; background: #101010; }
+.lessonThumb { width: 150px; aspect-ratio: 16 / 9; border-radius: 8px; object-fit: cover; display: block; background: #101010; }
 .lessonThumbFallback {
   width: 132px;
   aspect-ratio: 16 / 9;
@@ -355,16 +353,18 @@
   color: var(--m-text-dim);
   background: linear-gradient(150deg, var(--accent-dim), #101010);
 }
-.lessonThumbBar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 0 0 8px 8px; background: rgba(255,255,255,.15); overflow: hidden; }
+.lessonThumbBar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; border-radius: 0 0 8px 8px; background: rgba(255,255,255,.16); overflow: hidden; }
+.lessonThumbBarFill { height: 100%; background: var(--m-progress); }
 .lessonTitle { font-size: 14.5px; font-weight: 600; line-height: 1.45; flex: 1; min-width: 0; }
 .lessonDur { color: var(--m-text-dim); font-size: 12.5px; flex-shrink: 0; }
 @media (max-width: 599px) {
-  .lessonThumb, .lessonThumbFallback { width: 96px; }
+  .lessonThumb { width: 104px; }
+  .lessonThumbFallback { width: 104px; }
   .lessonRow { gap: 10px; padding: 10px 6px; }
 }
 
 /* ── Player ────────────────────────────────────────────────────────────── */
-.playerLayout { display: grid; grid-template-columns: 1fr 380px; min-height: 100dvh; background: var(--m-bg); color: var(--m-text); }
+.playerLayout { display: grid; grid-template-columns: 1fr 420px; min-height: 100dvh; background: var(--m-bg); color: var(--m-text); }
 @media (max-width: 1099px) { .playerLayout { grid-template-columns: 1fr; } }
 .playerMain { min-width: 0; }
 .playerTop { display: flex; align-items: center; gap: 12px; padding: 14px 18px 0; }
@@ -405,7 +405,7 @@
   font-weight: 700;
   cursor: pointer;
 }
-.completeBtnDone { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.completeBtnDone { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 .stars { display: inline-flex; gap: 4px; }
 .starBtn { background: none; border: none; cursor: pointer; padding: 2px; color: rgba(255, 255, 255, 0.25); display: grid; place-items: center; }
@@ -433,7 +433,7 @@
 .materialRow:hover { border-color: var(--accent-border); }
 
 /* Drawer de aulas (coluna direita desktop / aba mobile) */
-.drawerPanel { border-left: 1px solid rgba(255, 255, 255, 0.08); background: #0d0d0d; overflow-y: auto; max-height: 100dvh; position: sticky; top: 0; }
+.drawerPanel { border-left: 1px solid rgba(255, 255, 255, 0.08); background: #141414; overflow-y: auto; max-height: 100dvh; position: sticky; top: 0; }
 @media (max-width: 1099px) { .drawerPanel { display: none; } }
 .tabAulasMobile { display: none; }
 @media (max-width: 1099px) { .tabAulasMobile { display: inline-block; } }

@@ -43,7 +43,7 @@ type Period = "7d" | "30d" | "12m";
 
 interface Overview {
   options: string[];
-  funnel: { enrolled: number; sent: number; started: number; completed: number; responseRate: number | null };
+  funnel: { enrolled: number; sent: number; started: number; completed: number; declined?: number; responseRate: number | null };
   csatPct: number | null;
   avgScore: number | null;
   totalAnswered: number;
@@ -194,6 +194,7 @@ function OverviewTab({ data, loading }: { data: Overview | null; loading: boolea
           <StatTile label="Enviadas" value={funnel?.sent ?? "—"} hint="chegaram ao cliente" loading={loading} />
           <StatTile label="Iniciadas" value={funnel?.started ?? "—"} hint="≥ 1 resposta" loading={loading} />
           <StatTile accent label="Concluídas" value={funnel?.completed ?? "—"} tone="good" loading={loading} />
+          <StatTile label="Recusaram" value={funnel?.declined ?? 0} hint="disseram não ao consentimento" tone="warn" loading={loading} />
           <StatTile
             label="Canal"
             value={`${wa} / ${em}`}

@@ -48,6 +48,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       enrolled,
       sentSurveys,
       completed,
+      declined,
       answeredResponses,
       suggestionsInWindow,
       unreadSuggestions,
@@ -68,6 +69,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         },
       }),
       prisma.feedbackSurvey.count({ where: { feedbackCompletedAt: inWindow } }),
+      // Recusaram o consentimento (o pedido saiu na janela = feedbackStartedAt).
+      prisma.feedbackSurvey.count({
+        where: { feedbackStatus: 'declined', feedbackStartedAt: inWindow },
+      }),
       prisma.feedbackResponse.findMany({
         where: { answeredAt: inWindow },
         select: { questionKey: true, score: true, answeredAt: true, channel: true },
@@ -149,6 +154,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         sent,
         started,
         completed,
+        declined,
         responseRate: sent ? +((completed / sent) * 100).toFixed(1) : null,
       },
       csatPct: totalAnswered ? +((totalPositive / totalAnswered) * 100).toFixed(1) : null,

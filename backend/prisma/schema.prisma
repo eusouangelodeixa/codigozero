@@ -995,10 +995,12 @@ model FeedbackSurvey {
   anchorAt    DateTime // that Transaction.createdAt — D+14/D+21 anchor
   channel     String? // null until first successful send: whatsapp | email
 
-  // D+14 feedback session (4 native WhatsApp polls, adaptive pacing:
-  // voted → next in 1–2min; silent → next after 30–60min; 2 silent in a
-  // row → paused; paused 48h → expired).
-  feedbackStatus      String    @default("scheduled") // scheduled | in_progress | paused | awaiting_web | completed | expired | skipped
+  // D+14 feedback session (consent-gated: a text ask opens the session and
+  // the 4 native WhatsApp polls only start after an explicit "SIM"; "NÃO"
+  // declines BOTH sessions. Adaptive pacing: voted → next in 1–2min; silent
+  // → next after 30–60min; 2 silent in a row → paused; paused/consent 48h →
+  // expired). While awaiting_consent, nextActionAt holds the 48h deadline.
+  feedbackStatus      String    @default("scheduled") // scheduled | awaiting_consent | in_progress | paused | awaiting_web | completed | declined | expired | skipped
   feedbackDueAt       DateTime // anchor+14d, pre-staggered 30–60min apart across users
   feedbackStartedAt   DateTime?
   feedbackCompletedAt DateTime?
@@ -1007,8 +1009,10 @@ model FeedbackSurvey {
   nextActionAt        DateTime? // when the send tick may act on this session again
   pausedAt            DateTime?
 
-  // D+21 suggestion session (free-text ask; replies within 72h are stored).
-  suggestionStatus       String    @default("scheduled") // scheduled | awaiting_reply | awaiting_web | completed | expired | skipped
+  // D+21 suggestion session (consent-gated like the polls; the real ask goes
+  // out after "SIM" and replies within 72h are stored). While
+  // awaiting_consent, suggestionWindowEndsAt holds the 48h consent deadline.
+  suggestionStatus       String    @default("scheduled") // scheduled | awaiting_consent | awaiting_reply | awaiting_web | completed | declined | expired | skipped
   suggestionDueAt        DateTime
   suggestionSentAt       DateTime?
   suggestionWindowEndsAt DateTime? // sentAt + 72h

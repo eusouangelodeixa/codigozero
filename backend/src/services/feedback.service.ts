@@ -276,6 +276,7 @@ async function advanceInProgressSessions(now: Date): Promise<void> {
     take: ADVANCE_BATCH,
   });
 
+  let sentInThisTick = 0;
   for (const s of sessions) {
     try {
       // Was the most recently sent poll answered?
@@ -286,11 +287,14 @@ async function advanceInProgressSessions(now: Date): Promise<void> {
       if (!lastAnswered) {
         streak += 1;
         if (streak >= 2) {
-          await prisma.feedbackSurvey.update({
-            where: { id: s.id },
+          // Lock otimista em nextActionAt: se um voto chegou depois do nosso
+          // findMany (ingestPollVote muda nextActionAt), a pausa vira no-op
+          // em vez de atropelar a sessão recém-reativada.
+          const paused = await prisma.feedbackSurvey.updateMany({
+            where: { id: s.id, feedbackStatus: 'in_progress', nextActionAt: s.nextActionAt },
             data: { feedbackStatus: 'paused', pausedAt: now, unansweredStreak: streak, nextActionAt: null },
           });
-          console.log(`[FEEDBACK] ⏸️ Survey ${s.id} paused (2 silent polls)`);
+          if (paused.count > 0) console.log(`[FEEDBACK] ⏸️ Survey ${s.id} paused (2 silent polls)`);
           continue;
         }
       }
@@ -305,12 +309,20 @@ async function advanceInProgressSessions(now: Date): Promise<void> {
         continue;
       }
 
+      // Anti-rajada na abertura da janela (06:00 UTC): sessões estacionadas
+      // da noite disparam no mesmo tick — espaça 5–15s entre envios de
+      // usuários diferentes dentro do lote.
+      if (sentInThisTick > 0) {
+        await new Promise((res) => setTimeout(res, randBetween(5_000, 15_000)));
+      }
+
       const question = FEEDBACK_QUESTIONS[s.currentQuestion];
       const r = await sendWhatsAppPoll({
         phone: s.user.phone,
         question: question.text,
         options: [...FEEDBACK_OPTIONS],
       });
+      sentInThisTick++;
 
       if (!r.ok) {
         // Never advance on failure — defer 30min and retry.
@@ -371,7 +383,15 @@ async function maybeStartNextSession(now: Date): Promise<void> {
       include: { user: true },
     }),
     prisma.feedbackSurvey.findFirst({
-      where: { suggestionStatus: 'scheduled', suggestionDueAt: { lte: now }, channel: 'whatsapp' },
+      where: {
+        suggestionStatus: 'scheduled',
+        suggestionDueAt: { lte: now },
+        channel: 'whatsapp',
+        // Nunca atropelar uma sessão de enquetes ainda viva (consentimento
+        // pendente, enquetes em curso ou pausada): o D+21 espera o D+14
+        // terminar — a fila simplesmente re-tenta no próximo tick.
+        feedbackStatus: { notIn: ['awaiting_consent', 'in_progress', 'paused'] },
+      },
       orderBy: { suggestionDueAt: 'asc' },
       include: { user: true },
     }),
@@ -603,31 +623,66 @@ export async function ingestInboundText(input: {
 
   // ── Consentimento das enquetes (D+14) ──────────────────────────────────
   // Retorna SEMPRE dentro deste bloco: texto ambíguo durante o consentimento
-  // não pode virar sugestão nem destravar nada.
+  // não pode virar sugestão nem destravar nada. Toda transição é um
+  // updateMany GUARDADO pelo status atual — entregas duplicadas do webhook e
+  // corridas com o sweep de expiração viram no-ops (count 0).
   if (survey.feedbackStatus === 'awaiting_consent') {
     const consent = parseConsentReply(content);
     if (consent === 'yes') {
-      await prisma.feedbackSurvey.update({
-        where: { id: survey.id },
+      const claim = await prisma.feedbackSurvey.updateMany({
+        where: { id: survey.id, feedbackStatus: 'awaiting_consent' },
         data: {
           feedbackStatus: 'in_progress',
           unansweredStreak: 0,
           nextActionAt: new Date(now.getTime() + randQuickMs()),
         },
       });
-      console.log(`[FEEDBACK] ✅ Consent YES — polls starting for survey ${survey.id}`);
+      if (claim.count > 0) console.log(`[FEEDBACK] ✅ Consent YES — polls starting for survey ${survey.id}`);
     } else if (consent === 'no') {
       // O não do D+14 também cancela o pedido de sugestão do D+21.
-      await prisma.feedbackSurvey.update({
-        where: { id: survey.id },
-        data: {
-          feedbackStatus: 'declined',
-          nextActionAt: null,
-          ...(survey.suggestionStatus === 'scheduled' ? { suggestionStatus: 'skipped' } : {}),
-        },
+      const claim = await prisma.feedbackSurvey.updateMany({
+        where: { id: survey.id, feedbackStatus: 'awaiting_consent' },
+        data: { feedbackStatus: 'declined', nextActionAt: null },
       });
-      await sendWhatsAppMessage({ phone: user.phone, content: CONSENT_DECLINED_ACK });
-      console.log(`[FEEDBACK] 🚫 Consent NO — survey ${survey.id} declined`);
+      if (claim.count > 0) {
+        await prisma.feedbackSurvey.updateMany({
+          where: { id: survey.id, suggestionStatus: 'scheduled' },
+          data: { suggestionStatus: 'skipped' },
+        });
+        await sendWhatsAppMessage({ phone: user.phone, content: CONSENT_DECLINED_ACK });
+        console.log(`[FEEDBACK] 🚫 Consent NO — survey ${survey.id} declined`);
+      }
+    }
+    return;
+  }
+
+  // SIM tardio: o consentimento expirou (48h) mas a pessoa respondeu SIM
+  // mesmo assim — quem consente não pode ser ignorado. Revive a sessão
+  // (janela de sanidade: até 14d após o pedido) e restaura o D+21 se ele
+  // tinha sido cancelado pelo silêncio.
+  if (
+    survey.feedbackStatus === 'expired' &&
+    survey.channel === 'whatsapp' &&
+    survey.feedbackCompletedAt == null &&
+    survey.feedbackStartedAt &&
+    now.getTime() - survey.feedbackStartedAt.getTime() < 14 * DAY_MS &&
+    parseConsentReply(content) === 'yes'
+  ) {
+    const claim = await prisma.feedbackSurvey.updateMany({
+      where: { id: survey.id, feedbackStatus: 'expired' },
+      data: {
+        feedbackStatus: 'in_progress',
+        unansweredStreak: 0,
+        pausedAt: null,
+        nextActionAt: new Date(now.getTime() + randQuickMs()),
+      },
+    });
+    if (claim.count > 0) {
+      await prisma.feedbackSurvey.updateMany({
+        where: { id: survey.id, suggestionStatus: 'skipped' },
+        data: { suggestionStatus: 'scheduled' },
+      });
+      console.log(`[FEEDBACK] ♻️ Late consent YES — survey ${survey.id} revived`);
     }
     return;
   }
@@ -636,26 +691,31 @@ export async function ingestInboundText(input: {
   if (survey.suggestionStatus === 'awaiting_consent') {
     const consent = parseConsentReply(content);
     if (consent === 'yes') {
+      // CLAIM primeiro, envio depois: duas entregas/execuções concorrentes do
+      // mesmo SIM disputam o updateMany e só a vencedora envia o pedido real
+      // (nada de pedido duplicado). suggestionSentAt re-estampado aqui também
+      // serve de escudo anti-eco na captura (gate de 10s abaixo).
+      const claim = await prisma.feedbackSurvey.updateMany({
+        where: { id: survey.id, suggestionStatus: 'awaiting_consent' },
+        data: {
+          suggestionStatus: 'awaiting_reply',
+          suggestionSentAt: now,
+          suggestionWindowEndsAt: new Date(now.getTime() + SUGGESTION_WINDOW_MS),
+        },
+      });
+      if (claim.count === 0) return;
       const firstName = (user.name || '').split(' ')[0] || '';
       const r = await sendWhatsAppMessage({
         phone: user.phone,
         content: SUGGESTION_ASK_MESSAGE(firstName),
       });
       if (r.ok) {
-        await prisma.feedbackSurvey.update({
-          where: { id: survey.id },
-          data: {
-            suggestionStatus: 'awaiting_reply',
-            suggestionSentAt: now,
-            suggestionWindowEndsAt: new Date(now.getTime() + SUGGESTION_WINDOW_MS),
-          },
-        });
         console.log(`[FEEDBACK] ✅ Suggestion consent YES — ask sent for survey ${survey.id}`);
       } else {
         // Falha rara de envio logo após o SIM: volta para a fila e o tick
         // re-pede em 30min (melhor um novo pedido do que um SIM no vácuo).
-        await prisma.feedbackSurvey.update({
-          where: { id: survey.id },
+        await prisma.feedbackSurvey.updateMany({
+          where: { id: survey.id, suggestionStatus: 'awaiting_reply' },
           data: {
             suggestionStatus: 'scheduled',
             suggestionDueAt: new Date(now.getTime() + 30 * 60 * 1000),
@@ -664,20 +724,30 @@ export async function ingestInboundText(input: {
         });
       }
     } else if (consent === 'no') {
-      await prisma.feedbackSurvey.update({
-        where: { id: survey.id },
-        data: { suggestionStatus: 'declined' },
+      // Fecha a janela junto — sem isso, conversas de suporte nas próximas
+      // 48h seriam colhidas como "sugestões" de quem disse NÃO.
+      const claim = await prisma.feedbackSurvey.updateMany({
+        where: { id: survey.id, suggestionStatus: 'awaiting_consent' },
+        data: { suggestionStatus: 'declined', suggestionWindowEndsAt: null },
       });
-      await sendWhatsAppMessage({ phone: user.phone, content: CONSENT_DECLINED_ACK });
-      console.log(`[FEEDBACK] 🚫 Suggestion consent NO — survey ${survey.id}`);
+      if (claim.count > 0) {
+        await sendWhatsAppMessage({ phone: user.phone, content: CONSENT_DECLINED_ACK });
+        console.log(`[FEEDBACK] 🚫 Suggestion consent NO — survey ${survey.id}`);
+      }
     }
     return;
   }
 
   // ── Captura de sugestão (janela de 72h após o pedido real) ─────────────
+  // Guardas: (a) só nos status awaiting_reply/completed — declined/expired
+  // NUNCA capturam; (b) janela aberta; (c) 10s após o envio do pedido — a
+  // entrega duplicada do próprio "SIM" chega milissegundos depois do
+  // re-estampo de suggestionSentAt e seria colhida como "sugestão".
+  if (!['awaiting_reply', 'completed'].includes(survey.suggestionStatus)) return;
   if (!survey.suggestionSentAt || !survey.suggestionWindowEndsAt || now > survey.suggestionWindowEndsAt) {
     return;
   }
+  if (now.getTime() - survey.suggestionSentAt.getTime() < 10_000) return;
 
   try {
     await prisma.feedbackSuggestion.create({
@@ -788,6 +858,12 @@ export async function submitWebSurvey(input: {
         nextActionAt: null,
         pausedAt: null,
         unansweredStreak: 0,
+        // Fecha a janela de sugestão do WhatsApp e marca o agradecimento como
+        // feito: depois de completar via web não há mais troca no WhatsApp —
+        // sem isto, um consentimento pendente deixava a janela armada e
+        // qualquer texto (até o "SIM" atrasado) virava "sugestão" + thanks.
+        suggestionWindowEndsAt: survey.suggestionWindowEndsAt ? now : null,
+        thankYouSentAt: survey.thankYouSentAt ?? now,
       },
     }),
   );

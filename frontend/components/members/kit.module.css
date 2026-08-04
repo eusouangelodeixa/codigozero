@@ -123,6 +123,14 @@
   .bottomBar { display: flex; }
 }
 
+/* Preview mobile do editor: força o layout de celular por CLASSE (as media
+ * queries são do viewport e não disparam num container de 375px). */
+.forceMobile .sidebar { display: none; }
+.forceMobile .bottomBar { display: flex; position: absolute; }
+.forceMobile .drawer { position: absolute; }
+.forceMobile .main { padding-bottom: 76px; }
+.previewViewport { position: relative; overflow: hidden; }
+
 .drawerOverlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55); z-index: 45; }
 .drawer {
   position: fixed;

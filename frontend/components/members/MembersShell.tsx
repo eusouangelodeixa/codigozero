@@ -23,6 +23,7 @@ export function MembersShell({
   activeItemId = "home",
   onItemClick,
   previewMode = false,
+  mobilePreview = false,
   children,
 }: {
   config: MemberConfig;
@@ -32,6 +33,8 @@ export function MembersShell({
   /** home/continue navegam dentro do curso; link abre URL externa. */
   onItemClick?: (item: MemberMenuItem) => void;
   previewMode?: boolean;
+  /** Editor: força o layout mobile por classe (media queries não veem o container). */
+  mobilePreview?: boolean;
   children: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -72,7 +75,7 @@ export function MembersShell({
   });
 
   return (
-    <div className={k.shell}>
+    <div className={`${k.shell} ${mobilePreview ? k.forceMobile : ""}`}>
       <aside className={`${k.sidebar} ${collapsed ? k.sidebarCollapsed : ""}`}>
         <button type="button" className={k.collapseBtn} onClick={() => setCollapsed((c) => !c)} aria-label="Recolher menu">
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}

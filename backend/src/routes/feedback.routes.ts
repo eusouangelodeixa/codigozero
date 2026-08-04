@@ -2,11 +2,11 @@
  * Public routes for the /pesquisa web survey (post-purchase feedback).
  *
  * This is the EMAIL/WEB channel of the feedback system: buyers reach the page
- * through a signed link (e-mailed when WhatsApp is unavailable) or by asking
- * for a fresh link with their customer e-mail. No auth middleware — the token
- * IS the auth (possession of the e-mailed link = possession of the inbox),
- * and request-link answers generically so it can't be used to enumerate
- * customer e-mails (same contract as forgot-password/email-request).
+ * through a signed link (e-mailed when WhatsApp is unavailable) or by typing
+ * their customer e-mail at the gate — a valid customer e-mail opens the
+ * survey on the spot (product decision: confirming customer status on screen
+ * is accepted; the rate limit below blunts enumeration abuse). No auth
+ * middleware — the signed token IS the auth for loading/submitting.
  */
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
@@ -14,16 +14,16 @@ import { z } from 'zod';
 import { verifyFeedbackToken } from '../lib/feedbackToken';
 import {
   getWebSurveyState,
-  requestLinkByEmail,
+  openSurveyByEmail,
   submitWebSurvey,
 } from '../services/feedback.service';
 import { FEEDBACK_QUESTIONS } from '../lib/feedbackQuestions';
 
 const router = Router();
 
-const requestLinkLimiter = rateLimit({
+const openByEmailLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
@@ -100,30 +100,33 @@ router.post('/survey/submit', submitLimiter, async (req: Request, res: Response)
   }
 });
 
-const requestLinkSchema = z.object({
+const openByEmailSchema = z.object({
   email: z
     .preprocess((v) => String(v ?? '').trim(), z.string())
     .refine((s) => s.length > 0, { message: 'Informe o e-mail.' }),
 });
 
-// POST /api/feedback/request-link { email }
-// E-mails a fresh survey link IF the address belongs to a current/former
-// customer. ALWAYS answers the same generic message (anti-enumeration).
-router.post('/request-link', requestLinkLimiter, async (req: Request, res: Response) => {
-  const genericOk = () =>
-    res.json({
-      success: true,
-      message: 'Se houver uma conta de cliente com esse e-mail, enviamos o link da pesquisa.',
-    });
+// POST /api/feedback/open-by-email { email }
+// Valid customer e-mail (current or former, has paid at least once) → returns
+// a signed survey token so the page opens the form immediately.
+router.post('/open-by-email', openByEmailLimiter, async (req: Request, res: Response) => {
   try {
-    const parsed = requestLinkSchema.safeParse(req.body ?? {});
+    const parsed = openByEmailSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ error: 'Informe o e-mail.' });
 
-    // Fire-and-forget: the response must not vary with lookup time/result.
-    requestLinkByEmail(parsed.data.email).catch(() => {});
-    return genericOk();
-  } catch {
-    return genericOk();
+    const result = await openSurveyByEmail(parsed.data.email);
+    if (!result.ok) {
+      if (result.code === 'already-completed') {
+        return res.status(409).json({ error: 'Esta pesquisa já foi respondida com esse e-mail. Obrigado!' });
+      }
+      return res.status(404).json({
+        error: 'Não encontramos uma conta de cliente com esse e-mail. Confira se é o mesmo e-mail usado na compra.',
+      });
+    }
+    return res.json({ success: true, token: result.token });
+  } catch (error) {
+    console.error('[FEEDBACK-PUBLIC] POST /open-by-email failed:', error);
+    return res.status(500).json({ error: 'Erro ao verificar o e-mail. Tente novamente.' });
   }
 });
 

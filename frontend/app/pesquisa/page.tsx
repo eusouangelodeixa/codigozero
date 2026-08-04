@@ -4,11 +4,12 @@
  *
  * Com ?token= (link assinado enviado por e-mail): carrega as 4 perguntas +
  * campo de sugestão em uma página só. Respostas parciais que já chegaram via
- * WhatsApp vêm pré-marcadas e travadas. Sem token: pede o e-mail de cliente e
- * envia um link novo (resposta sempre genérica — anti-enumeração).
+ * WhatsApp vêm pré-marcadas e travadas. Sem token: a pessoa digita o e-mail
+ * de cliente e, se ele existir na base como cliente/ex-cliente que já pagou,
+ * a pesquisa ABRE ali mesmo (sem ida ao e-mail).
  */
 import { Suspense, useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -32,18 +33,27 @@ export default function PesquisaPage() {
 }
 
 function PesquisaInner() {
-  const token = useSearchParams().get("token") || "";
+  const urlToken = useSearchParams().get("token") || "";
+  const router = useRouter();
+  const [token, setToken] = useState(urlToken);
+
+  // Gate → token: guarda no estado e reflete na URL (refresh mantém a pesquisa).
+  const applyToken = (t: string) => {
+    setToken(t);
+    router.replace(`/pesquisa?token=${encodeURIComponent(t)}`);
+  };
+
   return (
     <div style={S.card}>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
         <Logo size={38} />
       </div>
-      {token ? <SurveyForm token={token} /> : <RequestLinkForm />}
+      {token ? <SurveyForm token={token} onToken={applyToken} /> : <EmailGate onToken={applyToken} />}
     </div>
   );
 }
 
-function SurveyForm({ token }: { token: string }) {
+function SurveyForm({ token, onToken }: { token: string; onToken: (t: string) => void }) {
   const [state, setState] = useState<SurveyState | null>(null);
   const [loadError, setLoadError] = useState("");
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -54,6 +64,8 @@ function SurveyForm({ token }: { token: string }) {
 
   useEffect(() => {
     let alive = true;
+    setLoadError("");
+    setState(null);
     fetch(`${API_URL}/api/feedback/survey?token=${encodeURIComponent(token)}`)
       .then(async (r) => {
         const j = await r.json();
@@ -76,7 +88,7 @@ function SurveyForm({ token }: { token: string }) {
       <>
         <h1 style={S.title}>Ops…</h1>
         <p style={S.subtitle}>{loadError}</p>
-        <RequestLinkForm compact />
+        <EmailGate compact onToken={onToken} />
       </>
     );
   }
@@ -194,31 +206,48 @@ function SurveyForm({ token }: { token: string }) {
   );
 }
 
-function RequestLinkForm({ compact }: { compact?: boolean }) {
+function EmailGate({ compact, onToken }: { compact?: boolean; onToken: (t: string) => void }) {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [done, setDone] = useState("");
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email.trim() || loading) return;
     setLoading(true);
+    setError("");
     try {
-      const r = await fetch(`${API_URL}/api/feedback/request-link`, {
+      const r = await fetch(`${API_URL}/api/feedback/open-by-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
       });
       const j = await r.json().catch(() => ({}));
-      setMessage(
-        j.message || "Se houver uma conta de cliente com esse e-mail, enviamos o link da pesquisa.",
-      );
+      if (r.ok && j.token) {
+        onToken(j.token); // abre a pesquisa na hora
+        return;
+      }
+      if (r.status === 409) {
+        setDone(j.error || "Esta pesquisa já foi respondida. Obrigado!");
+        return;
+      }
+      setError(j.error || "Não foi possível verificar o e-mail. Tente de novo.");
     } catch {
-      setMessage("Erro de conexão. Tente novamente em instantes.");
+      setError("Erro de conexão. Tente novamente em instantes.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (done) {
+    return (
+      <>
+        {!compact && <h1 style={S.title}>Pesquisa já respondida ✓</h1>}
+        <div style={S.infoBox}>{done}</div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -227,34 +256,32 @@ function RequestLinkForm({ compact }: { compact?: boolean }) {
           <h1 style={S.title}>Pesquisa de satisfação</h1>
           <p style={S.subtitle}>
             Esta pesquisa é exclusiva pra quem é (ou já foi) cliente do{" "}
-            <strong style={{ color: "#fff" }}>Código Zero</strong>. Informe o e-mail da sua conta e enviaremos
-            o link de acesso.
+            <strong style={{ color: "#fff" }}>Código Zero</strong>. Informe o e-mail da sua conta pra abrir a
+            pesquisa.
           </p>
         </>
       )}
       {compact && (
         <p style={{ ...S.subtitle, marginTop: 14 }}>
-          É (ou já foi) cliente? Informe o e-mail da sua conta e enviaremos um link novo:
+          É (ou já foi) cliente? Informe o e-mail da sua conta pra abrir a pesquisa:
         </p>
       )}
 
-      {message ? (
-        <div style={S.infoBox}>{message}</div>
-      ) : (
-        <form onSubmit={submit} style={{ marginTop: 6 }}>
-          <label style={S.label}>E-mail da sua conta</label>
-          <input
-            style={S.input}
-            type="email"
-            placeholder="seu@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
-            {loading ? "Enviando…" : "Receber link da pesquisa"}
-          </button>
-        </form>
-      )}
+      <form onSubmit={submit} style={{ marginTop: 6 }}>
+        <label style={S.label}>E-mail da sua conta</label>
+        <input
+          style={S.input}
+          type="email"
+          placeholder="seu@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoFocus={!compact}
+        />
+        {error && <div style={{ ...S.error, marginTop: 12 }}>{error}</div>}
+        <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
+          {loading ? "Verificando…" : "Abrir a pesquisa →"}
+        </button>
+      </form>
     </>
   );
 }

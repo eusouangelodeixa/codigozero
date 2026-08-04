@@ -38,7 +38,7 @@ import {
   SUGGESTION_THANKS_MESSAGE,
   scoreForOption,
 } from '../lib/feedbackQuestions';
-import { buildFeedbackLink } from '../lib/feedbackToken';
+import { buildFeedbackLink, signFeedbackToken } from '../lib/feedbackToken';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -713,61 +713,57 @@ export async function getWebSurveyState(surveyId: string) {
   };
 }
 
+export type OpenByEmailResult =
+  | { ok: true; token: string }
+  | { ok: false; code: 'not-customer' | 'already-completed' };
+
 /**
- * "Esqueci o link" / customers outside the backfill window: e-mail a fresh
- * web-survey link IF the address belongs to a current-or-former customer.
- * Callers must always answer with the same generic message (anti-enumeration
- * — pattern of auth.routes.ts:712). Never throws.
+ * Web gate of /pesquisa: the visitor types their account e-mail; if it belongs
+ * to a current-or-former customer (someone who actually paid at least once),
+ * the survey opens RIGHT THERE — no e-mail round trip. Deliberately confirms
+ * customer status on screen (product decision); the route rate-limits to blunt
+ * enumeration abuse.
  */
-export async function requestLinkByEmail(email: string): Promise<void> {
-  try {
-    const user = await prisma.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-    });
-    if (!user || user.role !== 'member' || user.grantedManually) return;
-    if (!PAID_STATUSES.includes(user.subscriptionStatus)) return; // leads never qualify
-
-    const anchorTxn = await firstApprovedTransaction(user);
-    if (!anchorTxn) return; // never actually paid
-
-    let survey = await prisma.feedbackSurvey.findUnique({ where: { userId: user.id } });
-    if (survey?.feedbackStatus === 'completed') return; // already answered
-
-    const now = new Date();
-    if (!survey) {
-      // Outside the 45d backfill (or not yet enrolled): create on demand as a
-      // web-only survey.
-      survey = await prisma.feedbackSurvey.create({
-        data: {
-          userId: user.id,
-          anchorTxnId: anchorTxn.id,
-          anchorAt: anchorTxn.createdAt,
-          channel: 'email',
-          feedbackStatus: 'awaiting_web',
-          suggestionStatus: 'awaiting_web',
-          feedbackDueAt: now,
-          suggestionDueAt: now,
-        },
-      });
-    }
-    // NOTE: an existing scheduled/in-progress WhatsApp survey is left as-is —
-    // the user asked for a link (inbound), which is not an outbound double-send.
-    // A web submission simply completes both sessions and halts the polls.
-
-    const sent = await sendFeedbackLinkEmail({
-      name: user.name,
-      email: user.email,
-      surveyUrl: buildFeedbackLink(survey.id),
-    });
-    if (sent.ok) {
-      await prisma.feedbackSurvey.update({
-        where: { id: survey.id },
-        data: { emailSentAt: now },
-      });
-    }
-  } catch (e: any) {
-    console.error('[FEEDBACK] request-link failed:', e?.message || e);
+export async function openSurveyByEmail(email: string): Promise<OpenByEmailResult> {
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+  });
+  if (!user || user.role !== 'member' || user.grantedManually) {
+    return { ok: false, code: 'not-customer' };
   }
+  if (!PAID_STATUSES.includes(user.subscriptionStatus)) {
+    return { ok: false, code: 'not-customer' }; // leads never qualify
+  }
+  const anchorTxn = await firstApprovedTransaction(user);
+  if (!anchorTxn) return { ok: false, code: 'not-customer' }; // never actually paid
+
+  let survey = await prisma.feedbackSurvey.findUnique({ where: { userId: user.id } });
+  if (survey?.feedbackStatus === 'completed') return { ok: false, code: 'already-completed' };
+
+  if (!survey) {
+    // Outside the 45d backfill (or not yet enrolled): create on demand as a
+    // web-only survey. emailSentAt doubles as the "web link issued" stamp so
+    // the admin funnel counts it as reached.
+    const now = new Date();
+    survey = await prisma.feedbackSurvey.create({
+      data: {
+        userId: user.id,
+        anchorTxnId: anchorTxn.id,
+        anchorAt: anchorTxn.createdAt,
+        channel: 'web',
+        feedbackStatus: 'awaiting_web',
+        suggestionStatus: 'awaiting_web',
+        feedbackDueAt: now,
+        suggestionDueAt: now,
+        emailSentAt: now,
+      },
+    });
+  }
+  // An existing scheduled/in-progress WhatsApp survey is left untouched — just
+  // viewing the web form must not flip the channel. A web SUBMISSION completes
+  // both sessions and halts the polls.
+
+  return { ok: true, token: signFeedbackToken(survey.id) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────

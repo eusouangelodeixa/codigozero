@@ -171,7 +171,7 @@ const NAV: NavGroup[] = [
   {
     label: "Conteúdo",
     items: [
-      { href: "/admin/aulas",    label: "Aulas",      icon: I.Lessons },
+      { href: "/admin/cursos",   label: "Cursos",     icon: I.Lessons },
       { href: "/admin/scripts",  label: "Scripts",    icon: I.Scripts },
       { href: "/admin/landing",  label: "Landing",    icon: I.Landing },
       { href: "/admin/lp",       label: "LP — Reels", icon: I.Film },

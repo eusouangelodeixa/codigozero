@@ -107,7 +107,10 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if ('serviceWorker' in navigator) {
+              // PWA só no app (app.czero.sbs) — nos subdomínios lp/central/
+              // members o SW cachearia o shell errado (o nginx do members
+              // também devolve 404 pra /sw.js, cinto e suspensório).
+              if ('serviceWorker' in navigator && !location.hostname.startsWith('members.') && !location.hostname.startsWith('lp.') && !location.hostname.startsWith('central.')) {
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').catch(function() {});
                 });

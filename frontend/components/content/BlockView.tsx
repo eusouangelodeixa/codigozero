@@ -8,33 +8,11 @@
 // scope (LP/Central), falling back to Georgia elsewhere (/conteudo).
 
 import React, { useState } from "react";
+// Markdown mínimo compartilhado (também usado pelo conteúdo das aulas na
+// área de membros) — extraído para lib/md.ts.
+import { mdToHtml } from "@/lib/md";
 
 export type Block = { id?: string; type: string; [k: string]: any };
-
-// ── Minimal, safe markdown → HTML for text/callout blocks (admin-authored) ──
-function esc(s: string) {
-  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function inline(s: string) {
-  return esc(s)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-}
-function mdToHtml(src: string) {
-  const lines = (src || "").split(/\r?\n/);
-  const out: string[] = [];
-  let list: string[] = [];
-  const flush = () => { if (list.length) { out.push(`<ul>${list.map((li) => `<li>${inline(li)}</li>`).join("")}</ul>`); list = []; } };
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line.startsWith("- ")) { list.push(line.slice(2)); continue; }
-    flush();
-    if (line) out.push(`<p>${inline(line)}</p>`);
-  }
-  flush();
-  return out.join("");
-}
 
 const serif = "var(--lp-display), Georgia, 'Times New Roman', serif";
 

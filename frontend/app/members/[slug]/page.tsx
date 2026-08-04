@@ -1,0 +1,64 @@
+"use client";
+// Home do curso: banner (slides), seções configuráveis (continuar assistindo,
+// carrosséis de módulos) dentro do shell tematizado — o "Netflix" do curso.
+import { use } from "react";
+import k from "@/components/members/kit.module.css";
+import { ThemeVars } from "@/components/members/ThemeVars";
+import { MembersShell } from "@/components/members/MembersShell";
+import { BannerCarousel, ContinueRow, ModuleCarousel } from "@/components/members/widgets";
+import { useCourse } from "@/lib/members/useCourse";
+import { membersUser } from "@/lib/members/api";
+import { memberGo } from "@/lib/members/nav";
+
+export default function CourseHome({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
+  const { data, config, error } = useCourse(slug);
+  const user = membersUser();
+
+  if (error) {
+    return (
+      <div className={k.centerLoad} style={{ minHeight: "100dvh", flexDirection: "column", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+        <span>{error}</span>
+        <a style={{ color: "#2DD4BF" }} href="#" onClick={(e) => { e.preventDefault(); memberGo("/"); }}>← Meus cursos</a>
+      </div>
+    );
+  }
+  if (!data || !config) return <div className={k.centerLoad} style={{ minHeight: "100dvh" }}>Carregando…</div>;
+
+  const openLesson = (lessonId: string) => memberGo(`/${slug}/aula/${lessonId}`);
+  const openModule = (moduleId: string) => memberGo(`/${slug}/conteudo?modulo=${moduleId}`);
+
+  return (
+    <ThemeVars config={config}>
+      <MembersShell
+        config={config}
+        courseName={data.course.name}
+        user={user}
+        activeItemId="home"
+        onItemClick={(item) => {
+          if (item.type === "home") memberGo(`/${slug}`);
+          if (item.type === "continue") {
+            if (data.continue) openLesson(data.continue.lessonId);
+            else memberGo(`/${slug}/conteudo`);
+          }
+        }}
+      >
+        <BannerCarousel slides={config.home.banner.slides} />
+        {config.home.sections.map((sec) => {
+          if (sec.type === "continue") {
+            return <ContinueRow key={sec.id} title={sec.title || "Continuar assistindo"} item={data.continue} onOpen={openLesson} />;
+          }
+          return (
+            <ModuleCarousel
+              key={sec.id}
+              title={sec.title || data.course.name}
+              modules={data.modules}
+              onOpenModule={openModule}
+            />
+          );
+        })}
+        <div style={{ height: 30 }} />
+      </MembersShell>
+    </ThemeVars>
+  );
+}

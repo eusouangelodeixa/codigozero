@@ -82,6 +82,12 @@ export const LP_DEFAULTS = {
   // lead descobre depois de entrar (não expomos a Central aqui).
   groupUrl: "",                                   // WhatsApp group invite link
 
+  // ── Aviso automático no grupo ─────────────────────────────────────────
+  // Grupo do Komunika que recebe o resumo automático (~10 min) quando um
+  // conteúdo novo é publicado na Central. null = aviso desativado. O id vem
+  // de GET /api/admin/central/groups (picker no /admin/lp).
+  announceGroup: null as null | { id: string; name: string },
+
   // ── Footer ────────────────────────────────────────────────────────────
   footer: "Código Zero · IA · Claude Code na prática · @eusouangelodeixa",
 };

@@ -16,6 +16,7 @@ import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { pageArgs, paginated } from '../lib/pagination';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
+import { listKomunikaGroups } from '../lib/centralAnnounce';
 import { deprovisionKomunika, syncKomunikaOnApprovedOrder } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
@@ -1663,6 +1664,18 @@ router.get('/broadcast/instances', async (_req: AuthRequest, res: Response) => {
     console.error('[BROADCAST] Instances error:', error);
     res.json({ instances: [], error: error.message });
   }
+});
+
+/**
+ * GET /api/admin/central/groups?sync=1
+ * Lists the WhatsApp groups of the admin Komunika instance so /admin/lp can
+ * offer a picker for the Central announcement group. ?sync=1 asks Komunika to
+ * refresh its group table from WhatsApp first (use on the button click).
+ * Returns { groups: [{ id, name, jid }] } (empty + error on failure).
+ */
+router.get('/central/groups', async (req: AuthRequest, res: Response) => {
+  const r = await listKomunikaGroups({ sync: req.query.sync === '1' });
+  return res.json({ groups: r.groups, ...(r.error ? { error: r.error } : {}) });
 });
 
 /**

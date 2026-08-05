@@ -349,6 +349,23 @@ model SystemConfig {
   dashboardBanners         Json?
 }
 
+// Fila do aviso no grupo do WhatsApp: publicar um conteúdo na Central agenda
+// UM anúncio (resumo + link central.czero.sbs/?m={slug}) para ~10 min depois,
+// enviado pelo cron via Komunika ao grupo escolhido em /admin/lp. pageId é
+// único: cada conteúdo anuncia UMA vez, mesmo que despublique/republique.
+model CentralAnnouncement {
+  id        String    @id @default(uuid())
+  pageId    String    @unique
+  dueAt     DateTime
+  sentAt    DateTime?
+  status    String    @default("pending") // pending | sent | skipped | failed
+  attempts  Int       @default(0)
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@index([status, dueAt])
+}
+
 // Delivery events streamed in by the Resend webhook (sent/delivered/bounced/…),
 // powering the real-time e-mail status panel in /admin/emails.
 model EmailEvent {

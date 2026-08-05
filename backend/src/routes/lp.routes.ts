@@ -37,7 +37,9 @@ router.get('/config', async (_req: Request, res: Response) => {
   try {
     const cfg = await prisma.landingConfig.findUnique({ where: { id: 'singleton' } });
     const sections = (cfg?.sections as Record<string, unknown>) || {};
-    const lp = (sections.lp as Record<string, unknown>) || {};
+    const lp = { ...((sections.lp as Record<string, unknown>) || {}) };
+    // Config interna do aviso no grupo (Komunika) — nunca vai pro público.
+    delete lp.announceGroup;
     return res.json({ config: lp });
   } catch (e: any) {
     console.error('[LP] config error:', e?.message || e);

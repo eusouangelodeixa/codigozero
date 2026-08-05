@@ -10,6 +10,7 @@ import { sendWhatsAppMessage } from '../lib/whatsapp';
 import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
+import { processCentralAnnouncements } from '../lib/centralAnnounce';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
@@ -965,6 +966,19 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Feedback send tick (every 2min, daytime CAT only)');
+
+  // ── Aviso de conteúdo novo no grupo da Central (a cada minuto) ──
+  // Publicou em /admin/conteudo → 10 min depois um resumo + link cai no grupo
+  // do WhatsApp escolhido em /admin/lp. 1 envio por tick; dedup por pageId;
+  // pendências expiram em 24h. Toda a lógica em lib/centralAnnounce.ts.
+  cron.schedule('* * * * *', async () => {
+    try {
+      await processCentralAnnouncements();
+    } catch (error) {
+      console.error('[CRON] ❌ Central announce tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Central group announce tick (every minute)');
 
   // ── Recover orphaned dispatches on boot ──
   // Any 'running' rows left over from a previous process crash, plus any

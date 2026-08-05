@@ -6,6 +6,7 @@ import fs from 'fs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
 import { optimizeImage } from '../lib/image';
+import { queueCentralAnnouncement } from '../lib/centralAnnounce';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -153,6 +154,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const slug = await uniqueSlug(typeof req.body.slug === 'string' && req.body.slug.trim() ? req.body.slug : title);
     const data = pickFields(req.body);
     const page = await prisma.contentPage.create({ data: { ...data, title, slug } });
+    // Nasceu publicado → agenda o aviso no grupo (+10 min). Fire-and-forget.
+    if (page.status === 'published') void queueCentralAnnouncement(page.id);
     return res.status(201).json({ page });
   } catch (e: any) {
     console.error('[CONTENT-ADMIN] create error:', e?.message || e);
@@ -163,7 +166,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 // PATCH /api/admin/content-pages/:id — update
 router.patch('/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const existing = await prisma.contentPage.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const existing = await prisma.contentPage.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
     if (!existing) return res.status(404).json({ error: 'Página não encontrada' });
 
     const data = pickFields(req.body);
@@ -172,6 +175,12 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       data.slug = await uniqueSlug(req.body.slug, existing.id);
     }
     const page = await prisma.contentPage.update({ where: { id: existing.id }, data });
+    // Transição draft → published = "subiu conteúdo novo na Central": agenda
+    // o aviso no grupo (+10 min). Dedup no lib (pageId único) — republicar
+    // depois não anuncia de novo.
+    if (existing.status !== 'published' && page.status === 'published') {
+      void queueCentralAnnouncement(page.id);
+    }
     return res.json({ page });
   } catch (e: any) {
     console.error('[CONTENT-ADMIN] update error:', e?.message || e);

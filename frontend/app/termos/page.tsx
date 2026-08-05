@@ -49,13 +49,13 @@ export default function TermosPage() {
             <li>A reactivação da conta após bloqueio por inadimplência requer novo pagamento.</li>
           </ul>
 
-          <h2>5. Garantia Condicional de 30 Dias</h2>
+          <h2>5. Garantia Condicional de 7 Dias</h2>
           <div className={styles.highlight}>
             <p>A garantia de reembolso do Código Zero é <strong>condicional</strong>. Ela existe para proteger quem realmente se compromete com o processo — e não para quem apenas se inscreve e não faz nada.</p>
           </div>
-          <p>Para solicitar o reembolso dentro do prazo de 30 dias após a compra, o Usuário deverá <strong>comprovar cumulativamente</strong> que:</p>
+          <p>Para solicitar o reembolso dentro do prazo de 7 dias após a compra, o Usuário deverá <strong>comprovar cumulativamente</strong> que:</p>
           <ol>
-            <li><strong>Assistiu 100% das aulas</strong> de todos os módulos disponíveis na Plataforma, conforme registado pelo sistema de progresso interno.</li>
+            <li><strong>Assistiu 100% das aulas</strong> de todos os cursos disponíveis na Plataforma, conforme registado pelo sistema de progresso interno.</li>
             <li><strong>Testou os scripts</strong> disponíveis no Banco de Scripts, enviando-os para pelo menos <strong>20 leads reais</strong> através do Scraper da Plataforma ou manualmente.</li>
             <li><strong>Participou de pelo menos 1 mentoria ao vivo</strong> ou assistiu à gravação da mentoria na íntegra.</li>
             <li><strong>Implementou na prática</strong> os conhecimentos adquiridos, demonstrando evidências de prospecção activa (capturas de tela de conversas, propostas enviadas, etc.).</li>
@@ -66,7 +66,7 @@ export default function TermosPage() {
             <li>Oferecer <strong>1 hora de consultoria individual gratuita</strong> para análise e ajuste da estratégia do Usuário.</li>
           </ul>
           <p><strong>Pedidos de reembolso que não cumpram os requisitos acima serão negados.</strong> A mera inscrição na Plataforma sem utilização do conteúdo e ferramentas não dá direito a reembolso.</p>
-          <p>O pedido de reembolso deve ser feito por e-mail ou WhatsApp dentro de <strong>30 dias corridos</strong> após a data do primeiro pagamento.</p>
+          <p>O pedido de reembolso deve ser feito por e-mail ou WhatsApp dentro de <strong>7 dias corridos</strong> após a data do primeiro pagamento. Pedidos feitos após esse prazo não serão aceitos.</p>
 
           <h2>6. Propriedade Intelectual</h2>
           <p>Todo o conteúdo disponibilizado na Plataforma (vídeos, textos, scripts, código-fonte, design, marca, logótipos) é de propriedade exclusiva do Código Zero e está protegido pela legislação de direitos autorais.</p>

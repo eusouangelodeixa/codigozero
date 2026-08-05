@@ -28,6 +28,7 @@ interface Coproducer {
   displayName: string | null;
   enabled: boolean;
   notes: string | null;
+  webhookToken?: string | null;
   createdAt: string;
   updatedAt?: string;
   user: { id: string; name: string; email: string; phone: string };
@@ -354,6 +355,50 @@ export default function AdminCoproducers() {
               <SubBox title="VSL + rastreio" desc="Em branco = mantém o conteúdo atual. Preencha só para substituir a VSL ou os pixels.">
                 <Field label="VSL embed HTML (iframe/script)" value={editVsl} onChange={setEditVsl} placeholder="Em branco mantém a VSL atual" multiline />
                 <Field label="Pixels / scripts de rastreio (head)" value={editHead} onChange={setEditHead} placeholder="Em branco mantém os pixels atuais" hint="O coprodutor também pode editar isto na própria conta. Limite 8 KB." multiline />
+              </SubBox>
+
+              <SubBox title="Webhook desta coprodução" desc="Cole esta URL na plataforma de vendas DELE (conta própria) para os pagamentos chegarem já atribuídos a esta coprodução.">
+                {editing.webhookToken ? (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      readOnly
+                      value={`https://app.czero.sbs/api/webhooks/lojou/copro/${editing.webhookToken}`}
+                      onFocus={(e) => e.target.select()}
+                      style={{ flex: 1, background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "9px 11px", color: "var(--text-secondary)", fontSize: 12, fontFamily: "ui-monospace, monospace" }}
+                    />
+                    <button
+                      type="button"
+                      className={a.btnSecondary}
+                      onClick={() => {
+                        navigator.clipboard?.writeText(`https://app.czero.sbs/api/webhooks/lojou/copro/${editing.webhookToken}`).catch(() => {});
+                        showToast("URL copiada");
+                      }}
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                ) : (
+                  <p style={{ color: "var(--text-tertiary)", fontSize: 12.5, margin: 0 }}>Sem token ainda — gere abaixo.</p>
+                )}
+                <button
+                  type="button"
+                  className={a.btnSecondary}
+                  style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    if (editing.webhookToken && !confirm("Rotacionar? A URL atual para de funcionar na hora.")) return;
+                    try {
+                      const r = await fetch(`${API}/api/admin/coproducers/${editing.id}/webhook-token`, { method: "POST", headers: hdr() });
+                      const d = await r.json();
+                      if (!r.ok) throw new Error(d.error);
+                      setEditing({ ...editing, webhookToken: d.webhookToken });
+                      showToast("Token gerado");
+                    } catch {
+                      showToast("Falha ao gerar token");
+                    }
+                  }}
+                >
+                  {editing.webhookToken ? "Rotacionar token" : "Gerar token"}
+                </button>
               </SubBox>
 
               <label style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)", fontSize: 13, cursor: "pointer" }}>

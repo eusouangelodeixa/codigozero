@@ -769,6 +769,11 @@ model CoproducerAccount {
   displayName         String?
   enabled             Boolean  @default(true)
   notes               String?
+  // Token da URL de webhook DESTA coprodução (vendas via conta própria na
+  // plataforma): POST /api/webhooks/lojou/copro/{token}. O token é a
+  // autenticação; atribuição é forçada a esta conta. Gerado no cadastro,
+  // rotacionável no admin.
+  webhookToken        String?  @unique
 
   // VSL embed (iframe HTML) que substitui o VSL principal na landing
   // /c/{code}. Só o superadmin edita — o coprodutor apenas visualiza.

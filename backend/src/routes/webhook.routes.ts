@@ -236,19 +236,82 @@ const CLOSE_FRIENDS_EXTRA_DAYS = 60; // +2 months on top of the base month
  * Receives payment events from Lojou gateway.
  * Events: order.approved, order.refunded, order.cancelled
  */
-router.post('/lojou', async (req: Request, res: Response) => {
+// Atribuição forçada quando o evento chega pela URL POR COPRODUÇÃO
+// (/lojou/copro/:token) — mesma forma do ResolvedCoproducer do service.
+interface ForcedCoproducer {
+  id: string;
+  code: string;
+  productPid: string;
+  bumpProductPid: string | null;
+  bumpPrice: number | null;
+  sharePct: number;
+}
+
+router.post('/lojou', (req: Request, res: Response) => handleLojouWebhook(req, res, {}));
+
+// URL de webhook POR COPRODUÇÃO — para vendas feitas na CONTA PRÓPRIA do
+// coprodutor na plataforma (eventos que nunca chegariam ao webhook
+// principal). O token único na rota É a autenticação (gerado no cadastro,
+// rotacionável no admin); a verificação do pedido na Lojou é pulada (o
+// pedido vive na conta DELE, nossa API key não o enxerga) e a atribuição
+// é FORÇADA para esta coprodução.
+router.post('/lojou/copro/:token', async (req: Request, res: Response) => {
+  try {
+    const token = String(req.params.token || '').trim();
+    if (token.length < 24) return res.status(401).json({ error: 'Unauthorized' });
+    const account = await prisma.coproducerAccount.findUnique({
+      where: { webhookToken: token },
+      select: {
+        id: true,
+        code: true,
+        productPid: true,
+        bumpProductPid: true,
+        bumpPrice: true,
+        sharePct: true,
+        enabled: true,
+      },
+    });
+    if (!account || !account.enabled) {
+      console.warn('[WEBHOOK] 🚨 copro token desconhecido/desativado');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    return handleLojouWebhook(req, res, {
+      viaCoproToken: true,
+      forcedCoproducer: {
+        id: account.id,
+        code: account.code,
+        productPid: account.productPid,
+        bumpProductPid: account.bumpProductPid,
+        bumpPrice: account.bumpPrice,
+        sharePct: account.sharePct,
+      },
+    });
+  } catch (error) {
+    console.error('[WEBHOOK] copro route error:', error);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+async function handleLojouWebhook(
+  req: Request,
+  res: Response,
+  opts: { viaCoproToken?: boolean; forcedCoproducer?: ForcedCoproducer },
+) {
   try {
     // ── SECURITY LAYER 1: Webhook Secret ──
     // A Lojou ENVIA o segredo por QUERY (?secret=), não por header — aceitamos os
     // DOIS (header preferencial). Aceitar só header quebrou TODOS os webhooks da
     // Lojou (401) e travou a entrega de acesso pós-compra. Comparação constant-time.
     // (Vazamento em log mitigado pela redação de query.secret no pino-http.)
-    const webhookSecret =
-      (req.headers['x-lojou-webhook-secret'] as string | undefined) ||
-      (req.query.secret as string | undefined);
-    if (!env.LOJOU_WEBHOOK_SECRET || !safeSecretEqual(webhookSecret, env.LOJOU_WEBHOOK_SECRET)) {
-      console.warn('[WEBHOOK] 🚨 REJECTED — invalid or missing webhook secret');
-      return res.status(401).json({ error: 'Unauthorized' });
+    // Na rota por coprodução o TOKEN da URL já autenticou — pula o segredo.
+    if (!opts.viaCoproToken) {
+      const webhookSecret =
+        (req.headers['x-lojou-webhook-secret'] as string | undefined) ||
+        (req.query.secret as string | undefined);
+      if (!env.LOJOU_WEBHOOK_SECRET || !safeSecretEqual(webhookSecret, env.LOJOU_WEBHOOK_SECRET)) {
+        console.warn('[WEBHOOK] 🚨 REJECTED — invalid or missing webhook secret');
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
     }
 
     // Parse body (may be raw buffer from express.raw())
@@ -300,7 +363,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
     // um order.approved com order_number "TEST..." e criar membro pago falso.
     const isTestOrder =
       env.NODE_ENV !== 'production' && String(orderId).toUpperCase().startsWith('TEST');
-    if (orderId && env.LOJOU_API_KEY && !isTestOrder) {
+    if (orderId && env.LOJOU_API_KEY && !isTestOrder && !opts.viaCoproToken) {
       try {
         const verifyRes = await fetch(`${env.LOJOU_API_URL}/v1/orders/${orderId}`, {
           headers: { 'Authorization': `Bearer ${env.LOJOU_API_KEY}` },
@@ -387,10 +450,13 @@ router.post('/lojou', async (req: Request, res: Response) => {
           },
           select: { referredByCoproducer: true },
         });
-        const coproducer = await resolveCoproducerForOrder({
-          productPid: data.product?.pid || null,
-          buyerReferralCode: preBuyerForCoproducer?.referredByCoproducer || null,
-        });
+        // Rota por coprodução → atribuição forçada; senão resolve por pid/código.
+        const coproducer =
+          opts.forcedCoproducer ??
+          (await resolveCoproducerForOrder({
+            productPid: data.product?.pid || null,
+            buyerReferralCode: preBuyerForCoproducer?.referredByCoproducer || null,
+          }));
         if (coproducer) {
           console.log(`[WEBHOOK] 🤝 Attributed to coproducer ${coproducer.code} (id=${coproducer.id})`);
         }
@@ -1049,7 +1115,7 @@ router.post('/lojou', async (req: Request, res: Response) => {
     captureException(error);
     return res.status(500).json({ error: 'Webhook processing failed' });
   }
-});
+}
 
 /* ────────────────────────────────────────────────────────────────────────
  * Stripe webhook

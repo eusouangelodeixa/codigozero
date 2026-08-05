@@ -14,9 +14,9 @@ const AFF_WINDOW_MS = 45 * 24 * 60 * 60 * 1000; // 45 dias de atribuição
 
 const DDI = ["+258", "+55", "+244", "+27", "+351", "+1", "+44"];
 
-function storedAffiliateCode(): string | undefined {
+function storedCode(key: string): string | undefined {
   try {
-    const raw = localStorage.getItem("cz_aff");
+    const raw = localStorage.getItem(key);
     if (!raw) return undefined;
     const { code, ts } = JSON.parse(raw);
     if (!code || !ts || Date.now() - ts > AFF_WINDOW_MS) return undefined;
@@ -34,9 +34,11 @@ export default function AssinarPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [affCode, setAffCode] = useState<string | undefined>(undefined);
+  const [coproCode, setCoproCode] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    setAffCode(storedAffiliateCode());
+    setAffCode(storedCode("cz_aff"));
+    setCoproCode(storedCode("cz_copro"));
   }, []);
 
   const submit = async (e: FormEvent) => {
@@ -57,6 +59,9 @@ export default function AssinarPage() {
           whatsapp: `${ddi}${whatsapp.replace(/\D/g, "")}`,
           phoneCode: ddi,
           ...(affCode ? { affiliateCode: affCode } : {}),
+          // Coprodutor: mesmo mecanismo (o backend dá preferência ao afiliado
+          // quando os dois chegam juntos — regra já existente no /lead).
+          ...(coproCode ? { coproducerCode: coproCode } : {}),
         }),
       });
       const d = await r.json();

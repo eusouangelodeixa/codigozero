@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
@@ -48,6 +49,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           displayName: true,
           enabled: true,
           notes: true,
+          webhookToken: true,
           createdAt: true,
           updatedAt: true,
           user: { select: { id: true, name: true, email: true, phone: true } },
@@ -154,6 +156,10 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
           notes: notes?.trim() || null,
           vslEmbedHtml: vslEmbedHtml?.trim() || null,
           headScripts: headScripts?.trim() || null,
+          // URL de webhook própria desta coprodução (vendas via conta
+          // própria na plataforma) — o token é a autenticação da rota
+          // /api/webhooks/lojou/copro/{token}.
+          webhookToken: crypto.randomBytes(24).toString('hex'),
         },
       }),
     ]);
@@ -264,6 +270,22 @@ router.delete('/:id', superadminMiddleware, async (req: AuthRequest, res: Respon
   } catch (error) {
     console.error('[ADMIN/COPRODUCERS] Delete error:', error);
     res.status(500).json({ error: 'Erro ao remover coprodutor' });
+  }
+});
+
+// POST /api/admin/coproducers/:id/webhook-token — gera/rotaciona o token da
+// URL de webhook desta coprodução (o antigo para de funcionar na hora).
+router.post('/:id/webhook-token', superadminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const account = await prisma.coproducerAccount.update({
+      where: { id: String(req.params.id) },
+      data: { webhookToken: crypto.randomBytes(24).toString('hex') },
+      select: { id: true, webhookToken: true },
+    });
+    return res.json({ webhookToken: account.webhookToken });
+  } catch (error) {
+    console.error('[ADMIN/COPRODUCERS] webhook-token error:', error);
+    return res.status(500).json({ error: 'Erro ao gerar token' });
   }
 });
 

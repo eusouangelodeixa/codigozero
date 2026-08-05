@@ -39,6 +39,12 @@ export default function CoproducerLandingPage() {
           vslEmbedHtml: data.vslEmbedHtml ?? null,
           headScripts: data.headScripts ?? null,
         });
+        // Persiste o código do coprodutor (45 dias): o botão do player da
+        // VSL aponta para /assinar, que recupera este código e registra o
+        // lead atribuído a esta coprodução antes do checkout.
+        try {
+          localStorage.setItem("cz_copro", JSON.stringify({ code: data.code || code, ts: Date.now() }));
+        } catch {}
       })
       .catch(() => {
         if (!cancelled) setError("Não foi possível validar o código agora.");

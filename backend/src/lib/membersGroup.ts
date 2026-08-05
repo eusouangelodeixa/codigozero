@@ -87,12 +87,21 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
     where: { phone: { not: '' } },
     select: { name: true, email: true, phone: true, role: true, subscriptionStatus: true, subscriptionEnd: true },
   });
+  // Colisão de número (duas contas com o mesmo telefone): ganha a conta com
+  // melhor status — admin/superadmin > assinatura ativa > resto. Sem isso, a
+  // conta-lead do Angelo sobrescrevia a conta superadmin dele no cruzamento.
+  const rank = (u: (typeof users)[number]) =>
+    u.role === 'admin' || u.role === 'superadmin' ? 3 : u.subscriptionStatus === 'active' ? 2 : 1;
   const byPhone = new Map<string, (typeof users)[number]>();
+  const put = (key: string, u: (typeof users)[number]) => {
+    const cur = byPhone.get(key);
+    if (!cur || rank(u) > rank(cur)) byPhone.set(key, u);
+  };
   for (const u of users) {
     const d = digits(u.phone as string);
     if (!d) continue;
-    byPhone.set(d, u);
-    if (d.length === 9 && d.startsWith('8')) byPhone.set(`258${d}`, u);
+    put(d, u);
+    if (d.length === 9 && d.startsWith('8')) put(`258${d}`, u);
   }
 
   const toRemove: GroupMemberRow[] = [];

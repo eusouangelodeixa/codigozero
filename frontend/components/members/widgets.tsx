@@ -38,12 +38,10 @@ export function ProgressBar({ pct }: { pct: number }) {
 }
 
 // ── Banner (1–3 slides, auto-avança) ───────────────────────────────────────
-// No DESKTOP o container adota a proporção NATURAL do primeiro slide (nada é
-// cortado — a imagem que o admin subiu aparece inteira); no mobile recorta
-// para 8:5 via media query, como a referência.
+// Quadro FIXO como a Kiwify (3.5:1 desktop / 8:5 mobile) — a arte deve ser
+// produzida na medida (1920×550); object-fit cover encaixa no quadro.
 export function BannerCarousel({ slides, previewMode }: { slides: MemberBannerSlide[]; previewMode?: boolean }) {
   const [idx, setIdx] = useState(0);
-  const [ratio, setRatio] = useState<number | null>(null);
   useEffect(() => {
     if (slides.length < 2) return;
     const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 6000);
@@ -51,25 +49,9 @@ export function BannerCarousel({ slides, previewMode }: { slides: MemberBannerSl
   }, [slides.length]);
   if (!slides.length) return null;
   return (
-    <div
-      className={k.banner}
-      style={ratio ? ({ ["--banner-ratio" as any]: String(ratio) } as React.CSSProperties) : undefined}
-    >
+    <div className={k.banner}>
       {slides.map((s, i) => {
-        const img = (
-          <img
-            src={s.imageUrl}
-            alt=""
-            onLoad={
-              i === 0
-                ? (ev) => {
-                    const el = ev.currentTarget;
-                    if (el.naturalWidth && el.naturalHeight) setRatio(el.naturalWidth / el.naturalHeight);
-                  }
-                : undefined
-            }
-          />
-        );
+        const img = <img src={s.imageUrl} alt="" />;
         return (
           <div key={s.id || i} className={`${k.bannerSlide} ${i === idx % slides.length ? k.bannerSlideActive : ""}`}>
             {s.linkUrl && !previewMode ? (

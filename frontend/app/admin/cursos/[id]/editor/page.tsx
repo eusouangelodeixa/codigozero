@@ -335,7 +335,7 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
                     onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: [...slides, { id: uid(), imageUrl: url }] } } }))}
                   />
                 )}
-                <div className={e.hint}>💡 Largura recomendada: 1920px — no computador o banner aparece INTEIRO (a altura acompanha a imagem); no celular é recortado para 8:5, então mantenha o conteúdo importante no centro.</div>
+                <div className={e.hint}>💡 Tamanho do banner: 1920×550 pixels (o quadro é fixo — a arte deve ser criada NESSA medida; imagens maiores são recortadas pra caber). No celular o corte vira 8:5: mantenha o conteúdo importante no centro.</div>
               </div>
 
               <div className={e.group}>

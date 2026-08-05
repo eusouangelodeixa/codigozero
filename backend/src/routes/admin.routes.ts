@@ -17,6 +17,8 @@ import { pageArgs, paginated } from '../lib/pagination';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { listKomunikaGroups } from '../lib/centralAnnounce';
+import { computeMembersGroupStatus, removeFromMembersGroup } from '../lib/membersGroup';
+import { superadminMiddleware } from '../middlewares/superadmin.middleware';
 import { deprovisionKomunika, syncKomunikaOnApprovedOrder } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
 import { initiateSdrOutbound } from '../services/sdr.service';
@@ -1277,12 +1279,12 @@ function sanitizeDashboardBanners(raw: unknown): { id: string; imageUrl: string;
 
 router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {
-    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret } = req.body;
+    const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, membersGroupId, membersGroupName, membersGroupInviteLink } = req.body;
     const dashboardBanners = sanitizeDashboardBanners(req.body?.dashboardBanners);
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink },
     });
     res.json({ config });
   } catch (error) {
@@ -1676,6 +1678,40 @@ router.get('/broadcast/instances', async (_req: AuthRequest, res: Response) => {
 router.get('/central/groups', async (req: AuthRequest, res: Response) => {
   const r = await listKomunikaGroups({ sync: req.query.sync === '1' });
   return res.json({ groups: r.groups, ...(r.error ? { error: r.error } : {}) });
+});
+
+/**
+ * GET /api/admin/members-group/status
+ * Monitor do grupo exclusivo de membros: participantes AO VIVO do WhatsApp
+ * cruzados com as assinaturas — quantos em dia, equipe, quem remover e os
+ * números desconhecidos (ver lib/membersGroup.ts).
+ */
+router.get('/members-group/status', async (_req: AuthRequest, res: Response) => {
+  try {
+    const status = await computeMembersGroupStatus();
+    return res.json(status);
+  } catch (e: any) {
+    console.error('[MEMBERS-GROUP] status error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao consultar o grupo' });
+  }
+});
+
+/**
+ * POST /api/admin/members-group/remove { jids: string[] }
+ * Remove participantes do grupo de membros (ação humana no /admin/grupo).
+ * Superadmin only — mexe num grupo real com membros reais.
+ */
+router.post('/members-group/remove', superadminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const jids = Array.isArray(req.body?.jids) ? req.body.jids.filter((j: any) => typeof j === 'string').slice(0, 50) : [];
+    if (!jids.length) return res.status(400).json({ error: 'Informe os participantes (jids)' });
+    const r = await removeFromMembersGroup(jids);
+    if (!r.ok) return res.status(502).json({ error: r.error || 'Falha ao remover' });
+    return res.json({ success: true, removed: jids.length });
+  } catch (e: any) {
+    console.error('[MEMBERS-GROUP] remove error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao remover do grupo' });
+  }
 });
 
 /**

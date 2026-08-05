@@ -29,14 +29,14 @@ const CENTRAL_URL = 'https://central.czero.sbs';
 const ANNOUNCE_DELAY_MS = 10 * 60 * 1000; // 10 min após publicar
 const EXPIRE_AFTER_MS = 24 * 60 * 60 * 1000; // pendente >24h do dueAt → skipped
 
-interface KomunikaApi {
+export interface KomunikaApi {
   apiUrl: string;
   apiKey: string;
   instanceId: string;
 }
 
 /** Credenciais Komunika — mesma resolução do lib/whatsapp (SystemConfig → env). */
-async function getKomunikaApi(): Promise<KomunikaApi | null> {
+export async function getKomunikaApi(): Promise<KomunikaApi | null> {
   const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
   const apiKey = sysConfig?.komunikaAdminApiKey || env.KOMUNIKA_ADMIN_API_KEY;
   const instanceId = sysConfig?.komunikaInstanceId;

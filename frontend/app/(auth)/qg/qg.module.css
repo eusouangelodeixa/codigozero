@@ -48,6 +48,13 @@
   color: #fff;
 }
 
+.whatsappIcon {
+  /* verde oficial do WhatsApp — marca de terceiro, mesma exceção do Discord */
+  background: #25D366;
+  border-color: transparent;
+  color: #fff;
+}
+
 .mentoriaIcon {
   background: var(--accent-dim);
   border-color: var(--accent-border);

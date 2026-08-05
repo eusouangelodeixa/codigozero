@@ -11,6 +11,7 @@ import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { processCentralAnnouncements } from '../lib/centralAnnounce';
+import { computeMembersGroupStatus } from '../lib/membersGroup';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
@@ -966,6 +967,28 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Feedback send tick (every 2min, daytime CAT only)');
+
+  // ── Grupo de membros: alerta diário de assinaturas vencidas (09:00 CAT) ──
+  // Se o grupo exclusivo estiver configurado, cruza participantes × base e
+  // avisa os superadmins (push) quando houver gente pra remover. A remoção em
+  // si é manual, no /admin/grupo — o sistema aponta, o humano decide.
+  cron.schedule('0 7 * * *', async () => {
+    try {
+      const status = await computeMembersGroupStatus();
+      if (!status.configured || status.error) return;
+      const n = status.counts?.toRemove || 0;
+      if (n === 0) return;
+      await sendPushToSuperAdmins({
+        title: '👥 Grupo de membros',
+        body: `${n} participante${n === 1 ? '' : 's'} com assinatura vencida — abrir o painel pra revisar e remover.`,
+        url: '/admin/grupo',
+      });
+      console.log(`[CRON] 👥 Members-group alert: ${n} to remove`);
+    } catch (error) {
+      console.error('[CRON] ❌ Members-group daily check failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Members-group daily check (09:00 CAT)');
 
   // ── Aviso de conteúdo novo no grupo da Central (a cada minuto) ──
   // Publicou em /admin/conteudo → 10 min depois um resumo + link cai no grupo

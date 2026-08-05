@@ -27,6 +27,12 @@ router.get('/info', authMiddleware, subscriptionMiddleware, async (_req: AuthReq
         platform: 'Discord',
         link: config.communityLink || 'https://discord.gg/codigozero',
       },
+      // Grupo do WhatsApp exclusivo de membros — o link só chega aqui porque
+      // esta rota é gateada por assinatura ativa (subscriptionMiddleware).
+      // Grupo privado: o admin aprova cada entrada.
+      whatsappGroup: {
+        link: config.membersGroupInviteLink || null,
+      },
       mentoria: {
         nextSession: config.mentoriaSchedule,
         link: config.mentoriaLink,

@@ -6,12 +6,19 @@ import styles from "./qg.module.css";
 
 interface QgInfo {
   community?: { link?: string };
+  whatsappGroup?: { link?: string | null };
   mentoria?: { nextSession?: string; link?: string };
 }
 
 const DiscordSvg = ({ size = 22 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 71 55" fill="currentColor" aria-hidden>
     <path d="M60.1 4.9A58.5 58.5 0 0045.4.2a.2.2 0 00-.2.1 40.8 40.8 0 00-1.8 3.7 54 54 0 00-16.2 0A37.3 37.3 0 0025.4.3a.2.2 0 00-.2-.1 58.4 58.4 0 00-14.7 4.6.2.2 0 00-.1.1A59.7 59.7 0 00.2 42.8a.2.2 0 000 .2 58.8 58.8 0 0017.7 9 .2.2 0 00.3-.1 42 42 0 003.6-5.9.2.2 0 00-.1-.3 38.8 38.8 0 01-5.5-2.6.2.2 0 010-.4l1.1-.9a.2.2 0 01.2 0 42 42 0 0035.7 0 .2.2 0 01.2 0l1.1.9a.2.2 0 010 .3 36.4 36.4 0 01-5.5 2.7.2.2 0 00-.1.3 47.2 47.2 0 003.6 5.9.2.2 0 00.2.1A58.6 58.6 0 0070.6 43a.2.2 0 000-.2 59.2 59.2 0 00-10.2-38c0 0-.1 0-.1-.1zM23.7 35.1c-3.3 0-6-3-6-6.7s2.7-6.7 6-6.7 6.1 3 6 6.7c0 3.7-2.7 6.7-6 6.7zm22.2 0c-3.3 0-6-3-6-6.7s2.6-6.7 6-6.7 6 3 6 6.7-2.7 6.7-6 6.7z" />
+  </svg>
+);
+
+const WhatsAppSvg = ({ size = 22 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M17.5 14.4c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.5 0 1.47 1.07 2.89 1.22 3.09.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.7.63.71.22 1.36.19 1.87.11.57-.08 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.05 21.79h-.01a9.8 9.8 0 01-5-1.37l-.36-.21-3.72.97.99-3.62-.23-.37a9.77 9.77 0 01-1.5-5.23c0-5.41 4.41-9.81 9.83-9.81a9.76 9.76 0 016.95 2.88 9.75 9.75 0 012.88 6.95c0 5.41-4.41 9.81-9.83 9.81zm8.36-18.17A11.71 11.71 0 0012.05.2C5.55.2.26 5.48.26 11.97c0 2.08.54 4.1 1.57 5.89L.16 23.95l6.24-1.63a11.8 11.8 0 005.64 1.43h.01c6.5 0 11.79-5.28 11.79-11.77 0-3.15-1.23-6.1-3.46-8.32z" />
   </svg>
 );
 
@@ -111,6 +118,40 @@ export default function QGPage() {
             </div>
           </div>
         </Card>
+
+        {/* ── Grupo do WhatsApp exclusivo de membros ── */}
+        {info?.whatsappGroup?.link && (
+          <Card padding="lg">
+            <div className={styles.cardBody}>
+              <div className={styles.cardHead}>
+                <span className={`${styles.cardIcon} ${styles.whatsappIcon}`}>
+                  <WhatsAppSvg size={20} />
+                </span>
+                <div>
+                  <h2 className={styles.cardTitle}>Grupo exclusivo no WhatsApp</h2>
+                  <p className={styles.cardDesc}>
+                    Só pra membros com assinatura ativa. O grupo é privado — pede pra entrar e o Ângelo aprova.
+                  </p>
+                </div>
+              </div>
+
+              <div className={styles.spacer} />
+
+              <div className={styles.cardActions}>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => {
+                    window.open(info.whatsappGroup!.link!, "_blank", "noopener,noreferrer");
+                  }}
+                  iconEnd={<ExternalLink size={14} />}
+                >
+                  Entrar no grupo
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* ── Mentoria card ── */}
         <Card padding="lg">

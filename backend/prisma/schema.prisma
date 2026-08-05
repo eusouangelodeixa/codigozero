@@ -347,6 +347,12 @@ model SystemConfig {
   // Banners rotativos da tela inicial do app do aluno (máx. 5) — mesmo formato
   // dos slides da área de membros: [{ id, imageUrl, mobileImageUrl?, linkUrl? }].
   dashboardBanners         Json?
+  // Grupo do WhatsApp EXCLUSIVO de membros (assinantes): id/nome do grupo no
+  // Komunika (o monitor em /admin/grupo cruza participantes × assinaturas) e o
+  // link de convite exibido no QG (grupo privado — o Angelo aprova a entrada).
+  membersGroupId           String?
+  membersGroupName         String?
+  membersGroupInviteLink   String?
 }
 
 // Fila do aviso no grupo do WhatsApp: publicar um conteúdo na Central agenda

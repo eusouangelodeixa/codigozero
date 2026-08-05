@@ -36,3 +36,6 @@ backend/prisma/seed*.d.ts.map
 # Logs
 *.log
 npm-debug.log*
+
+# Prints de referência (material de sessão, não é código)
+members/

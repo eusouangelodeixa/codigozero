@@ -210,6 +210,37 @@ export async function getRemovalQueueSummary() {
   return { pending, pendingJids, lastProcessedAt: lastDone?.processedAt || null };
 }
 
+// Carência ANTES da remoção automática: vencido há menos de 3 dias ainda não
+// entra na fila sozinho (muita renovação chega 1-2 dias atrasada, e os
+// lembretes de expiração batem nesses dias). O admin pode antecipar à mão em
+// /admin/grupo. Quem nunca teve assinatura (sem subscriptionEnd) não tem
+// carência a contar — entra direto.
+const AUTO_REMOVE_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Tick diário: agenda SOZINHO a remoção dos participantes vencidos (passada a
+ * carência). Dedup na fila; segurança final é a re-checagem na hora do lote.
+ * Retorna contagens pro push do admin.
+ */
+export async function autoEnqueueExpired(): Promise<{ queued: number; alreadyQueued: number; inGrace: number } | { skipped: true }> {
+  const status = await computeMembersGroupStatus();
+  if (!status.configured || status.error || !status.toRemove?.length) return { skipped: true };
+
+  const cutoff = Date.now() - AUTO_REMOVE_GRACE_MS;
+  const eligible = status.toRemove.filter((r) => {
+    if (!r.subscriptionEnd) return true; // nunca pagou — sem carência a contar
+    return new Date(r.subscriptionEnd).getTime() < cutoff;
+  });
+  const inGrace = status.toRemove.length - eligible.length;
+  if (!eligible.length) return { queued: 0, alreadyQueued: 0, inGrace };
+
+  const r = await enqueueGroupRemovals(
+    eligible.map((e) => ({ jid: e.jid, phone: e.phone, name: e.name })),
+    'auto',
+  );
+  return { ...r, inGrace };
+}
+
 /**
  * Tick do cron (a cada minuto): processa NO MÁXIMO um lote de 3, e só quando
  * o intervalo aleatório de 10-15 min desde o lote anterior já passou. Antes

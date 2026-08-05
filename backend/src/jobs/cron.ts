@@ -11,7 +11,7 @@ import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { processCentralAnnouncements } from '../lib/centralAnnounce';
-import { computeMembersGroupStatus, processGroupRemovalQueue } from '../lib/membersGroup';
+import { autoEnqueueExpired, processGroupRemovalQueue } from '../lib/membersGroup';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
@@ -968,27 +968,31 @@ export function startCronJobs() {
   });
   console.log('[CRON] ⏰ Feedback send tick (every 2min, daytime CAT only)');
 
-  // ── Grupo de membros: alerta diário de assinaturas vencidas (09:00 CAT) ──
-  // Se o grupo exclusivo estiver configurado, cruza participantes × base e
-  // avisa os superadmins (push) quando houver gente pra remover. A remoção em
-  // si é manual, no /admin/grupo — o sistema aponta, o humano decide.
+  // ── Grupo de membros: remoção AUTOMÁTICA dos vencidos (09:00 CAT) ──
+  // Cruza participantes × assinaturas e agenda SOZINHO a remoção de quem
+  // venceu há mais de 3 dias (carência — renovação atrasada é comum). A fila
+  // remove em lotes de 3 com 10-15 min aleatórios e re-checa a assinatura na
+  // hora do lote. O push pro admin é informativo, não um pedido de ação.
   cron.schedule('0 7 * * *', async () => {
     try {
-      const status = await computeMembersGroupStatus();
-      if (!status.configured || status.error) return;
-      const n = status.counts?.toRemove || 0;
-      if (n === 0) return;
+      const r = await autoEnqueueExpired();
+      if ('skipped' in r) return;
+      if (r.queued === 0 && r.inGrace === 0) return;
+      const parts: string[] = [];
+      if (r.queued > 0) parts.push(`${r.queued} vencido${r.queued === 1 ? '' : 's'} entrou${r.queued === 1 ? '' : 'aram'} na fila de remoção automática`);
+      if (r.alreadyQueued > 0) parts.push(`${r.alreadyQueued} já na fila`);
+      if (r.inGrace > 0) parts.push(`${r.inGrace} na carência de 3 dias`);
       await sendPushToSuperAdmins({
         title: '👥 Grupo de membros',
-        body: `${n} participante${n === 1 ? '' : 's'} com assinatura vencida — abrir o painel pra revisar e remover.`,
+        body: `${parts.join(' · ')}. Acompanhar no painel.`,
         url: '/admin/grupo',
       });
-      console.log(`[CRON] 👥 Members-group alert: ${n} to remove`);
+      console.log(`[CRON] 👥 Members-group auto-enqueue: queued=${r.queued} already=${r.alreadyQueued} grace=${r.inGrace}`);
     } catch (error) {
       console.error('[CRON] ❌ Members-group daily check failed:', error);
     }
   });
-  console.log('[CRON] ⏰ Members-group daily check (09:00 CAT)');
+  console.log('[CRON] ⏰ Members-group auto-removal check (09:00 CAT, 3d grace)');
 
   // ── Fila de remoção do grupo de membros (a cada minuto, auto-regulada) ──
   // O tick roda por minuto mas a lib só processa um lote (máx. 3 números)

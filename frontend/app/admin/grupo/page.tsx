@@ -234,8 +234,8 @@ export default function AdminGrupo() {
 
           {/* ── A remover ── */}
           <div className={styles.card} style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>🚫 Assinatura vencida — remover do grupo</h2>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>🚫 Assinatura vencida — remoção do grupo</h2>
               {(status?.toRemove?.filter((r) => !status?.queue?.pendingJids?.includes(r.jid)).length || 0) > 1 && (
                 <button
                   className={styles.btnPrimary}
@@ -250,6 +250,10 @@ export default function AdminGrupo() {
                 </button>
               )}
             </div>
+            <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 12 }}>
+              <strong>Automático:</strong> todo dia às 09:00 o sistema agenda sozinho a remoção de quem venceu há
+              mais de 3 dias (carência pra renovação atrasada). Os botões abaixo servem só pra <strong>antecipar</strong>.
+            </p>
             {!status?.toRemove?.length ? (
               <p style={{ color: "var(--text-tertiary)", fontSize: 14 }}>
                 {loading ? "Consultando o grupo…" : "Ninguém pra remover — todo mundo no grupo está em dia. ✓"}

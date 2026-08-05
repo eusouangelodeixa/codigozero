@@ -68,7 +68,7 @@ export function MembersShell({
         title={item.label}
       >
         <span className={k.navIcon}>
-          <Icon size={18} strokeWidth={2} />
+          <Icon size={collapsed ? 22 : 19} />
         </span>
         <span className={k.navLabel}>{item.label}</span>
       </button>
@@ -78,9 +78,11 @@ export function MembersShell({
   return (
     <div className={`${k.shell} ${mobilePreview ? k.forceMobile : ""}`}>
       <aside className={`${k.sidebar} ${collapsed ? k.sidebarCollapsed : ""}`}>
-        <button type="button" className={k.collapseBtn} onClick={() => setCollapsed((c) => !c)} aria-label="Recolher menu">
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
+        <div className={k.sidebarTop}>
+          <button type="button" className={k.collapseBtn} onClick={() => setCollapsed((c) => !c)} aria-label="Recolher menu">
+            {collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+          </button>
+        </div>
         <div className={k.sidebarLogo}>{logo}</div>
         <nav className={k.nav}>{items}</nav>
         <div className={k.userFoot}>
@@ -88,7 +90,7 @@ export function MembersShell({
             {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : initials(user?.name)}
           </span>
           <span className={k.userName}>{user?.name || "Aluno"}</span>
-          <ChevronUp size={15} style={{ marginLeft: "auto", opacity: 0.7 }} />
+          <ChevronUp size={15} className={k.footChevron} style={{ marginLeft: "auto", opacity: 0.7 }} />
         </div>
       </aside>
 
@@ -106,7 +108,7 @@ export function MembersShell({
               onClick={() => click(item)}
               aria-label={item.label}
             >
-              <Icon size={22} strokeWidth={2} />
+              <Icon size={22} />
             </button>
           );
         })}

@@ -17,7 +17,7 @@ import { pageArgs, paginated } from '../lib/pagination';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { listKomunikaGroups } from '../lib/centralAnnounce';
-import { computeMembersGroupStatus, removeFromMembersGroup } from '../lib/membersGroup';
+import { computeMembersGroupStatus, enqueueGroupRemovals, getRemovalQueueSummary } from '../lib/membersGroup';
 import { superadminMiddleware } from '../middlewares/superadmin.middleware';
 import { deprovisionKomunika, syncKomunikaOnApprovedOrder } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
@@ -1688,8 +1688,8 @@ router.get('/central/groups', async (req: AuthRequest, res: Response) => {
  */
 router.get('/members-group/status', async (_req: AuthRequest, res: Response) => {
   try {
-    const status = await computeMembersGroupStatus();
-    return res.json(status);
+    const [status, queue] = await Promise.all([computeMembersGroupStatus(), getRemovalQueueSummary()]);
+    return res.json({ ...status, queue });
   } catch (e: any) {
     console.error('[MEMBERS-GROUP] status error:', e?.message || e);
     return res.status(500).json({ error: 'Erro ao consultar o grupo' });
@@ -1697,20 +1697,29 @@ router.get('/members-group/status', async (_req: AuthRequest, res: Response) => 
 });
 
 /**
- * POST /api/admin/members-group/remove { jids: string[] }
- * Remove participantes do grupo de membros (ação humana no /admin/grupo).
- * Superadmin only — mexe num grupo real com membros reais.
+ * POST /api/admin/members-group/remove { rows: [{jid, phone, name?}] }
+ * AGENDA a remoção (nada sai na hora): o cron remove em lotes de 3 com
+ * intervalo aleatório de 10-15 min (anti-ban), re-checando a assinatura na
+ * hora do lote — quem renovou na espera é pulado. Superadmin only.
+ * Aceita também o formato legado { jids: string[] }.
  */
 router.post('/members-group/remove', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const jids = Array.isArray(req.body?.jids) ? req.body.jids.filter((j: any) => typeof j === 'string').slice(0, 50) : [];
-    if (!jids.length) return res.status(400).json({ error: 'Informe os participantes (jids)' });
-    const r = await removeFromMembersGroup(jids);
-    if (!r.ok) return res.status(502).json({ error: r.error || 'Falha ao remover' });
-    return res.json({ success: true, removed: jids.length });
+    let rows: { jid: string; phone: string; name?: string | null }[] = [];
+    if (Array.isArray(req.body?.rows)) {
+      rows = req.body.rows
+        .filter((r: any) => r && typeof r.jid === 'string')
+        .map((r: any) => ({ jid: r.jid, phone: String(r.phone || r.jid), name: typeof r.name === 'string' ? r.name : null }));
+    } else if (Array.isArray(req.body?.jids)) {
+      rows = req.body.jids.filter((j: any) => typeof j === 'string').map((jid: string) => ({ jid, phone: jid }));
+    }
+    rows = rows.slice(0, 100);
+    if (!rows.length) return res.status(400).json({ error: 'Informe os participantes' });
+    const r = await enqueueGroupRemovals(rows, req.user?.email || null);
+    return res.json({ success: true, queued: r.queued, alreadyQueued: r.alreadyQueued });
   } catch (e: any) {
     console.error('[MEMBERS-GROUP] remove error:', e?.message || e);
-    return res.status(500).json({ error: 'Erro ao remover do grupo' });
+    return res.status(500).json({ error: 'Erro ao agendar a remoção' });
   }
 });
 

@@ -11,7 +11,7 @@ import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { processCentralAnnouncements } from '../lib/centralAnnounce';
-import { computeMembersGroupStatus } from '../lib/membersGroup';
+import { computeMembersGroupStatus, processGroupRemovalQueue } from '../lib/membersGroup';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
@@ -989,6 +989,19 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Members-group daily check (09:00 CAT)');
+
+  // ── Fila de remoção do grupo de membros (a cada minuto, auto-regulada) ──
+  // O tick roda por minuto mas a lib só processa um lote (máx. 3 números)
+  // quando o intervalo ALEATÓRIO de 10-15 min desde o lote anterior passou —
+  // remoção em ritmo humano (anti-ban), com re-checagem de assinatura.
+  cron.schedule('* * * * *', async () => {
+    try {
+      await processGroupRemovalQueue();
+    } catch (error) {
+      console.error('[CRON] ❌ Group removal queue tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Members-group removal queue (batches of 3, 10-15min random gap)');
 
   // ── Aviso de conteúdo novo no grupo da Central (a cada minuto) ──
   // Publicou em /admin/conteudo → 10 min depois um resumo + link cai no grupo

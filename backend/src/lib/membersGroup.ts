@@ -133,11 +133,12 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
 }
 
 /**
- * Remove participantes do grupo de membros (DELETE …/participants no
- * Komunika → Evolution updateParticipant remove). Recebe JIDs/números; envia
- * só os dígitos. Retorna ok/erro — quem chama decide o feedback.
+ * Chamada crua de remoção no Komunika (DELETE …/participants → Evolution
+ * updateParticipant remove). Envia só os dígitos. Usada APENAS pelo
+ * processador da fila — nunca direto da rota (anti-ban: a remoção é sempre
+ * intervalada).
  */
-export async function removeFromMembersGroup(jids: string[]): Promise<{ ok: boolean; error?: string }> {
+async function removeFromMembersGroup(jids: string[]): Promise<{ ok: boolean; error?: string }> {
   const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
   if (!cfg?.membersGroupId) return { ok: false, error: 'Grupo de membros não configurado' };
   const api = await getKomunikaApi();
@@ -157,5 +158,117 @@ export async function removeFromMembersGroup(jids: string[]): Promise<{ ok: bool
     return { ok: false, error: `Komunika ${r.status}: ${body.slice(0, 160)}` };
   } catch (e: any) {
     return { ok: false, error: e?.message || 'Erro de conexão com o Komunika' };
+  }
+}
+
+// ── Fila de remoção intervalada (anti-ban) ──────────────────────────────────
+// Remover pela API em rajada é o único padrão que poderia parecer robótico.
+// Então: lotes de no MÁXIMO 3 números, com intervalo ALEATÓRIO de 10-15 min
+// entre lotes — ritmo de admin humano. Estado do próximo lote em memória
+// (reboot só faz o primeiro lote sair na hora; os seguintes voltam ao ritmo).
+const REMOVAL_BATCH_SIZE = 3;
+const REMOVAL_MIN_GAP_MS = 10 * 60 * 1000;
+const REMOVAL_MAX_GAP_MS = 15 * 60 * 1000;
+let nextRemovalBatchAt = 0;
+
+/**
+ * Agenda remoções (dedup: quem já está pendente não entra de novo). A rota
+ * do admin chama isto — nada é removido na hora.
+ */
+export async function enqueueGroupRemovals(
+  rows: { jid: string; phone: string; name?: string | null }[],
+  requestedBy?: string | null,
+): Promise<{ queued: number; alreadyQueued: number }> {
+  let queued = 0;
+  let alreadyQueued = 0;
+  for (const row of rows) {
+    const jid = (row.jid || '').trim();
+    const phone = digits(row.phone || jid);
+    if (!jid || !phone) continue;
+    const pending = await prisma.groupRemovalQueue.findFirst({ where: { jid, status: 'pending' }, select: { id: true } });
+    if (pending) {
+      alreadyQueued++;
+      continue;
+    }
+    await prisma.groupRemovalQueue.create({
+      data: { jid, phone, name: row.name || null, requestedBy: requestedBy || null },
+    });
+    queued++;
+  }
+  return { queued, alreadyQueued };
+}
+
+/** Resumo da fila pro painel /admin/grupo. */
+export async function getRemovalQueueSummary() {
+  const [pending, lastDone] = await Promise.all([
+    prisma.groupRemovalQueue.count({ where: { status: 'pending' } }),
+    prisma.groupRemovalQueue.findFirst({ where: { status: { in: ['done', 'skipped', 'failed'] } }, orderBy: { processedAt: 'desc' } }),
+  ]);
+  const pendingJids = pending
+    ? (await prisma.groupRemovalQueue.findMany({ where: { status: 'pending' }, select: { jid: true } })).map((r) => r.jid)
+    : [];
+  return { pending, pendingJids, lastProcessedAt: lastDone?.processedAt || null };
+}
+
+/**
+ * Tick do cron (a cada minuto): processa NO MÁXIMO um lote de 3, e só quando
+ * o intervalo aleatório de 10-15 min desde o lote anterior já passou. Antes
+ * de remover, RE-CHECA a assinatura — quem renovou na espera é pulado.
+ */
+export async function processGroupRemovalQueue(): Promise<void> {
+  const now = Date.now();
+  if (now < nextRemovalBatchAt) return;
+
+  const batch = await prisma.groupRemovalQueue.findMany({
+    where: { status: 'pending' },
+    orderBy: { createdAt: 'asc' },
+    take: REMOVAL_BATCH_SIZE,
+  });
+  if (!batch.length) return;
+
+  // Trava o ritmo JÁ (mesmo que o lote falhe, o próximo respeita o intervalo).
+  nextRemovalBatchAt = now + REMOVAL_MIN_GAP_MS + Math.floor(Math.random() * (REMOVAL_MAX_GAP_MS - REMOVAL_MIN_GAP_MS));
+
+  // Re-checagem de assinatura: renovou enquanto esperava → NUNCA remover.
+  const toRemove: typeof batch = [];
+  for (const item of batch) {
+    const variants = item.phone.length === 12 && item.phone.startsWith('258') ? [item.phone, item.phone.slice(3)] : [item.phone];
+    const user = await prisma.user.findFirst({
+      where: { OR: variants.flatMap((v) => [{ phone: v }, { phone: `+${v}` }]) },
+      select: { subscriptionStatus: true, role: true },
+    });
+    if (user && (user.subscriptionStatus === 'active' || user.role === 'admin' || user.role === 'superadmin')) {
+      await prisma.groupRemovalQueue.update({
+        where: { id: item.id },
+        data: { status: 'skipped', processedAt: new Date(), error: 'assinatura ativa na hora do lote — não removido' },
+      });
+      console.log(`[MEMBERS-GROUP] ⏭️ ${item.phone} renovou na espera — removido da fila, não do grupo`);
+      continue;
+    }
+    toRemove.push(item);
+  }
+  if (!toRemove.length) return;
+
+  const r = await removeFromMembersGroup(toRemove.map((i) => i.jid));
+  const processedAt = new Date();
+  if (r.ok) {
+    await prisma.groupRemovalQueue.updateMany({
+      where: { id: { in: toRemove.map((i) => i.id) } },
+      data: { status: 'done', processedAt },
+    });
+    console.log(`[MEMBERS-GROUP] 🚫 Lote removido do grupo: ${toRemove.map((i) => i.phone).join(', ')}`);
+  } else {
+    // Falha (Komunika fora etc.): re-tenta nos próximos lotes; após 5 falhas
+    // marca failed pra não travar a fila.
+    for (const item of toRemove) {
+      const attempts = item.attempts + 1;
+      await prisma.groupRemovalQueue.update({
+        where: { id: item.id },
+        data: attempts >= 5
+          ? { status: 'failed', processedAt, attempts, error: r.error || 'falha' }
+          : { attempts, error: r.error || 'falha' },
+      });
+    }
+    console.warn(`[MEMBERS-GROUP] lote de remoção falhou (${r.error}) — re-tenta no próximo intervalo`);
   }
 }

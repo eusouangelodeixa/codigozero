@@ -30,6 +30,7 @@ interface Status {
   counts?: { participants: number; ok: number; team: number; toRemove: number; unknown: number };
   toRemove?: RemoveRow[];
   unknown?: { jid: string; phone: string }[];
+  queue?: { pending: number; pendingJids: string[]; lastProcessedAt?: string | null };
 }
 
 const fmtDate = (iso?: string | null) =>
@@ -105,22 +106,25 @@ export default function AdminGrupo() {
     }
   };
 
-  const removeJids = async (jids: string[], label: string) => {
-    if (!jids.length) return;
-    if (!window.confirm(`Remover ${label} do grupo do WhatsApp? Essa ação é imediata.`)) return;
-    setRemoving(jids.length > 1 ? "all" : jids[0]);
+  // AGENDA a remoção: o servidor processa em lotes de 3 com intervalo
+  // aleatório de 10-15 min (anti-ban) e re-checa a assinatura em cada lote —
+  // quem renovar enquanto espera NÃO é removido.
+  const scheduleRemoval = async (rows: RemoveRow[], label: string) => {
+    if (!rows.length) return;
+    if (!window.confirm(`Agendar a remoção de ${label}? A saída acontece em lotes de 3, a cada 10–15 minutos (ritmo seguro). Quem renovar enquanto espera não é removido.`)) return;
+    setRemoving(rows.length > 1 ? "all" : rows[0].jid);
     try {
       const r = await fetch(`${API}/api/admin/members-group/remove`, {
         method: "POST",
         headers: hdr(),
-        body: JSON.stringify({ jids }),
+        body: JSON.stringify({ rows: rows.map((x) => ({ jid: x.jid, phone: x.phone, name: x.name || null })) }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "Falha ao remover");
-      showToast(`Removido${jids.length > 1 ? "s" : ""} ✓`);
+      if (!r.ok) throw new Error(d.error || "Falha ao agendar");
+      showToast(d.alreadyQueued ? `${d.queued} agendado(s) — ${d.alreadyQueued} já estavam na fila` : `${d.queued} agendado(s) pra remoção ✓`);
       loadStatus();
     } catch (e: any) {
-      showToast(e?.message || "Erro ao remover.");
+      showToast(e?.message || "Erro ao agendar.");
     } finally {
       setRemoving(null);
     }
@@ -217,18 +221,32 @@ export default function AdminGrupo() {
             </div>
           )}
 
+          {/* ── Fila de remoção em andamento ── */}
+          {(status?.queue?.pending || 0) > 0 && (
+            <div className={styles.card} style={{ marginBottom: 20, borderColor: "var(--accent-border, rgba(45,212,191,0.3))" }}>
+              <p style={{ fontSize: 14, color: "var(--text-secondary)" }}>
+                ⏳ <strong>{status!.queue!.pending}</strong> remoç{status!.queue!.pending === 1 ? "ão agendada" : "ões agendadas"} na fila
+                — saindo em lotes de 3, a cada 10–15 minutos (ritmo seguro anti-ban).
+                {status!.queue!.lastProcessedAt && <> Último lote: {new Date(status!.queue!.lastProcessedAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}.</>}
+              </p>
+            </div>
+          )}
+
           {/* ── A remover ── */}
           <div className={styles.card} style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
               <h2 style={{ fontSize: 16, fontWeight: 700 }}>🚫 Assinatura vencida — remover do grupo</h2>
-              {(status?.toRemove?.length || 0) > 1 && (
+              {(status?.toRemove?.filter((r) => !status?.queue?.pendingJids?.includes(r.jid)).length || 0) > 1 && (
                 <button
                   className={styles.btnPrimary}
                   style={{ background: "var(--color-error, #ef4444)" }}
                   disabled={removing !== null}
-                  onClick={() => removeJids(status!.toRemove!.map((r) => r.jid), `os ${status!.toRemove!.length} participantes vencidos`)}
+                  onClick={() => {
+                    const rows = status!.toRemove!.filter((r) => !status?.queue?.pendingJids?.includes(r.jid));
+                    scheduleRemoval(rows, `os ${rows.length} participantes vencidos`);
+                  }}
                 >
-                  {removing === "all" ? "Removendo…" : `Remover todos (${status!.toRemove!.length})`}
+                  {removing === "all" ? "Agendando…" : `Agendar remoção de todos`}
                 </button>
               )}
             </div>
@@ -250,24 +268,31 @@ export default function AdminGrupo() {
                     </tr>
                   </thead>
                   <tbody>
-                    {status.toRemove.map((r) => (
-                      <tr key={r.jid}>
-                        <td>{r.name || "—"}</td>
-                        <td>+{r.phone}</td>
-                        <td>{r.email || "—"}</td>
-                        <td><span className={`${styles.badge} ${styles.badgeRed}`}>{r.subscriptionStatus || "sem status"}</span></td>
-                        <td>{fmtDate(r.subscriptionEnd)}</td>
-                        <td>
-                          <button
-                            className={styles.btnSecondary}
-                            disabled={removing !== null}
-                            onClick={() => removeJids([r.jid], r.name || `+${r.phone}`)}
-                          >
-                            {removing === r.jid ? "Removendo…" : "Remover"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {status.toRemove.map((r) => {
+                      const queued = status?.queue?.pendingJids?.includes(r.jid);
+                      return (
+                        <tr key={r.jid}>
+                          <td>{r.name || "—"}</td>
+                          <td>+{r.phone}</td>
+                          <td>{r.email || "—"}</td>
+                          <td><span className={`${styles.badge} ${styles.badgeRed}`}>{r.subscriptionStatus || "sem status"}</span></td>
+                          <td>{fmtDate(r.subscriptionEnd)}</td>
+                          <td>
+                            {queued ? (
+                              <span className={`${styles.badge} ${styles.badgeTeal}`}>⏳ na fila</span>
+                            ) : (
+                              <button
+                                className={styles.btnSecondary}
+                                disabled={removing !== null}
+                                onClick={() => scheduleRemoval([r], r.name || `+${r.phone}`)}
+                              >
+                                {removing === r.jid ? "Agendando…" : "Agendar remoção"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

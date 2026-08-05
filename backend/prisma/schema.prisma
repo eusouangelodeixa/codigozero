@@ -355,6 +355,26 @@ model SystemConfig {
   membersGroupInviteLink   String?
 }
 
+// Fila de remoção do grupo de membros: remover via /admin/grupo AGENDA aqui e
+// o cron processa em lotes pequenos (3) com intervalo aleatório de 10-15 min
+// (anti-ban: imita admin humano). Na hora do lote a assinatura é RE-CHECADA —
+// quem renovou na espera é pulado (status skipped), nunca removido.
+model GroupRemovalQueue {
+  id          String    @id @default(uuid())
+  jid         String
+  phone       String
+  name        String?
+  status      String    @default("pending") // pending | done | skipped | failed
+  attempts    Int       @default(0)
+  error       String?
+  requestedBy String?   // admin (email) que agendou — auditoria
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([jid, status])
+}
+
 // Fila do aviso no grupo do WhatsApp: publicar um conteúdo na Central agenda
 // UM anúncio (resumo + link central.czero.sbs/?m={slug}) para ~10 min depois,
 // enviado pelo cron via Komunika ao grupo escolhido em /admin/lp. pageId é

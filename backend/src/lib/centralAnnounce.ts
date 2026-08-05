@@ -198,10 +198,12 @@ export async function processCentralAnnouncements(): Promise<void> {
 
   // 5) Envia pro grupo.
   try {
+    // mentionAll → Evolution `mentionsEveryOne`: marca todos os membros do
+    // grupo (notificação pra todo mundo, sem poluir o texto com @s).
     const r = await fetch(`${api.apiUrl}/api/v1/groups/${encodeURIComponent(group.id)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-API-Key': api.apiKey },
-      body: JSON.stringify({ content: buildMessage(page) }),
+      body: JSON.stringify({ content: buildMessage(page), mentionAll: true }),
     });
     if (r.ok) {
       await prisma.centralAnnouncement.update({

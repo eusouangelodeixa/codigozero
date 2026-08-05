@@ -55,8 +55,10 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
   const api = await getKomunikaApi();
   if (!api) return { configured: true, groupId: cfg.membersGroupId, groupName: cfg.membersGroupName, error: 'Komunika não configurado (/admin/config)' };
 
-  // Participantes AO VIVO (o Komunika consulta o WhatsApp na hora).
-  let participants: string[] = [];
+  // Participantes AO VIVO (o Komunika consulta o WhatsApp na hora). Formato
+  // atual: [{ jid, admin }] (admin = flag de admin DO GRUPO, patch de
+  // 2026-08-05 no box); aceita também o formato antigo de strings.
+  let participants: { jid: string; groupAdmin: boolean }[] = [];
   try {
     const r = await fetch(`${api.apiUrl}/api/v1/groups/${encodeURIComponent(cfg.membersGroupId)}/metadata`, {
       headers: { 'X-API-Key': api.apiKey },
@@ -68,7 +70,10 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
         error: `Komunika respondeu ${r.status} ao buscar participantes`,
       };
     }
-    participants = Array.isArray(d?.data?.participants) ? d.data.participants.filter((p: any) => typeof p === 'string') : [];
+    const raw: any[] = Array.isArray(d?.data?.participants) ? d.data.participants : [];
+    participants = raw
+      .map((p) => (typeof p === 'string' ? { jid: p, groupAdmin: false } : { jid: String(p?.jid || ''), groupAdmin: !!p?.admin }))
+      .filter((p) => p.jid);
   } catch (e: any) {
     return {
       configured: true, groupId: cfg.membersGroupId, groupName: cfg.membersGroupName,
@@ -95,12 +100,18 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
   let ok = 0;
   let team = 0;
 
-  for (const jid of participants) {
-    const phone = digits(jid);
+  for (const p of participants) {
+    const phone = digits(p.jid);
     if (!phone) continue;
+    // ADMIN DO GRUPO = equipe, sempre (regra do Angelo): nunca vai pra
+    // remoção nem pra "desconhecidos", tenha cadastro na base ou não.
+    if (p.groupAdmin) {
+      team++;
+      continue;
+    }
     const u = byPhone.get(phone);
     if (!u) {
-      unknown.push({ jid, phone });
+      unknown.push({ jid: p.jid, phone });
       continue;
     }
     if (u.role === 'admin' || u.role === 'superadmin') {
@@ -112,7 +123,7 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
       continue;
     }
     toRemove.push({
-      jid,
+      jid: p.jid,
       phone,
       name: u.name,
       email: u.email,

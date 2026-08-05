@@ -1252,13 +1252,36 @@ router.get('/system', async (_req: AuthRequest, res: Response) => {
   }
 });
 
+// Banners da tela inicial do app do aluno: máx. 5 slides, cada um com arte
+// desktop obrigatória, arte mobile e link opcionais. Qualquer payload fora do
+// formato vira `undefined` (o PATCH simplesmente não toca no campo).
+function sanitizeDashboardBanners(raw: unknown): { id: string; imageUrl: string; mobileImageUrl?: string; linkUrl?: string }[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const out: { id: string; imageUrl: string; mobileImageUrl?: string; linkUrl?: string }[] = [];
+  for (const item of raw.slice(0, 5)) {
+    if (!item || typeof item !== 'object') continue;
+    const imageUrl = str((item as any).imageUrl);
+    if (!imageUrl) continue;
+    out.push({
+      id: str((item as any).id) || randomUUID(),
+      imageUrl,
+      ...(str((item as any).mobileImageUrl) ? { mobileImageUrl: str((item as any).mobileImageUrl) } : {}),
+      ...(str((item as any).linkUrl) ? { linkUrl: str((item as any).linkUrl) } : {}),
+    });
+  }
+  return out;
+}
+
 router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {
     const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret } = req.body;
+    const dashboardBanners = sanitizeDashboardBanners(req.body?.dashboardBanners);
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners },
     });
     res.json({ config });
   } catch (error) {

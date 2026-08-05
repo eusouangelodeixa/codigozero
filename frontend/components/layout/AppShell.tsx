@@ -37,59 +37,34 @@ interface NavItem {
   badge?: string;
 }
 
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
+// Navegação achatada: uma lista principal + bloco de conta, separados por UM
+// divisor fino — sem rótulos de grupo (visual compacto, profissional).
+const NAV_MAIN: NavItem[] = [
+  { href: "/dashboard", label: "Início", icon: DashboardIcon },
+  { href: "/radar", label: "Radar", icon: RadarIcon },
+  { href: "/disparador", label: "Disparador", icon: DisparadorIcon },
+  { href: "/cofre", label: "Cofre", icon: CofreIcon },
+  { href: "/forja", label: "Cursos", icon: ForjaIcon },
+  { href: "/qg", label: "QG", icon: QGIcon },
+  { href: "/chat", label: "Chat", icon: ChatIcon },
+  {
+    href: "/afiliacao",
+    label: "Afiliação",
+    icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+      <Handshake size={size} strokeWidth={1.6} className={className} />
+    ),
+  },
+];
 
-const NAV_GROUPS: NavGroup[] = [
+const NAV_ACCOUNT: NavItem[] = [
+  { href: "/assinatura", label: "Assinatura", icon: SubscriptionIcon },
+  { href: "/integracoes", label: "Integrações", icon: IntegrationIcon },
   {
-    label: "Operação",
-    items: [
-      { href: "/dashboard", label: "Início", icon: DashboardIcon },
-      { href: "/radar", label: "Radar", icon: RadarIcon },
-      { href: "/disparador", label: "Disparador", icon: DisparadorIcon },
-    ],
-  },
-  {
-    label: "Arsenal",
-    items: [
-      { href: "/cofre", label: "Cofre", icon: CofreIcon },
-      { href: "/forja", label: "Cursos", icon: ForjaIcon },
-    ],
-  },
-  {
-    label: "Comunidade",
-    items: [
-      { href: "/qg", label: "QG", icon: QGIcon },
-      { href: "/chat", label: "Chat", icon: ChatIcon },
-    ],
-  },
-  {
-    label: "Negócio",
-    items: [
-      {
-        href: "/afiliacao",
-        label: "Afiliação",
-        icon: ({ size = 18, className }: { size?: number; className?: string }) => (
-          <Handshake size={size} strokeWidth={1.6} className={className} />
-        ),
-      },
-    ],
-  },
-  {
-    label: "Conta",
-    items: [
-      { href: "/assinatura", label: "Assinatura", icon: SubscriptionIcon },
-      { href: "/integracoes", label: "Integrações", icon: IntegrationIcon },
-      {
-        href: "/instalar",
-        label: "Instalar app",
-        icon: ({ size = 18, className }: { size?: number; className?: string }) => (
-          <Smartphone size={size} strokeWidth={1.6} className={className} />
-        ),
-      },
-    ],
+    href: "/instalar",
+    label: "Instalar app",
+    icon: ({ size = 18, className }: { size?: number; className?: string }) => (
+      <Smartphone size={size} strokeWidth={1.6} className={className} />
+    ),
   },
 ];
 
@@ -162,7 +137,7 @@ const SaqueNavItem: NavItem = {
 // tools, each with a description and its own open/launch action.
 const FerramentasNavItem: NavItem = {
   href: "/ferramentas",
-  label: "Hub de Ferramentas",
+  label: "Ferramentas",
   icon: ({ size = 18, className }: { size?: number; className?: string }) => (
     <Wrench size={size} strokeWidth={1.6} className={className} />
   ),
@@ -220,23 +195,15 @@ export function AppShell({
   // Inject conditional nav: "Sócios" for revenue-share partners, plus the
   // "Ferramentas" hub (Komunika + future tools), shown to every member.
   // For withdrawOnly users we collapse everything to a single "Meu saque" link.
-  const navGroups = useMemo(() => {
-    if (withdrawOnly) {
-      return [{ label: "Conta", items: [SaqueNavItem] }];
-    }
-    let groups: NavGroup[] = NAV_GROUPS;
+  const navSections = useMemo<NavItem[][]>(() => {
+    if (withdrawOnly) return [[SaqueNavItem]];
+    const main = [...NAV_MAIN];
     if (user?.isPartner) {
-      groups = groups.map((g) =>
-        g.label === "Negócio" ? { ...g, items: [...g.items, SociosNavItem] } : g,
-      );
+      const idx = main.findIndex((i) => i.href === "/afiliacao");
+      main.splice(idx + 1, 0, SociosNavItem);
     }
-    const ferramentas: NavGroup = { label: "Ferramentas", items: [FerramentasNavItem] };
-    const contaIdx = groups.findIndex((g) => g.label === "Conta");
-    groups =
-      contaIdx === -1
-        ? [...groups, ferramentas]
-        : [...groups.slice(0, contaIdx), ferramentas, ...groups.slice(contaIdx)];
-    return groups;
+    main.push(FerramentasNavItem);
+    return [main, NAV_ACCOUNT];
   }, [user?.isPartner, withdrawOnly]);
 
   const firstName = user?.name?.split(" ")[0] || "Membro";
@@ -270,10 +237,10 @@ export function AppShell({
         </a>
 
         <nav className={styles.navList}>
-          {navGroups.map((group) => (
-            <div key={group.label} className={styles.group}>
-              <span className={styles.groupLabel}>{group.label}</span>
-              {group.items.map((item) => {
+          {navSections.map((items, si) => (
+            <div key={si} className={styles.navSection}>
+              {si > 0 && <span className={styles.navDivider} aria-hidden />}
+              {items.map((item) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
                 return (
@@ -445,10 +412,10 @@ export function AppShell({
         </header>
 
         <nav className={styles.drawerNav}>
-          {navGroups.map((group) => (
-            <div key={group.label} className={styles.group}>
-              <span className={styles.groupLabel}>{group.label}</span>
-              {group.items.map((item) => {
+          {navSections.map((items, si) => (
+            <div key={si} className={styles.navSection}>
+              {si > 0 && <span className={styles.navDivider} aria-hidden />}
+              {items.map((item) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
                 return (

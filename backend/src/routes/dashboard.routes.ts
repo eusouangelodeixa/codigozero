@@ -51,16 +51,35 @@ router.get('/metrics', authMiddleware, subscriptionMiddleware, async (req: AuthR
       orderBy: { sortOrder: 'asc' },
       select: { slug: true, name: true, modules: { select: { lessons: { select: { id: true } } } } },
     });
-    const doneRows = await prisma.lessonProgress.findMany({
-      where: { userId, completed: true },
-      select: { lessonId: true },
+    // Uma linha de progresso (concluída OU apenas visualizada) marca o curso
+    // como "iniciado" — alimenta o KPI "Cursos iniciados" do dashboard.
+    const progressRows = await prisma.lessonProgress.findMany({
+      where: { userId },
+      select: { lessonId: true, completed: true, lastViewedAt: true },
     });
-    const doneSet = new Set(doneRows.map((r) => r.lessonId));
+    const doneSet = new Set(progressRows.filter((r) => r.completed).map((r) => r.lessonId));
+    const touchedSet = new Set(progressRows.filter((r) => r.completed || r.lastViewedAt).map((r) => r.lessonId));
     const courses = publishedCourses.map((c) => {
       const ids = c.modules.flatMap((m) => m.lessons.map((l) => l.id));
       const done = ids.filter((lid) => doneSet.has(lid)).length;
-      return { slug: c.slug, name: c.name, totalLessons: ids.length, completedLessons: done, pct: ids.length ? Math.round((done / ids.length) * 100) : 0 };
+      return {
+        slug: c.slug,
+        name: c.name,
+        totalLessons: ids.length,
+        completedLessons: done,
+        pct: ids.length ? Math.round((done / ids.length) * 100) : 0,
+        started: ids.some((lid) => touchedSet.has(lid)),
+      };
     });
+
+    // Banners rotativos configurados em /admin/config (máx. 5).
+    const sysConfig = await prisma.systemConfig.findFirst({
+      where: { id: 'singleton' },
+      select: { dashboardBanners: true },
+    });
+    const banners = Array.isArray(sysConfig?.dashboardBanners)
+      ? (sysConfig!.dashboardBanners as any[]).filter((b) => b && typeof b.imageUrl === 'string' && b.imageUrl)
+      : [];
 
     // Get user info for subscription
     const user = await prisma.user.findUnique({
@@ -86,6 +105,7 @@ router.get('/metrics', authMiddleware, subscriptionMiddleware, async (req: AuthR
         dailySearchLimit: env.MAX_DAILY_SEARCHES,
       },
       courses,
+      banners,
       user: {
         name: user?.name,
         subscriptionStatus: user?.subscriptionStatus,

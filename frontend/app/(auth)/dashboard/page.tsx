@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { PageHeader, Card, Button, Skeleton } from "@/components/ui";
-import { CofreIcon, ForjaIcon, QGIcon, RadarIcon, DisparadorIcon } from "@/components/Icons";
+import { CofreIcon, ForjaIcon, QGIcon, RadarIcon, DisparadorIcon, ChatIcon } from "@/components/Icons";
+import { Wrench } from "lucide-react";
 import styles from "./dashboard.module.css";
 
 interface Metrics {
@@ -15,6 +16,22 @@ interface Metrics {
   progressPercentage: number;
   searchesRemaining: number;
   dailySearchLimit: number;
+}
+
+interface CourseRow {
+  slug: string;
+  name: string;
+  totalLessons: number;
+  completedLessons: number;
+  pct: number;
+  started: boolean;
+}
+
+interface DashBanner {
+  id: string;
+  imageUrl: string;
+  mobileImageUrl?: string;
+  linkUrl?: string;
 }
 
 interface SubInfo {
@@ -43,9 +60,57 @@ const ChevronRight = (props: { size?: number }) => (
   </svg>
 );
 
+// ── Banners rotativos (config do admin — mesma mecânica da área de membros:
+// quadro fixo, arte mobile opcional substitui a desktop no celular). ──
+function BannerCarousel({ banners }: { banners: DashBanner[] }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (banners.length < 2) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % banners.length), 6000);
+    return () => clearInterval(t);
+  }, [banners.length]);
+  if (!banners.length) return null;
+  return (
+    <div className={styles.banners}>
+      {banners.map((b, i) => {
+        const img = (
+          <span className={b.mobileImageUrl ? styles.hasMobileArt : undefined} style={{ position: "absolute", inset: 0, display: "block" }}>
+            <img className={styles.bannerImgDesktop} src={b.imageUrl} alt="" />
+            {b.mobileImageUrl && <img className={styles.bannerImgMobile} src={b.mobileImageUrl} alt="" />}
+          </span>
+        );
+        return (
+          <div key={b.id || i} className={`${styles.bannerSlide} ${i === idx % banners.length ? styles.bannerSlideActive : ""}`}>
+            {b.linkUrl ? (
+              <a href={b.linkUrl} target="_blank" rel="noopener noreferrer">{img}</a>
+            ) : (
+              img
+            )}
+          </div>
+        );
+      })}
+      {banners.length > 1 && (
+        <div className={styles.bannerDots}>
+          {banners.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`${styles.bannerDot} ${i === idx % banners.length ? styles.bannerDotActive : ""}`}
+              onClick={() => setIdx(i)}
+              aria-label={`Banner ${i + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [courses, setCourses] = useState<CourseRow[]>([]);
+  const [banners, setBanners] = useState<DashBanner[]>([]);
   const [sub, setSub] = useState<SubInfo | null>(null);
   const [verse, setVerse] = useState<Verse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,6 +129,8 @@ export default function DashboardPage() {
       .getMetrics()
       .then((data) => {
         setMetrics(data.metrics);
+        setCourses(Array.isArray(data.courses) ? data.courses : []);
+        setBanners(Array.isArray(data.banners) ? data.banners : []);
         setSub(data.user || null);
       })
       .catch((e) => console.error("Failed to load metrics:", e))
@@ -84,8 +151,20 @@ export default function DashboardPage() {
   const campaigns = metrics?.totalCampaigns ?? 0;
   const messagesSent = metrics?.messagesSent ?? 0;
 
+  // KPIs de plataforma multi-curso.
+  const coursesTotal = courses.length;
+  const coursesStarted = courses.filter((c) => c.started).length;
+  const coursesDone = courses.filter((c) => c.totalLessons > 0 && c.pct === 100).length;
+  const nextCourse =
+    courses.find((c) => c.started && c.pct < 100) || courses.find((c) => c.pct < 100) || null;
+
+  // Abre a área de membros já no curso certo (a ponte /forja faz o SSO e o
+  // fragment `to` leva ao slug).
+  const openCourse = (c?: CourseRow | null) =>
+    router.push(c ? `/forja?to=${encodeURIComponent(`/${c.slug}`)}` : "/forja");
+
   // ── Dynamic "Ação do dia" — the next best step for THIS member, based on
-  // where they are (subscription, leads, dispatches, lessons). ──
+  // where they are (subscription, courses, leads, dispatches). ──
   const daysToExpiry = sub?.subscriptionEnd
     ? Math.ceil((new Date(sub.subscriptionEnd).getTime() - Date.now()) / 86_400_000)
     : null;
@@ -99,10 +178,20 @@ export default function DashboardPage() {
           daysToExpiry !== null && daysToExpiry >= 0
             ? `Sua assinatura expira em ${daysToExpiry} dia${daysToExpiry === 1 ? "" : "s"}.`
             : "Reative seu acesso ao Código Zero.",
-        desc: "Renove para não perder o acesso às aulas, scripts e ao Radar.",
+        desc: "Renove para não perder o acesso aos cursos, scripts e ao Radar.",
         button: "Renovar assinatura",
         href: "/assinatura",
         icon: <DisparadorIcon size={18} />,
+      };
+    }
+    if (nextCourse && nextCourse.started) {
+      return {
+        eyebrow: "Ação do dia",
+        title: `Continue de onde parou em ${nextCourse.name}.`,
+        desc: `Você já concluiu ${nextCourse.pct}% desse curso. Avance mais uma aula hoje.`,
+        button: "Continuar curso",
+        href: `/forja?to=${encodeURIComponent(`/${nextCourse.slug}`)}`,
+        icon: <ForjaIcon size={18} />,
       };
     }
     if (leads === 0) {
@@ -125,13 +214,13 @@ export default function DashboardPage() {
         icon: <DisparadorIcon size={18} />,
       };
     }
-    if (total > 0 && progress < 100) {
+    if (nextCourse) {
       return {
         eyebrow: "Ação do dia",
-        title: "Continue de onde parou nos cursos.",
-        desc: `Você já concluiu ${progress}% das aulas. Avance mais uma hoje para dominar o método.`,
-        button: "Continuar aulas",
-        href: "/forja",
+        title: `Comece o curso ${nextCourse.name}.`,
+        desc: "Você ainda não iniciou esse curso. Assista à primeira aula hoje e destrave o próximo nível.",
+        button: "Começar agora",
+        href: `/forja?to=${encodeURIComponent(`/${nextCourse.slug}`)}`,
         icon: <ForjaIcon size={18} />,
       };
     }
@@ -147,8 +236,9 @@ export default function DashboardPage() {
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
     { href: "/cofre", icon: <CofreIcon size={20} />, title: "Cofre", desc: "Scripts prontos para vender" },
-    { href: "/forja", icon: <ForjaIcon size={20} />, title: "Cursos", desc: "Área de membros e aulas" },
     { href: "/qg", icon: <QGIcon size={20} />, title: "QG", desc: "Comunidade e mentorias ao vivo" },
+    { href: "/chat", icon: <ChatIcon size={20} />, title: "Chat", desc: "Fale com a equipe e membros" },
+    { href: "/ferramentas", icon: <Wrench size={20} strokeWidth={1.6} />, title: "Ferramentas", desc: "Komunika e próximas ferramentas" },
   ];
 
   return (
@@ -156,8 +246,11 @@ export default function DashboardPage() {
       <PageHeader
         label="Início"
         title={`${greeting()}, ${userName}`}
-        description="Aqui está o resumo de onde você está hoje. Comece pela ação do dia."
+        description="Sua central de cursos e ferramentas. Continue de onde parou."
       />
+
+      {/* ── Banners (config do admin) ── */}
+      <BannerCarousel banners={banners} />
 
       {/* ── Hero (dynamic action of the day) ── */}
       <div className={styles.hero}>
@@ -182,44 +275,38 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Versículo do dia ── */}
-      {verse && (
-        <div className={styles.verse}>
-          <span className={styles.verseEyebrow}>
-            {verse.isSabbath ? "Versículo do dia · Dia de guardar o sábado" : "Versículo do dia"}
-          </span>
-          <p className={styles.verseText}>“{verse.text}”</p>
-          <span className={styles.verseRef}>{verse.reference} · {verse.translation}</span>
-        </div>
-      )}
-
-      {/* ── Metrics ── */}
+      {/* ── KPIs (plataforma multi-curso) ── */}
       <div className={styles.metricsGrid}>
         <Card>
           <div className={styles.metric}>
             <div className={styles.metricHeader}>
-              <span className={styles.metricLabel}>Leads extraídos</span>
-              <span className={styles.metricIcon}><RadarIcon size={14} /></span>
+              <span className={styles.metricLabel}>Cursos iniciados</span>
+              <span className={styles.metricIcon}><ForjaIcon size={14} /></span>
             </div>
             <div className={styles.metricValue}>
-              {loading ? <Skeleton variant="title" width={64} /> : leads.toLocaleString("pt-BR")}
+              {loading ? (
+                <Skeleton variant="title" width={64} />
+              ) : (
+                <>
+                  {coursesStarted}
+                  <span className={styles.metricSuffix}>/ {coursesTotal}</span>
+                </>
+              )}
             </div>
-            <span className={styles.metricHint}>
-              {loading ? " " : campaigns > 0 ? `em ${campaigns} ${campaigns === 1 ? "campanha" : "campanhas"}` : "desde o início"}
-            </span>
+            <span className={styles.metricHint}>cursos disponíveis pra você</span>
           </div>
         </Card>
 
         <Card>
           <div className={styles.metric}>
             <div className={styles.metricHeader}>
-              <span className={styles.metricLabel}>Disparos enviados</span>
-              <span className={styles.metricIcon}><DisparadorIcon size={14} /></span>
+              <span className={styles.metricLabel}>Cursos concluídos</span>
+              <span className={styles.metricIcon}><ForjaIcon size={14} /></span>
             </div>
             <div className={styles.metricValue}>
-              {loading ? <Skeleton variant="title" width={64} /> : messagesSent.toLocaleString("pt-BR")}
+              {loading ? <Skeleton variant="title" width={48} /> : coursesDone}
             </div>
-            <span className={styles.metricHint}>mensagens entregues</span>
+            <span className={styles.metricHint}>{coursesDone > 0 ? "100% das aulas assistidas" : "chegue aos 100% de um curso"}</span>
           </div>
         </Card>
 
@@ -239,46 +326,109 @@ export default function DashboardPage() {
                 </>
               )}
             </div>
-            <span className={styles.metricHint}>{progress}% completo</span>
+            <span className={styles.metricHint}>em todos os cursos</span>
           </div>
         </Card>
 
         <Card>
           <div className={styles.metric}>
             <div className={styles.metricHeader}>
-              <span className={styles.metricLabel}>Buscas restantes</span>
-              <span className={styles.metricIcon}><RadarIcon size={14} /></span>
+              <span className={styles.metricLabel}>Progresso geral</span>
+              <span className={styles.metricIcon}><ForjaIcon size={14} /></span>
             </div>
             <div className={styles.metricValue}>
-              {loading ? (
-                <Skeleton variant="title" width={48} />
-              ) : (
-                <>
-                  {searchesRemaining}
-                  <span className={styles.metricSuffix}>/ {dailyLimit}</span>
-                </>
-              )}
+              {loading ? <Skeleton variant="title" width={64} /> : <>{progress}<span className={styles.metricSuffix}>%</span></>}
             </div>
-            <span className={styles.metricHint}>renova diariamente</span>
+            <div className={styles.progressTrack} style={{ marginTop: 2 }}>
+              <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+            </div>
           </div>
         </Card>
       </div>
 
-      {/* ── Progress ── */}
-      <Card>
-        <div className={styles.progressCard}>
-          <div className={styles.progressHead}>
-            <div className={styles.progressTitle}>
-              <span className={styles.progressTitleMain}>Progresso nos cursos</span>
-              <span className={styles.progressTitleSub}>{completed} de {total} aulas concluídas</span>
+      {/* ── Meus cursos ── */}
+      {courses.length > 0 && (
+        <>
+          <div className={styles.sectionHead}>
+            <span className={styles.sectionLabel}>Meus cursos</span>
+            <button type="button" className={styles.sectionAction} onClick={() => openCourse(null)}>
+              Abrir área de membros <ChevronRight size={13} />
+            </button>
+          </div>
+          <div className={styles.courseGrid}>
+            {courses.map((c) => (
+              <Card key={c.slug} as="button" interactive accentHover onClick={() => openCourse(c)}>
+                <div className={styles.courseRow}>
+                  <div className={styles.courseInfo}>
+                    <span className={styles.courseName}>{c.name}</span>
+                    <span className={styles.courseMeta}>
+                      {c.completedLessons} de {c.totalLessons} aulas · {c.pct}%
+                    </span>
+                    <div className={styles.progressTrack}>
+                      <div className={styles.progressFill} style={{ width: `${c.pct}%` }} />
+                    </div>
+                  </div>
+                  <span className={styles.courseCta}>
+                    {c.pct === 100 ? "Rever" : c.started ? "Continuar" : "Começar"}
+                    <ChevronRight size={14} />
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── Operação (Radar / Disparador) ── */}
+      <span className={styles.sectionLabel}>Sua operação</span>
+      <div className={styles.opsGrid}>
+        <Card>
+          <div className={styles.opMetric}>
+            <span className={styles.opIcon}><RadarIcon size={16} /></span>
+            <div className={styles.opText}>
+              <span className={styles.opValue}>
+                {loading ? <Skeleton variant="title" width={48} /> : leads.toLocaleString("pt-BR")}
+              </span>
+              <span className={styles.opLabel}>
+                Leads extraídos{campaigns > 0 ? ` · ${campaigns} ${campaigns === 1 ? "campanha" : "campanhas"}` : ""}
+              </span>
             </div>
-            <span className={styles.progressPercent}>{progress}%</span>
           </div>
-          <div className={styles.progressTrack}>
-            <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+        </Card>
+        <Card>
+          <div className={styles.opMetric}>
+            <span className={styles.opIcon}><DisparadorIcon size={16} /></span>
+            <div className={styles.opText}>
+              <span className={styles.opValue}>
+                {loading ? <Skeleton variant="title" width={48} /> : messagesSent.toLocaleString("pt-BR")}
+              </span>
+              <span className={styles.opLabel}>Disparos enviados</span>
+            </div>
           </div>
+        </Card>
+        <Card>
+          <div className={styles.opMetric}>
+            <span className={styles.opIcon}><RadarIcon size={16} /></span>
+            <div className={styles.opText}>
+              <span className={styles.opValue}>
+                {loading ? <Skeleton variant="title" width={48} /> : `${searchesRemaining}/${dailyLimit}`}
+              </span>
+              <span className={styles.opLabel}>Buscas restantes hoje</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Versículo do dia ── */}
+      {verse && (
+        <div className={styles.verse}>
+          <span className={styles.verseEyebrow}>
+            {verse.isSabbath ? "Versículo do dia · Dia de guardar o sábado" : "Versículo do dia"}
+          </span>
+          <p className={styles.verseText}>“{verse.text}”</p>
+          <span className={styles.verseRef}>{verse.reference} · {verse.translation}</span>
         </div>
-      </Card>
+      )}
 
       {/* ── Quick Links ── */}
       <span className={styles.sectionLabel}>Acesso rápido</span>

@@ -344,6 +344,9 @@ model SystemConfig {
   // HMAC secret (whsec_…) of the CZ endpoint registered in the Komunika
   // dashboard → Webhooks. Verifies X-Komunika-Signature on inbound events.
   komunikaWebhookSecret    String?
+  // Banners rotativos da tela inicial do app do aluno (máx. 5) — mesmo formato
+  // dos slides da área de membros: [{ id, imageUrl, mobileImageUrl?, linkUrl? }].
+  dashboardBanners         Json?
 }
 
 // Delivery events streamed in by the Resend webhook (sent/delivered/bounced/…),

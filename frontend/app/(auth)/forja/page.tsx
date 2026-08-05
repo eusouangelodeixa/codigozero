@@ -23,7 +23,11 @@ export default function ForjaRedirect() {
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok || !d.code) throw new Error(d.error || "Falha ao abrir a área de membros");
-        window.location.href = `${MEMBERS_URL}/sso#code=${encodeURIComponent(d.code)}`;
+        // Deep-link opcional: /forja?to=/slug cai direto no curso (o /sso do
+        // members lê `to` do fragment). Só caminhos internos são aceitos.
+        const to = new URLSearchParams(window.location.search).get("to") || "";
+        const toFrag = to.startsWith("/") && !to.startsWith("//") ? `&to=${encodeURIComponent(to)}` : "";
+        window.location.href = `${MEMBERS_URL}/sso#code=${encodeURIComponent(d.code)}${toFrag}`;
       })
       .catch((e) => setError(e?.message || "Falha ao abrir a área de membros"));
   }, []);

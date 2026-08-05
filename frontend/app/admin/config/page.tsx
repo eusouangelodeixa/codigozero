@@ -13,7 +13,15 @@ const hdr = () => ({
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
+interface DashBanner {
+  id: string;
+  imageUrl: string;
+  mobileImageUrl?: string;
+  linkUrl?: string;
+}
+
 interface SystemConfig {
+  dashboardBanners?: DashBanner[] | null;
   communityLink?: string;
   mentoriaSchedule?: string | null;
   mentoriaLink?: string;
@@ -34,6 +42,14 @@ interface SystemConfig {
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
 interface KomunikaAssistant { id?: string; assistantId?: string; _id?: string; name?: string; title?: string; mode?: string; }
+
+const IconBanner = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <circle cx="8" cy="10" r="1.5" />
+    <path d="M22 15l-5-5-9 9" />
+  </svg>
+);
 
 const IconCommunity = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -110,6 +126,52 @@ export default function AdminConfig() {
 
   const setField = <K extends keyof SystemConfig>(key: K, value: SystemConfig[K]) =>
     setConfig((c) => ({ ...c, [key]: value }));
+
+  // ── Banners do dashboard (máx. 5, rotativos, com link opcional) ──
+  const banners: DashBanner[] = Array.isArray(config.dashboardBanners) ? config.dashboardBanners : [];
+  const setBanners = (next: DashBanner[]) => setField("dashboardBanners", next);
+  const patchBanner = (id: string, patch: Partial<DashBanner>) =>
+    setBanners(banners.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+  const moveBanner = (i: number, dir: -1 | 1) => {
+    const next = [...banners];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setBanners(next);
+  };
+
+  const pickImage = (cb: (f: File) => void) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp";
+    input.onchange = () => {
+      const f = input.files?.[0];
+      if (f) cb(f);
+    };
+    input.click();
+  };
+
+  // Reusa o upload da área de membros (uploads/courses, otimizado p/ webp).
+  const uploadBannerFile = async (file: File): Promise<string | null> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch(`${API}/api/admin/members/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("cz_token")}` },
+        body: fd,
+      });
+      const d = await res.json();
+      if (!res.ok || !d.url) {
+        toast.error("Falha no upload", d.error);
+        return null;
+      }
+      return d.url as string;
+    } catch {
+      toast.error("Erro de conexão no upload");
+      return null;
+    }
+  };
 
   useEffect(() => {
     fetch(`${API}/api/admin/system`, { headers: hdr() })
@@ -286,6 +348,106 @@ export default function AdminConfig() {
     <AdminPage title="Configurações">
     <div className={styles.page}>
       {/* ── Comunidade ── */}
+      {/* ── Banners do dashboard ── */}
+      <Section
+        title="Banners do dashboard"
+        subtitle="Até 5 banners rotativos na tela inicial do app do aluno — link opcional em cada um."
+        icon={<IconBanner />}
+        actions={
+          <span className={banners.length ? styles.statusOk : styles.statusEmpty}>
+            {banners.length ? `${banners.length}/5` : "Vazio"}
+          </span>
+        }
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {banners.map((b, i) => (
+            <div
+              key={b.id}
+              style={{
+                display: "flex",
+                gap: 14,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <img
+                src={b.imageUrl}
+                alt=""
+                style={{ width: 190, aspectRatio: "7 / 2", objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
+              />
+              <div style={{ flex: 1, minWidth: 240, display: "flex", flexDirection: "column", gap: 8 }}>
+                <input
+                  className={styles.input}
+                  placeholder="Link ao clicar (opcional) — https://…"
+                  value={b.linkUrl || ""}
+                  onChange={(e) => patchBanner(b.id, { linkUrl: e.target.value })}
+                />
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      pickImage(async (f) => {
+                        const url = await uploadBannerFile(f);
+                        if (url) patchBanner(b.id, { imageUrl: url });
+                      })
+                    }
+                  >
+                    Trocar arte
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      pickImage(async (f) => {
+                        const url = await uploadBannerFile(f);
+                        if (url) patchBanner(b.id, { mobileImageUrl: url });
+                      })
+                    }
+                  >
+                    {b.mobileImageUrl ? "Trocar arte mobile" : "Arte mobile"}
+                  </Button>
+                  {b.mobileImageUrl && (
+                    <Button variant="ghost" size="sm" onClick={() => patchBanner(b.id, { mobileImageUrl: undefined })}>
+                      Tirar mobile
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => moveBanner(i, -1)} aria-label="Mover para cima">
+                    ↑
+                  </Button>
+                  <Button variant="ghost" size="sm" disabled={i === banners.length - 1} onClick={() => moveBanner(i, 1)} aria-label="Mover para baixo">
+                    ↓
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => setBanners(banners.filter((x) => x.id !== b.id))}>
+                    Remover
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {banners.length < 5 && (
+            <Button
+              variant="secondary"
+              onClick={() =>
+                pickImage(async (f) => {
+                  const url = await uploadBannerFile(f);
+                  if (url) setBanners([...banners, { id: crypto.randomUUID(), imageUrl: url }]);
+                })
+              }
+            >
+              + Adicionar banner
+            </Button>
+          )}
+          <span className={styles.fieldHint}>
+            Desktop: 1920×550 (quadro fixo 7:2). Arte mobile opcional: 1080×675 (8:5) — substitui a desktop no celular.
+            Alternam automaticamente a cada 6 segundos, igual à área de membros.
+          </span>
+        </div>
+      </Section>
+
       <Section
         title="Comunidade"
         subtitle="Link do Discord exibido no QG dos membros."

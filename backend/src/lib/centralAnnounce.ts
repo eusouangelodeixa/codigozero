@@ -22,8 +22,8 @@ import { env } from '../config/env';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
-// Host público da Central. O deep-link ?m={slug} abre o material direto no
-// hub (com OG próprio — bom preview no grupo).
+// Host público da Central. Cada material é uma página real em
+// central.czero.sbs/{slug} (links antigos ?m={slug} redirecionam pra ela).
 const CENTRAL_URL = 'https://central.czero.sbs';
 
 const ANNOUNCE_DELAY_MS = 10 * 60 * 1000; // 10 min após publicar
@@ -132,7 +132,7 @@ function buildMessage(page: { title: string; slug: string; metaDescription: stri
     `*${page.title}*`,
     buildSummary(page),
     '',
-    `👉 Resgata aqui: ${CENTRAL_URL}/?m=${encodeURIComponent(page.slug)}`,
+    `👉 Resgata aqui: ${CENTRAL_URL}/${encodeURIComponent(page.slug)}`,
   ].join('\n');
 }
 

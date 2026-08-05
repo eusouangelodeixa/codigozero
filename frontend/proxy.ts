@@ -16,6 +16,14 @@ export function proxy(req: NextRequest) {
     url.pathname = `/members${pathname === "/" ? "" : pathname}`;
     return NextResponse.rewrite(url);
   }
+  // central.czero.sbs: os materiais são páginas reais (central.czero.sbs/{slug}
+  // → app/central/[slug]) com URL limpa. O nginx já rescreve só a raiz (/ →
+  // /central); os demais caminhos ganham o prefixo aqui.
+  if (host.startsWith("central.") && !pathname.startsWith("/central")) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/central${pathname === "/" ? "" : pathname}`;
+    return NextResponse.rewrite(url);
+  }
   return NextResponse.next();
 }
 

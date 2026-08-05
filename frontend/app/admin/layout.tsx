@@ -163,20 +163,20 @@ const NAV: NavGroup[] = [
   {
     label: "Pessoas",
     items: [
-      { href: "/admin/users", label: "Usuários", icon: I.Users },
-      { href: "/admin/grupo", label: "Grupo",    icon: I.Users },
-      { href: "/admin/leads", label: "Leads",    icon: I.Leads },
-      { href: "/admin/chat",  label: "Chat",     icon: I.Chat },
+      { href: "/admin/users", label: "Usuários",         icon: I.Users },
+      { href: "/admin/grupo", label: "Grupo de Membros", icon: I.Users },
+      { href: "/admin/leads", label: "Leads",            icon: I.Leads },
+      { href: "/admin/chat",  label: "Chat",             icon: I.Chat },
     ],
   },
   {
     label: "Conteúdo",
     items: [
-      { href: "/admin/cursos",   label: "Cursos",     icon: I.Lessons },
-      { href: "/admin/scripts",  label: "Scripts",    icon: I.Scripts },
-      { href: "/admin/landing",  label: "Landing",    icon: I.Landing },
-      { href: "/admin/lp",       label: "LP — Reels", icon: I.Film },
-      { href: "/admin/conteudo", label: "Iscas",      icon: I.Target },
+      { href: "/admin/cursos",   label: "Cursos",           icon: I.Lessons },
+      { href: "/admin/scripts",  label: "Scripts",          icon: I.Scripts },
+      { href: "/admin/landing",  label: "Landing (Vendas)", icon: I.Landing },
+      { href: "/admin/lp",       label: "Captura (Reels)",  icon: I.Film },
+      { href: "/admin/conteudo", label: "Iscas & Central",  icon: I.Target },
     ],
   },
   {

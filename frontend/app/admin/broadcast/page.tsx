@@ -290,7 +290,10 @@ export default function BroadcastPage() {
 
   return (
     <>
-      <AdminPage title="Broadcast">
+      <AdminPage
+        title="Broadcast"
+        desc="Mensagem individual pra CADA contato da base filtrada (1 a 1, com pacing). Pra falar no grupo de assinantes, usa Pessoas → Grupo de Membros."
+      >
 
       {/* ── Audience ── */}
       <div className={styles.card}>

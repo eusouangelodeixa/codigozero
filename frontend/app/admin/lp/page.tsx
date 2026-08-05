@@ -20,9 +20,6 @@ export default function AdminLp() {
   const [count, setCount] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [groupsError, setGroupsError] = useState("");
 
   useEffect(() => {
     fetch(`${API}/api/admin/landing-config`, { headers: hdr() })
@@ -42,24 +39,6 @@ export default function AdminLp() {
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 3000); };
   const u = (key: string, val: any) => setLp((p: any) => ({ ...p, [key]: val }));
-
-  // Busca os grupos da instância admin no Komunika (com sync — reflete os
-  // grupos atuais do WhatsApp). O escolhido vai em lp.announceGroup no Salvar.
-  const loadGroups = async () => {
-    setLoadingGroups(true);
-    setGroupsError("");
-    try {
-      const r = await fetch(`${API}/api/admin/central/groups?sync=1`, { headers: hdr() });
-      const d = await r.json();
-      setGroups(Array.isArray(d.groups) ? d.groups : []);
-      if (d.error) setGroupsError(d.error);
-      else if (!d.groups?.length) setGroupsError("Nenhum grupo encontrado na instância admin do Komunika.");
-    } catch {
-      setGroupsError("Erro de conexão ao carregar os grupos.");
-    } finally {
-      setLoadingGroups(false);
-    }
-  };
 
   const save = async () => {
     setSaving(true);
@@ -99,7 +78,7 @@ export default function AdminLp() {
   return (
     <>
       <AdminPage
-        title="LP — Reels"
+        title="Captura — Reels (lp.czero.sbs)"
         actions={
           <>
             <a className={`${k.btn} ${k.btnSecondary}`} href="/lp" target="_blank" rel="noopener noreferrer">Ver página ↗</a>
@@ -123,54 +102,16 @@ export default function AdminLp() {
         </button>
       </div>
 
-      {/* ── Link do grupo (o mais importante) ── */}
+      {/* ── Link do grupo GRÁTIS de leads (o mais importante) ── */}
       <div className={styles.card} style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🔗 Link do grupo</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🔗 Grupo grátis de leads (botão da LP)</h2>
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16 }}>
           Onde cai o botão verde da tela final (“TÁ LIBERADO”). O link da Central vai na <strong>descrição do grupo</strong> — o lead só descobre depois de entrar.
+          <strong> Não confundir</strong> com o grupo pago de assinantes (Pessoas → Grupo de Membros).
         </p>
         <div className={styles.formGrid}>
           <Field label="Link do grupo do WhatsApp (botão verde)" field="groupUrl" hint="Cole o convite do grupo (https://chat.whatsapp.com/…). Enquanto vazio, o botão fica desativado." />
         </div>
-      </div>
-
-      {/* ── Aviso automático de conteúdo novo no grupo ── */}
-      <div className={styles.card} style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>📢 Aviso de conteúdo novo no grupo</h2>
-        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16 }}>
-          Ao <strong>publicar</strong> um conteúdo na Central, ~10 minutos depois um resumo breve com o link
-          cai automaticamente no grupo selecionado (enviado pela instância admin do Komunika). Cada conteúdo
-          é anunciado uma única vez.
-        </p>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <select
-            className={styles.formInput}
-            style={{ maxWidth: 420 }}
-            value={lp.announceGroup?.id || ""}
-            onChange={(e) => {
-              const id = e.target.value;
-              const g = groups.find((x) => x.id === id);
-              u("announceGroup", id ? { id, name: g?.name || lp.announceGroup?.name || "" } : null);
-            }}
-          >
-            <option value="">— Nenhum grupo (aviso desativado) —</option>
-            {lp.announceGroup?.id && !groups.some((g) => g.id === lp.announceGroup.id) && (
-              <option value={lp.announceGroup.id}>{lp.announceGroup.name || lp.announceGroup.id}</option>
-            )}
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
-          <button className={styles.btnSecondary} onClick={loadGroups} disabled={loadingGroups}>
-            {loadingGroups ? "Carregando…" : "Carregar grupos do Komunika"}
-          </button>
-        </div>
-        {groupsError && (
-          <p style={{ fontSize: 13, color: "var(--color-error, #f87171)", marginTop: 10 }}>{groupsError}</p>
-        )}
-        <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "10px 2px 0" }}>
-          Clica em "Carregar grupos" pra listar os grupos do número admin, escolhe o grupo e <strong>Salvar</strong>.
-        </p>
       </div>
 
       {/* ── Hero ── */}

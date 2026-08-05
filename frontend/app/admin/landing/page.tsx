@@ -182,7 +182,7 @@ export default function AdminLanding() {
 
   return (
     <>
-      <AdminPage title="Landing">
+      <AdminPage title="Landing de Vendas (czero.sbs)">
 
       {/* Tab Navigation */}
       <div style={{ display: "flex", gap: 4, marginBottom: 24, flexWrap: "wrap" }}>

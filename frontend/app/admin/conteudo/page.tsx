@@ -47,13 +47,69 @@ export default function AdminConteudo() {
   const [toast, setToast] = useState("");
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
+  // ── Aviso automático no grupo (mora AQUI porque é aqui que se publica) ──
+  // O grupo escolhido fica em LandingConfig.sections.lp.announceGroup; o save
+  // relê a config na hora e altera SÓ esse campo (não pisa na edição da LP).
+  const [announceGroup, setAnnounceGroup] = useState<{ id: string; name: string } | null>(null);
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
+  const [savingAnnounce, setSavingAnnounce] = useState(false);
+
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 3000); };
+
+  const loadAnnounceGroup = () => {
+    fetch(`${API}/api/admin/landing-config`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((d) => setAnnounceGroup(((d.config?.sections || {}).lp || {}).announceGroup || null))
+      .catch(() => {});
+  };
+
+  const loadGroups = async () => {
+    setLoadingGroups(true);
+    setGroupsError("");
+    try {
+      const r = await fetch(`${API}/api/admin/central/groups?sync=1`, { headers: hdr() });
+      const d = await r.json();
+      setGroups(Array.isArray(d.groups) ? d.groups : []);
+      if (d.error) setGroupsError(d.error);
+      else if (!d.groups?.length) setGroupsError("Nenhum grupo encontrado na instância admin do Komunika.");
+    } catch {
+      setGroupsError("Erro de conexão ao carregar os grupos.");
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const saveAnnounceGroup = async (next: { id: string; name: string } | null) => {
+    setSavingAnnounce(true);
+    setAnnounceGroup(next);
+    try {
+      // Read-modify-write: pega a config fresca e troca só o announceGroup.
+      const r0 = await fetch(`${API}/api/admin/landing-config`, { headers: hdr() });
+      const d0 = await r0.json();
+      const cfg = d0.config || {};
+      const sections = { ...(cfg.sections || {}), lp: { ...((cfg.sections || {}).lp || {}), announceGroup: next } };
+      const r = await fetch(`${API}/api/admin/landing-config`, {
+        method: "PATCH",
+        headers: hdr(),
+        body: JSON.stringify({ ...cfg, sections }),
+      });
+      if (!r.ok) throw new Error();
+      showToast(next ? `Aviso ligado: ${next.name} ✓` : "Aviso no grupo desativado ✓");
+    } catch {
+      showToast("Erro ao salvar o grupo do aviso.");
+      loadAnnounceGroup();
+    } finally {
+      setSavingAnnounce(false);
+    }
+  };
 
   const load = () => {
     fetch(`${API}/api/admin/content-pages`, { headers: hdr() })
       .then(r => r.json()).then(d => setPages(d.pages || [])).catch(() => {});
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadAnnounceGroup(); }, []);
 
   const openNew = () => setEditing(emptyPage());
   const openEdit = async (id: string) => {
@@ -164,9 +220,46 @@ export default function AdminConteudo() {
     return (
       <>
         <AdminPage
-          title="Iscas"
+          title="Iscas & Central"
+          desc="Páginas de conteúdo: com gate em /conteudo/{slug} (tráfego frio) e liberadas na Central de Material."
           actions={<button className={`${k.btn} ${k.btnPrimary}`} onClick={openNew}>+ Nova página</button>}
         >
+          {/* ── Aviso automático no grupo ao publicar ── */}
+          <div className={styles.card} style={{ marginBottom: 16 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>📢 Aviso automático no grupo</h2>
+            <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 12 }}>
+              Ao <strong>publicar</strong> uma página, ~10 min depois um resumo com o link da Central cai no grupo
+              selecionado, <strong>com todos marcados</strong>. Cada conteúdo anuncia uma única vez.
+              (Normalmente é o grupo <strong>grátis de leads</strong> — o dos Reels, não o de membros.)
+            </p>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                className={styles.formInput}
+                style={{ maxWidth: 380 }}
+                disabled={savingAnnounce}
+                value={announceGroup?.id || ""}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const g = groups.find((x) => x.id === id);
+                  saveAnnounceGroup(id ? { id, name: g?.name || announceGroup?.name || "" } : null);
+                }}
+              >
+                <option value="">— Desativado (não avisa em grupo nenhum) —</option>
+                {announceGroup?.id && !groups.some((g) => g.id === announceGroup.id) && (
+                  <option value={announceGroup.id}>{announceGroup.name || announceGroup.id}</option>
+                )}
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              <button className={styles.btnSecondary} onClick={loadGroups} disabled={loadingGroups}>
+                {loadingGroups ? "Carregando…" : "Carregar grupos do Komunika"}
+              </button>
+              {savingAnnounce && <span style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Salvando…</span>}
+            </div>
+            {groupsError && <p style={{ fontSize: 13, color: "var(--color-error, #f87171)", marginTop: 8 }}>{groupsError}</p>}
+          </div>
+
           <DataTable
             columns={columns}
             rows={pages}

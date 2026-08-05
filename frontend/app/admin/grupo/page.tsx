@@ -284,10 +284,11 @@ export default function AdminGrupo() {
     >
       {/* ── Config ── */}
       <div className={styles.card} style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>⚙️ Configuração</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>⚙️ Grupo pago de assinantes</h2>
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 16 }}>
           O grupo é <strong>privado</strong>: o link de convite aparece no QG só pra quem tem assinatura ativa,
           e tu aprovas cada entrada no WhatsApp. O monitor abaixo cruza os participantes com as assinaturas.
+          <strong> Não confundir</strong> com o grupo grátis de leads (Captura — Reels).
         </p>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
           <select

@@ -351,7 +351,7 @@ export default function AdminConfig() {
       {/* ── Banners do dashboard ── */}
       <Section
         title="Banners do dashboard"
-        subtitle="Até 5 banners rotativos na tela inicial do app do aluno — link opcional em cada um."
+        subtitle="Até 5 banners rotativos na tela inicial do APP do aluno — link opcional em cada um. (Os banners da área de membros ficam no editor de cada curso.)"
         icon={<IconBanner />}
         actions={
           <span className={banners.length ? styles.statusOk : styles.statusEmpty}>
@@ -450,7 +450,7 @@ export default function AdminConfig() {
 
       <Section
         title="Comunidade"
-        subtitle="Link do Discord exibido no QG dos membros."
+        subtitle="Link do Discord exibido no QG dos membros. (O grupo do WhatsApp de assinantes configura-se em Pessoas → Grupo de Membros.)"
         icon={<IconCommunity />}
         actions={
           <span className={config.communityLink ? styles.statusOk : styles.statusEmpty}>

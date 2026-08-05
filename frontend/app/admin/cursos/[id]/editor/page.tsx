@@ -327,6 +327,30 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
                         <X size={12} />
                       </button>
                     </div>
+                    {/* Arte exclusiva para MOBILE (opcional) */}
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #e5e7eb" }}>
+                      <span className={e.subtle}>📱 Versão mobile (opcional)</span>
+                      {s.mobileImageUrl && (
+                        <div className={e.imgPreview} style={{ marginTop: 6 }}>
+                          <img src={s.mobileImageUrl} alt="" />
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                        <Upload
+                          label={s.mobileImageUrl ? "Trocar arte mobile" : "Enviar arte mobile"}
+                          onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: slides.map((x, xi) => (xi === i ? { ...x, mobileImageUrl: url } : x)) } } }))}
+                        />
+                        {s.mobileImageUrl && (
+                          <button
+                            type="button"
+                            className={e.smallBtn}
+                            onClick={() => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: slides.map((x, xi) => (xi === i ? { ...x, mobileImageUrl: undefined } : x)) } } }))}
+                          >
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
                 {slides.length < 3 && (
@@ -335,7 +359,7 @@ export default function CursoEditor({ params }: { params: Promise<{ id: string }
                     onDone={(url) => patch((c) => ({ ...c, home: { ...c.home, banner: { slides: [...slides, { id: uid(), imageUrl: url }] } } }))}
                   />
                 )}
-                <div className={e.hint}>💡 Tamanho do banner: 1920×550 pixels (o quadro é fixo — a arte deve ser criada NESSA medida; imagens maiores são recortadas pra caber). No celular o corte vira 8:5: mantenha o conteúdo importante no centro.</div>
+                <div className={e.hint}>💡 Desktop: 1920×550 pixels (quadro fixo — crie a arte NESSA medida). Mobile: suba a versão mobile opcional em 1080×675 (8:5); sem ela, a arte desktop é recortada no centro.</div>
               </div>
 
               <div className={e.group}>

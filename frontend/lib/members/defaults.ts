@@ -11,7 +11,12 @@ export type MemberMenuItem = {
   url?: string; // apenas type 'link'
 };
 
-export type MemberBannerSlide = { id: string; imageUrl: string; linkUrl?: string };
+export type MemberBannerSlide = {
+  id: string;
+  imageUrl: string; // arte desktop (1920×550, quadro 3.5:1)
+  mobileImageUrl?: string; // arte EXCLUSIVA mobile (1080×675, quadro 8:5) — opcional; sem ela, recorta a desktop
+  linkUrl?: string;
+};
 
 export type MemberHomeSection = { id: string; type: "modules" | "continue"; title?: string };
 

@@ -51,7 +51,14 @@ export function BannerCarousel({ slides, previewMode }: { slides: MemberBannerSl
   return (
     <div className={k.banner}>
       {slides.map((s, i) => {
-        const img = <img src={s.imageUrl} alt="" />;
+        // Duas artes por slide: desktop sempre; mobile EXCLUSIVA quando o
+        // admin subiu uma (classes alternam via media query e forceMobile).
+        const img = (
+          <span className={s.mobileImageUrl ? k.hasMobileArt : undefined} style={{ position: "absolute", inset: 0, display: "block" }}>
+            <img className={k.bannerImgDesktop} src={s.imageUrl} alt="" />
+            {s.mobileImageUrl && <img className={k.bannerImgMobile} src={s.mobileImageUrl} alt="" />}
+          </span>
+        );
         return (
           <div key={s.id || i} className={`${k.bannerSlide} ${i === idx % slides.length ? k.bannerSlideActive : ""}`}>
             {s.linkUrl && !previewMode ? (

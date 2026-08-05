@@ -166,6 +166,16 @@
 .bannerSlide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; }
 .bannerSlideActive { opacity: 1; }
 .bannerSlide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Arte exclusiva mobile por slide: desktop mostra a imagem desktop; no
+ * mobile (media query real OU forceMobile do preview) troca pra mobile
+ * QUANDO o slide tem uma (.hasMobileArt). */
+.bannerImgMobile { display: none; }
+@media (max-width: 899px) {
+  .hasMobileArt .bannerImgDesktop { display: none; }
+  .hasMobileArt .bannerImgMobile { display: block; }
+}
+.forceMobile .hasMobileArt .bannerImgDesktop { display: none; }
+.forceMobile .hasMobileArt .bannerImgMobile { display: block; }
 .bannerDots { position: absolute; bottom: 12px; left: 0; right: 0; display: flex; gap: 8px; justify-content: center; }
 .bannerDot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.4); border: none; cursor: pointer; padding: 0; }
 .bannerDotActive { background: var(--accent); }

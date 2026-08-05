@@ -230,6 +230,121 @@ export async function getRemovalQueueSummary() {
   return { pending, pendingJids, lastProcessedAt: lastDone?.processedAt || null };
 }
 
+// ── Mensagens do admin pro grupo (texto / mídia / áudio-voz) ────────────────
+// Envio "agora" também passa pela fila (scheduledAt = now): pipeline único,
+// pacing de 1 por tick e histórico auditável no /admin/grupo.
+
+export interface GroupMessageInput {
+  kind: 'text' | 'media' | 'audio';
+  content?: string | null;
+  mediaUrl?: string | null;
+  mentionAll?: boolean;
+  scheduledAt?: Date | null;
+  createdBy?: string | null;
+}
+
+export async function enqueueGroupMessage(input: GroupMessageInput): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const kind = input.kind;
+  const content = (input.content || '').trim() || null;
+  const mediaUrl = (input.mediaUrl || '').trim() || null;
+  if (kind === 'text' && !content) return { ok: false, error: 'Escreve a mensagem.' };
+  if ((kind === 'media' || kind === 'audio') && !mediaUrl) return { ok: false, error: 'Falta o arquivo.' };
+  const when = input.scheduledAt && input.scheduledAt.getTime() > Date.now() ? input.scheduledAt : new Date();
+  const row = await prisma.groupMessageQueue.create({
+    data: {
+      kind,
+      content,
+      mediaUrl,
+      mentionAll: kind === 'audio' ? false : !!input.mentionAll,
+      scheduledAt: when,
+      createdBy: input.createdBy || null,
+    },
+  });
+  return { ok: true, id: row.id };
+}
+
+export async function listGroupMessages() {
+  const [pending, history] = await Promise.all([
+    prisma.groupMessageQueue.findMany({ where: { status: 'pending' }, orderBy: { scheduledAt: 'asc' } }),
+    prisma.groupMessageQueue.findMany({
+      where: { status: { in: ['sent', 'failed', 'canceled'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+  ]);
+  return { pending, history };
+}
+
+export async function cancelGroupMessage(id: string): Promise<boolean> {
+  const r = await prisma.groupMessageQueue.updateMany({
+    where: { id, status: 'pending' },
+    data: { status: 'canceled' },
+  });
+  return r.count > 0;
+}
+
+/**
+ * Tick do cron (a cada minuto): envia NO MÁXIMO UMA mensagem vencida por vez
+ * (pacing) via endpoint de grupos do Komunika. Áudio vai com ptt:true →
+ * mensagem de VOZ (como se gravada na hora). Falha re-tenta; 5 falhas → failed.
+ */
+export async function processGroupMessageQueue(): Promise<void> {
+  const item = await prisma.groupMessageQueue.findFirst({
+    where: { status: 'pending', scheduledAt: { lte: new Date() } },
+    orderBy: { scheduledAt: 'asc' },
+  });
+  if (!item) return;
+
+  const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+  const api = await getKomunikaApi();
+  if (!cfg?.membersGroupId || !api) {
+    await prisma.groupMessageQueue.update({
+      where: { id: item.id },
+      data: { attempts: { increment: 1 }, error: !cfg?.membersGroupId ? 'grupo não configurado' : 'Komunika não configurado' },
+    });
+    return;
+  }
+
+  const body: Record<string, unknown> =
+    item.kind === 'text'
+      ? { content: item.content, mentionAll: item.mentionAll }
+      : item.kind === 'audio'
+        ? { mediaUrl: item.mediaUrl, ptt: true }
+        : { mediaUrl: item.mediaUrl, ...(item.content ? { content: item.content } : {}), mentionAll: item.mentionAll };
+
+  try {
+    const r = await fetch(`${api.apiUrl}/api/v1/groups/${encodeURIComponent(cfg.membersGroupId)}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': api.apiKey },
+      body: JSON.stringify(body),
+    });
+    if (r.ok) {
+      await prisma.groupMessageQueue.update({
+        where: { id: item.id },
+        data: { status: 'sent', sentAt: new Date(), error: null, attempts: { increment: 1 } },
+      });
+      console.log(`[MEMBERS-GROUP] 📣 Mensagem (${item.kind}) enviada pro grupo`);
+    } else {
+      const text = await r.text().catch(() => '');
+      const attempts = item.attempts + 1;
+      await prisma.groupMessageQueue.update({
+        where: { id: item.id },
+        data: attempts >= 5
+          ? { status: 'failed', attempts, error: `Komunika ${r.status}: ${text.slice(0, 160)}` }
+          : { attempts, error: `Komunika ${r.status}: ${text.slice(0, 160)}` },
+      });
+    }
+  } catch (e: any) {
+    const attempts = item.attempts + 1;
+    await prisma.groupMessageQueue.update({
+      where: { id: item.id },
+      data: attempts >= 5
+        ? { status: 'failed', attempts, error: `throw: ${e?.message || 'desconhecido'}` }
+        : { attempts, error: `throw: ${e?.message || 'desconhecido'}` },
+    });
+  }
+}
+
 // Carência ANTES da remoção automática: vencido há menos de 3 dias ainda não
 // entra na fila sozinho (muita renovação chega 1-2 dias atrasada, e os
 // lembretes de expiração batem nesses dias). O admin pode antecipar à mão em

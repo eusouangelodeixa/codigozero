@@ -4,7 +4,7 @@
 // pra assinante ativo). Monitor: participantes AO VIVO cruzados com as
 // assinaturas — em dia, equipe, quem remover (com botão de remoção real via
 // Komunika) e números desconhecidos (nunca removidos automaticamente).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "../admin.module.css";
 import k from "@/components/admin/kit.module.css";
 import { AdminPage } from "@/components/admin";
@@ -36,6 +36,23 @@ interface Status {
 const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
+const fmtDateTime = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleString("pt-PT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+
+interface GroupMsg {
+  id: string;
+  kind: "text" | "media" | "audio";
+  content?: string | null;
+  mediaUrl?: string | null;
+  mentionAll: boolean;
+  scheduledAt: string;
+  status: string;
+  error?: string | null;
+  sentAt?: string | null;
+}
+
+const KIND_LABEL: Record<string, string> = { text: "Texto", media: "Mídia", audio: "Áudio (voz)" };
+
 export default function AdminGrupo() {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +66,131 @@ export default function AdminGrupo() {
   const [removing, setRemoving] = useState<string | null>(null); // jid | "all"
   const [toast, setToast] = useState("");
 
+  // ── Composer do grupo ──
+  const [msgKind, setMsgKind] = useState<"text" | "media" | "audio">("text");
+  const [msgText, setMsgText] = useState("");
+  const [msgMentionAll, setMsgMentionAll] = useState(true);
+  const [msgMediaUrl, setMsgMediaUrl] = useState("");
+  const [msgMediaType, setMsgMediaType] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const recChunksRef = useRef<Blob[]>([]);
+  const [schedMode, setSchedMode] = useState<"now" | "later">("now");
+  const [schedAt, setSchedAt] = useState("");
+  const [sending, setSending] = useState(false);
+  const [msgs, setMsgs] = useState<{ pending: GroupMsg[]; history: GroupMsg[] }>({ pending: [], history: [] });
+
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 3500); };
+
+  const loadMessages = async () => {
+    try {
+      const r = await fetch(`${API}/api/admin/members-group/messages`, { headers: hdr() });
+      const d = await r.json();
+      setMsgs({ pending: d.pending || [], history: d.history || [] });
+    } catch {}
+  };
+
+  const uploadGroupFile = async (file: File): Promise<{ url: string; type: string } | null> => {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch(`${API}/api/admin/members-group/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("cz_token")}` },
+        body: fd,
+      });
+      const d = await r.json();
+      if (!r.ok || !d.url) { showToast(d.error || "Falha no upload"); return null; }
+      return { url: d.url, type: d.type };
+    } catch {
+      showToast("Erro de conexão no upload");
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const pickFile = (accept: string, cb: (f: File) => void) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.onchange = () => { const f = input.files?.[0]; if (f) cb(f); };
+    input.click();
+  };
+
+  // Gravador nativo: o áudio sai como MENSAGEM DE VOZ no grupo (ptt).
+  const startRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "";
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recChunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) recChunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recChunksRef.current, { type: rec.mimeType || "audio/webm" });
+        const ext = (rec.mimeType || "").includes("mp4") ? "m4a" : "webm";
+        const up = await uploadGroupFile(new File([blob], `voz-${Date.now()}.${ext}`, { type: blob.type }));
+        if (up) { setMsgMediaUrl(up.url); setMsgMediaType("audio"); showToast("Áudio gravado ✓"); }
+      };
+      rec.start();
+      recRef.current = rec;
+      setRecording(true);
+    } catch {
+      showToast("Sem acesso ao microfone");
+    }
+  };
+
+  const stopRec = () => {
+    recRef.current?.stop();
+    recRef.current = null;
+    setRecording(false);
+  };
+
+  const sendGroupMessage = async () => {
+    if (msgKind === "text" && !msgText.trim()) { showToast("Escreve a mensagem."); return; }
+    if (msgKind !== "text" && !msgMediaUrl) { showToast("Falta o arquivo."); return; }
+    if (schedMode === "later" && !schedAt) { showToast("Escolhe a data/hora."); return; }
+    setSending(true);
+    try {
+      const r = await fetch(`${API}/api/admin/members-group/messages`, {
+        method: "POST",
+        headers: hdr(),
+        body: JSON.stringify({
+          kind: msgKind,
+          content: msgText.trim() || undefined,
+          mediaUrl: msgMediaUrl || undefined,
+          mentionAll: msgKind === "audio" ? false : msgMentionAll,
+          scheduledAt: schedMode === "later" ? new Date(schedAt).toISOString() : undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Falha ao enviar");
+      showToast(schedMode === "later" ? "Agendado ✓" : "Na fila — sai em instantes ✓");
+      setMsgText(""); setMsgMediaUrl(""); setMsgMediaType(""); setSchedMode("now"); setSchedAt("");
+      loadMessages();
+    } catch (e: any) {
+      showToast(e?.message || "Erro ao enviar.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const cancelMsg = async (id: string) => {
+    if (!window.confirm("Cancelar esta mensagem agendada?")) return;
+    try {
+      const r = await fetch(`${API}/api/admin/members-group/messages/${id}`, { method: "DELETE", headers: hdr() });
+      if (!r.ok) throw new Error();
+      showToast("Cancelada ✓");
+      loadMessages();
+    } catch {
+      showToast("Erro ao cancelar.");
+    }
+  };
 
   const loadStatus = async () => {
     setLoading(true);
@@ -66,7 +207,7 @@ export default function AdminGrupo() {
     }
   };
 
-  useEffect(() => { loadStatus(); }, []);
+  useEffect(() => { loadStatus(); loadMessages(); }, []);
 
   const loadGroups = async () => {
     setLoadingGroups(true);
@@ -187,6 +328,130 @@ export default function AdminGrupo() {
         <button className={styles.btnPrimary} onClick={saveConfig} disabled={saving}>
           {saving ? "Salvando…" : "Salvar configuração"}
         </button>
+      </div>
+
+      {/* ── Composer: enviar mensagem no grupo ── */}
+      <div className={styles.card} style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>📣 Enviar no grupo</h2>
+        <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginBottom: 14 }}>
+          Texto (com todos marcados), mídia ou áudio — o áudio chega como <strong>mensagem de voz</strong>,
+          como se gravada na hora. Envia já ou agenda.
+        </p>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {(["text", "media", "audio"] as const).map((kd) => (
+            <button
+              key={kd}
+              className={msgKind === kd ? styles.btnPrimary : styles.btnSecondary}
+              style={{ padding: "8px 16px" }}
+              onClick={() => { setMsgKind(kd); setMsgMediaUrl(""); setMsgMediaType(""); }}
+            >
+              {kd === "text" ? "💬 Texto" : kd === "media" ? "🖼️ Mídia" : "🎙️ Áudio"}
+            </button>
+          ))}
+        </div>
+
+        {msgKind !== "audio" && (
+          <div className={`${styles.formGroup} ${styles.formGroupFull}`} style={{ marginBottom: 12 }}>
+            <label className={styles.formLabel}>{msgKind === "text" ? "Mensagem" : "Legenda (opcional)"}</label>
+            <textarea
+              className={styles.formTextarea}
+              rows={4}
+              placeholder={msgKind === "text" ? "Escreve a mensagem pro grupo… (*negrito* funciona)" : "Legenda da mídia…"}
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+            />
+          </div>
+        )}
+
+        {msgKind === "media" && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+            <button className={styles.btnSecondary} disabled={uploading} onClick={() => pickFile("image/*,video/*", async (f) => { const up = await uploadGroupFile(f); if (up) { setMsgMediaUrl(up.url); setMsgMediaType(up.type); } })}>
+              {uploading ? "Enviando…" : msgMediaUrl ? "Trocar arquivo" : "Escolher imagem/vídeo"}
+            </button>
+            {msgMediaUrl && msgMediaType === "image" && (
+              <img src={msgMediaUrl} alt="" style={{ height: 54, borderRadius: 8, objectFit: "cover" }} />
+            )}
+            {msgMediaUrl && msgMediaType === "video" && <span className={`${styles.badge} ${styles.badgeTeal}`}>🎬 vídeo pronto</span>}
+          </div>
+        )}
+
+        {msgKind === "audio" && (
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+            {!recording ? (
+              <button className={styles.btnSecondary} disabled={uploading} onClick={startRec}>🔴 Gravar agora</button>
+            ) : (
+              <button className={styles.btnPrimary} style={{ background: "var(--color-error, #ef4444)" }} onClick={stopRec}>⏹️ Parar gravação</button>
+            )}
+            <button className={styles.btnSecondary} disabled={uploading || recording} onClick={() => pickFile("audio/*", async (f) => { const up = await uploadGroupFile(f); if (up) { setMsgMediaUrl(up.url); setMsgMediaType("audio"); } })}>
+              {uploading ? "Enviando…" : "…ou subir arquivo de áudio"}
+            </button>
+            {msgMediaUrl && msgMediaType === "audio" && <audio controls src={msgMediaUrl} style={{ height: 36 }} />}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+          {msgKind !== "audio" && (
+            <label style={{ display: "inline-flex", gap: 8, alignItems: "center", fontSize: 13.5, cursor: "pointer" }}>
+              <input type="checkbox" checked={msgMentionAll} onChange={(e) => setMsgMentionAll(e.target.checked)} />
+              Marcar todos os membros
+            </label>
+          )}
+          <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13.5, cursor: "pointer" }}>
+            <input type="radio" checked={schedMode === "now"} onChange={() => setSchedMode("now")} /> Enviar agora
+          </label>
+          <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13.5, cursor: "pointer" }}>
+            <input type="radio" checked={schedMode === "later"} onChange={() => setSchedMode("later")} /> Agendar
+          </label>
+          {schedMode === "later" && (
+            <input
+              type="datetime-local"
+              className={styles.formInput}
+              style={{ maxWidth: 220 }}
+              value={schedAt}
+              onChange={(e) => setSchedAt(e.target.value)}
+            />
+          )}
+        </div>
+
+        <button className={styles.btnPrimary} disabled={sending || uploading || recording} onClick={sendGroupMessage}>
+          {sending ? "Enviando…" : schedMode === "later" ? "Agendar envio" : "Enviar no grupo"}
+        </button>
+
+        {msgs.pending.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>⏳ Agendadas</div>
+            {msgs.pending.map((m) => (
+              <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 13.5 }}>
+                <span className={`${styles.badge} ${styles.badgeTeal}`}>{KIND_LABEL[m.kind]}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                  {m.content || (m.kind === "audio" ? "mensagem de voz" : "mídia")}
+                </span>
+                <span style={{ color: "var(--text-tertiary)" }}>{fmtDateTime(m.scheduledAt)}</span>
+                {m.mentionAll && <span title="Marca todos">@todos</span>}
+                <button className={styles.btnSecondary} style={{ padding: "4px 10px" }} onClick={() => cancelMsg(m.id)}>Cancelar</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {msgs.history.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>Histórico recente</div>
+            {msgs.history.map((m) => (
+              <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 13.5 }}>
+                <span className={`${styles.badge} ${m.status === "sent" ? styles.badgeGreen : m.status === "failed" ? styles.badgeRed : styles.badgeGray}`}>
+                  {m.status === "sent" ? "enviada" : m.status === "failed" ? "falhou" : "cancelada"}
+                </span>
+                <span className={`${styles.badge} ${styles.badgeGray}`}>{KIND_LABEL[m.kind]}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                  {m.content || (m.kind === "audio" ? "mensagem de voz" : "mídia")}
+                </span>
+                <span style={{ color: "var(--text-tertiary)" }}>{fmtDateTime(m.sentAt || m.scheduledAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Monitor ── */}

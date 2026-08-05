@@ -17,7 +17,18 @@ import { pageArgs, paginated } from '../lib/pagination';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendWhatsAppMessage, normalizeMzPhone } from '../lib/whatsapp';
 import { listKomunikaGroups } from '../lib/centralAnnounce';
-import { computeMembersGroupStatus, enqueueGroupRemovals, getRemovalQueueSummary } from '../lib/membersGroup';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { optimizeImage } from '../lib/image';
+import {
+  computeMembersGroupStatus,
+  enqueueGroupRemovals,
+  getRemovalQueueSummary,
+  enqueueGroupMessage,
+  listGroupMessages,
+  cancelGroupMessage,
+} from '../lib/membersGroup';
 import { superadminMiddleware } from '../middlewares/superadmin.middleware';
 import { deprovisionKomunika, syncKomunikaOnApprovedOrder } from '../services/komunika.service';
 import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGORIES } from '../services/cost.service';
@@ -1693,6 +1704,92 @@ router.get('/members-group/status', async (_req: AuthRequest, res: Response) => 
   } catch (e: any) {
     console.error('[MEMBERS-GROUP] status error:', e?.message || e);
     return res.status(500).json({ error: 'Erro ao consultar o grupo' });
+  }
+});
+
+// ── Composer do grupo: upload de mídia/áudio + fila de mensagens ────────────
+// Mídia servida em /uploads/group-media (URL absoluta — a Evolution baixa
+// dela). Áudio gravado no navegador chega como webm/mp4; imagem é otimizada.
+const groupMediaDir = path.join(__dirname, '..', '..', 'uploads', 'group-media');
+fs.mkdirSync(groupMediaDir, { recursive: true });
+const groupMediaUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, groupMediaDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || (file.mimetype.startsWith('audio/') ? '.ogg' : '');
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 16 * 1024 * 1024 }, // teto de mídia do WhatsApp
+  fileFilter: (_req, file, cb) => {
+    if (/^(image|video|audio)\//.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Envia imagem, vídeo ou áudio'));
+  },
+});
+
+/**
+ * POST /api/admin/members-group/upload — mídia do composer do grupo.
+ * Devolve { url, type: image|video|audio }.
+ */
+router.post('/members-group/upload', (req: AuthRequest, res: Response) => {
+  groupMediaUpload.single('file')(req, res, async (err: any) => {
+    if (err) return res.status(400).json({ error: err.message || 'Falha no upload' });
+    if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
+    let filename = req.file.filename;
+    const type = req.file.mimetype.startsWith('image/') ? 'image' : req.file.mimetype.startsWith('video/') ? 'video' : 'audio';
+    if (type === 'image') {
+      const optimized = await optimizeImage(req.file.path, { maxDim: 1920, format: 'webp' });
+      if (optimized) filename = optimized.filename;
+    }
+    const base = `${req.protocol}://${req.get('host')}`;
+    return res.json({ url: `${base}/uploads/group-media/${filename}`, type });
+  });
+});
+
+/**
+ * POST /api/admin/members-group/messages — envia AGORA ou agenda (superadmin).
+ * { kind: text|media|audio, content?, mediaUrl?, mentionAll?, scheduledAt? }
+ * Tudo passa pela fila (1 envio/min) — áudio sai como MENSAGEM DE VOZ (ptt).
+ */
+router.post('/members-group/messages', superadminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const kind = String(req.body?.kind || '');
+    if (!['text', 'media', 'audio'].includes(kind)) return res.status(400).json({ error: 'Tipo inválido' });
+    const scheduledAt = req.body?.scheduledAt ? new Date(req.body.scheduledAt) : null;
+    if (scheduledAt && isNaN(scheduledAt.getTime())) return res.status(400).json({ error: 'Data de agendamento inválida' });
+    const r = await enqueueGroupMessage({
+      kind: kind as 'text' | 'media' | 'audio',
+      content: typeof req.body?.content === 'string' ? req.body.content : null,
+      mediaUrl: typeof req.body?.mediaUrl === 'string' ? req.body.mediaUrl : null,
+      mentionAll: !!req.body?.mentionAll,
+      scheduledAt,
+      createdBy: req.user?.email || null,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    return res.json({ success: true, id: r.id });
+  } catch (e: any) {
+    console.error('[MEMBERS-GROUP] message enqueue error:', e?.message || e);
+    return res.status(500).json({ error: 'Erro ao agendar a mensagem' });
+  }
+});
+
+/** GET /api/admin/members-group/messages — agendadas + histórico recente. */
+router.get('/members-group/messages', async (_req: AuthRequest, res: Response) => {
+  try {
+    return res.json(await listGroupMessages());
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Erro ao listar mensagens' });
+  }
+});
+
+/** DELETE /api/admin/members-group/messages/:id — cancela uma pendente. */
+router.delete('/members-group/messages/:id', superadminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const ok = await cancelGroupMessage(req.params.id);
+    if (!ok) return res.status(404).json({ error: 'Mensagem não está pendente' });
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ error: 'Erro ao cancelar' });
   }
 });
 

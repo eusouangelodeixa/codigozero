@@ -11,7 +11,7 @@ import { lojouService } from '../services/lojou.service';
 import { deprovisionKomunika } from '../services/komunika.service';
 import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { processCentralAnnouncements } from '../lib/centralAnnounce';
-import { autoEnqueueExpired, processGroupRemovalQueue } from '../lib/membersGroup';
+import { autoEnqueueExpired, processGroupRemovalQueue, processGroupMessageQueue } from '../lib/membersGroup';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
@@ -1006,6 +1006,18 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Members-group removal queue (batches of 3, 10-15min random gap)');
+
+  // ── Composer do grupo de membros: fila de mensagens (a cada minuto) ──
+  // Texto/mídia/áudio-voz do /admin/grupo, imediatos ou agendados — 1 envio
+  // por tick (pacing). Áudio sai como mensagem de voz (ptt) via Komunika.
+  cron.schedule('* * * * *', async () => {
+    try {
+      await processGroupMessageQueue();
+    } catch (error) {
+      console.error('[CRON] ❌ Group message queue tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Members-group message queue (1 send/min)');
 
   // ── Aviso de conteúdo novo no grupo da Central (a cada minuto) ──
   // Publicou em /admin/conteudo → 10 min depois um resumo + link cai no grupo

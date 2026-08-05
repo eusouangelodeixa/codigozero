@@ -33,6 +33,12 @@ export default function AffiliateLandingPage() {
           affiliateVslEmbedHtml: data.vslEmbedHtml ?? null,
           checkoutUrl: data.checkoutUrl,
         });
+        // Persiste o código do afiliado (janela de 45 dias): o botão DENTRO
+        // do player da VSL aponta para /assinar (mesma origem), que recupera
+        // este código e registra o lead atribuído antes do checkout.
+        try {
+          localStorage.setItem("cz_aff", JSON.stringify({ code: data.code, ts: Date.now() }));
+        } catch {}
       })
       .catch(() => {
         if (!cancelled) setError("Não foi possível validar o código agora.");

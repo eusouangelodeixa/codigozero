@@ -236,7 +236,7 @@ export default function DashboardPage() {
 
   const quickLinks: { href: string; icon: React.ReactNode; title: string; desc: string }[] = [
     { href: "/cofre", icon: <CofreIcon size={20} />, title: "Cofre", desc: "Scripts prontos para vender" },
-    { href: "/qg", icon: <QGIcon size={20} />, title: "QG", desc: "Comunidade e mentorias ao vivo" },
+    { href: "/qg", icon: <QGIcon size={20} />, title: "Comunidades", desc: "Discord, WhatsApp e mentorias ao vivo" },
     { href: "/chat", icon: <ChatIcon size={20} />, title: "Suporte", desc: "Fale direto com a equipe" },
     { href: "/ferramentas", icon: <Wrench size={20} strokeWidth={1.6} />, title: "Ferramentas", desc: "Komunika e próximas ferramentas" },
   ];

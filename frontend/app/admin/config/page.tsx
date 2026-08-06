@@ -442,7 +442,7 @@ export default function AdminConfig() {
 
       <Section
         title="Comunidade"
-        subtitle="Link do Discord exibido no QG dos membros. (O grupo do WhatsApp de assinantes configura-se em Pessoas → Grupo de Membros.)"
+        subtitle="Link do Discord exibido na página Comunidades dos membros. (O grupo do WhatsApp de assinantes configura-se em Pessoas → Grupo de Membros.)"
         icon={<IconCommunity />}
         actions={
           <span className={config.communityLink ? styles.statusOk : styles.statusEmpty}>
@@ -450,7 +450,7 @@ export default function AdminConfig() {
           </span>
         }
       >
-        <Field label="Link do Discord / Grupo" hint="Aparece no QG. Use o convite permanente.">
+        <Field label="Link do Discord / Grupo" hint="Aparece em Comunidades. Use o convite permanente.">
           <input
             className={styles.input}
             placeholder="https://discord.gg/..."
@@ -463,7 +463,7 @@ export default function AdminConfig() {
       {/* ── Mentoria ── */}
       <Section
         title="Próxima mentoria"
-        subtitle="Data e link da sessão semanal — exibidos no QG com countdown."
+        subtitle="Data e link da sessão semanal — exibidos em Comunidades com countdown."
         icon={<IconMentoria />}
         actions={
           <span className={config.mentoriaSchedule ? styles.statusOk : styles.statusEmpty}>

@@ -80,14 +80,15 @@ export default function QGPage() {
   return (
     <div className={styles.page}>
       <PageHeader
-        label="Comunidade · QG"
-        title="Sua rede de apoio"
-        description="Comunidade, mentorias ao vivo e suporte direto. O QG é onde você não avança sozinho."
+        label="Conexão · Comunidades"
+        title="Comunidades"
+        description="Discord, grupo exclusivo no WhatsApp e mentorias ao vivo — é aqui que você não avança sozinho."
       />
 
       <div className={styles.grid}>
-        {/* ── Community card ── */}
-        <Card padding="lg">
+        {/* ── Community card (ocupa a linha toda quando o grupo do WhatsApp
+             não está configurado — senão os dois dividem a primeira linha) ── */}
+        <Card padding="lg" className={info?.whatsappGroup?.link ? undefined : styles.fullCard}>
           <div className={styles.cardBody}>
             <div className={styles.cardHead}>
               <span className={`${styles.cardIcon} ${styles.discordIcon}`}>
@@ -153,8 +154,8 @@ export default function QGPage() {
           </Card>
         )}
 
-        {/* ── Mentoria card ── */}
-        <Card padding="lg">
+        {/* ── Mentoria card — sempre linha inteira (o countdown respira) ── */}
+        <Card padding="lg" className={styles.fullCard}>
           <div className={styles.cardBody}>
             <div className={styles.cardHead}>
               <span className={`${styles.cardIcon} ${styles.mentoriaIcon}`}>

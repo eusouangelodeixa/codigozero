@@ -195,8 +195,8 @@ export default function LoginPage() {
 
   return (
     <div className={styles.container}>
-      {/* ── Painel de marca (desktop) ── */}
-      <aside className={styles.heroSide} aria-hidden>
+      {/* ── Painel de marca (desktop: coluna esquerda; mobile: cabeçalho compacto) ── */}
+      <aside className={styles.heroSide}>
         <div className={styles.heroInner}>
           <Logo size={34} />
           <h1 className={styles.heroTitle}>

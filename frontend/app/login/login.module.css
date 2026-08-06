@@ -140,9 +140,20 @@
 .passToggle:hover { text-decoration: underline; }
 
 @media (max-width: 900px) {
-  .container { grid-template-columns: 1fr; }
-  .heroSide { display: none; }
-  .brandLogoMobile { display: inline-flex; margin-bottom: var(--space-2); }
+  /* Mobile: o painel vira um cabeçalho de marca compacto acima do card —
+     mesma identidade do desktop, sem roubar espaço do formulário. */
+  .container { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .heroSide {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+    padding: 30px 22px 24px;
+  }
+  .heroInner { gap: 6px; }
+  .heroTitle { font-size: 1.45rem; margin-top: 10px; }
+  .heroDesc { font-size: 0.9rem; }
+  .heroList, .heroFoot { display: none; }
+  .formSide { padding-top: var(--space-5); align-items: flex-start; }
+  .brandLogoMobile { display: none; }
 }
 
 /* Subtle dotted grid pattern */

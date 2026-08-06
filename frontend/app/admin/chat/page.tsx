@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import styles from "../admin.module.css";
-import { AdminPage, SegmentedControl } from "@/components/admin";
+import { AdminPage } from "@/components/admin";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`, "Content-Type": "application/json" });
@@ -35,7 +35,8 @@ interface Message {
 type View = "support" | "community";
 
 export default function AdminChatPage() {
-  const [view, setView] = useState<View>("support");
+  // Comunidade removida (2026-08-05): admin só atende SUPORTE 1:1.
+  const view = "support" as View;
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -170,17 +171,8 @@ export default function AdminChatPage() {
   return (
     <>
       <AdminPage
-        title="Chat de suporte"
-        actions={
-          <SegmentedControl<View>
-            value={view}
-            onChange={(v) => { setView(v); setMessages([]); }}
-            options={[
-              { value: "support", label: "🎧 Suporte 1:1" },
-              { value: "community", label: "💬 Comunidade" },
-            ]}
-          />
-        }
+        title="Suporte"
+        desc="Conversas 1:1 com os membros — o mesmo canal do menu Suporte no app."
       >
         <div style={{
           display: "grid",

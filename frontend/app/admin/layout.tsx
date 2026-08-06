@@ -166,7 +166,7 @@ const NAV: NavGroup[] = [
       { href: "/admin/users", label: "Usuários",         icon: I.Users },
       { href: "/admin/grupo", label: "Grupo de Membros", icon: I.Users },
       { href: "/admin/leads", label: "Leads",            icon: I.Leads },
-      { href: "/admin/chat",  label: "Chat",             icon: I.Chat },
+      { href: "/admin/chat",  label: "Suporte",          icon: I.Chat },
     ],
   },
   {

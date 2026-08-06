@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent, type TouchEvent as ReactTouchEvent } from "react";
-import { Tabs, useToast } from "@/components/ui";
+import { useToast } from "@/components/ui";
 import { ChatIcon } from "@/components/Icons";
 import styles from "./chat.module.css";
 
@@ -127,7 +127,8 @@ const CheckIcon = (p: { size?: number }) => (
 
 export default function ChatPage() {
   const toast = useToast();
-  const [tab, setTab] = useState<Tab>("community");
+  // Comunidade removida (2026-08-05): este canal é exclusivamente SUPORTE.
+  const tab = "support" as Tab;
   const [messages, setMessages] = useState<Message[]>([]);
   const [pinned, setPinned] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -293,17 +294,6 @@ export default function ChatPage() {
     const el = containerRef.current;
     if (!el) return;
     nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-  };
-
-  const switchTab = (t: Tab) => {
-    setTab(t);
-    setMessages([]);
-    setPinned([]);
-    setReplyingTo(null);
-    setActiveMsgId(null);
-    setAttachOpen(false);
-    setMentionQuery(null);
-    nearBottomRef.current = true;
   };
 
   // ── Generic send (text / media / poll). Returns true on success. ──
@@ -704,10 +694,9 @@ export default function ChatPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerMeta}>
-          <span className={styles.title}>{tab === "community" ? "Comunidade" : "Suporte"}</span>
+          <span className={styles.title}>Suporte</span>
           <span className={styles.subtitle}>{headerSubtitle}</span>
         </div>
-        <Tabs value={tab} onChange={(v) => switchTab(v as Tab)} items={[{ value: "community", label: "Comunidade" }, { value: "support", label: "Suporte" }]} />
       </header>
 
       {tab === "community" && pinned.length > 0 && (

@@ -55,7 +55,6 @@ type FullMessage = Prisma.ChatMessageGetPayload<{ include: typeof MESSAGE_INCLUD
 const isAdminRole = (role?: string) => role === 'admin' || role === 'superadmin';
 
 // Pin durations the UI offers, mapped to hours.
-const PIN_DURATIONS: Record<string, number> = { '1h': 1, '1d': 24, '7d': 168, '30d': 720 };
 
 // Reshape a DB message for the client: fold poll votes into per-option counts +
 // the viewer's own choices, and flatten mentions to {userId,name}. The raw
@@ -158,62 +157,6 @@ router.post('/upload', (req: AuthRequest, res: Response) => {
 // MEMBERS (for @mention autocomplete)
 // ═══════════════════════════════════════
 
-/**
- * GET /api/chat/members?q=  — active members for the @mention picker.
- */
-router.get('/members', async (req: AuthRequest, res: Response) => {
-  try {
-    const q = ((req.query.q as string) || '').trim();
-    const where: Prisma.UserWhereInput = { isActive: true };
-    if (q) where.name = { contains: q, mode: 'insensitive' };
-    const members = await prisma.user.findMany({
-      where,
-      select: { id: true, name: true, avatarUrl: true, role: true },
-      orderBy: { name: 'asc' },
-      take: 20,
-    });
-    res.json({ members });
-  } catch (error) {
-    console.error('[CHAT] members error:', error);
-    res.status(500).json({ error: 'Erro ao buscar membros' });
-  }
-});
-
-// ═══════════════════════════════════════
-// COMMUNITY CHAT
-// ═══════════════════════════════════════
-
-/**
- * GET /api/chat/community  — latest messages (paginated) + the active pins.
- */
-router.get('/community', async (req: AuthRequest, res: Response) => {
-  try {
-    const before = req.query.before as string;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-
-    const where: Prisma.ChatMessageWhereInput = { channel: 'community' };
-    if (before) where.createdAt = { lt: new Date(before) };
-
-    const [messages, pinned] = await Promise.all([
-      prisma.chatMessage.findMany({ where, orderBy: { createdAt: 'desc' }, take: limit, include: MESSAGE_INCLUDE }),
-      prisma.chatMessage.findMany({
-        where: { channel: 'community', pinnedUntil: { gt: new Date() } },
-        orderBy: { pinnedAt: 'desc' },
-        take: 5,
-        include: MESSAGE_INCLUDE,
-      }),
-    ]);
-
-    res.json({
-      messages: messages.reverse().map((m) => serialize(m, req.user!.id)),
-      pinned: pinned.map((m) => serialize(m, req.user!.id)),
-    });
-  } catch (error) {
-    console.error('[CHAT] Community fetch error:', error);
-    res.status(500).json({ error: 'Erro ao carregar mensagens' });
-  }
-});
-
 // ═══════════════════════════════════════
 // LIVE STREAM (Server-Sent Events)
 // ═══════════════════════════════════════
@@ -241,16 +184,12 @@ router.get('/community', async (req: AuthRequest, res: Response) => {
  */
 router.get('/stream', async (req: AuthRequest, res: Response) => {
   const isAdmin = isAdminRole(req.user!.role);
-  const tab = req.query.channel === 'support' ? 'support' : 'community';
-
-  // Resolve the real DB channel. Support is 1:1 (`support_<userId>`); admins may
-  // target a member via ?userId=, members always get their own conversation.
-  let channel = 'community';
-  if (tab === 'support') {
-    const targetUserId = isAdmin ? (req.query.userId as string) : req.user!.id;
-    if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
-    channel = `support_${targetUserId}`;
-  }
+  // Suporte-only (a Comunidade foi removida 2026-08-05 — comunidade vive fora,
+  // no Discord e nos grupos de WhatsApp). Admin acompanha um membro via ?userId=.
+  const tab = 'support';
+  const targetUserId = isAdmin ? (req.query.userId as string) : req.user!.id;
+  if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
+  const channel = `support_${targetUserId}`;
 
   // SSE headers. `X-Accel-Buffering: no` is the load-bearing one — without it
   // nginx buffers the stream and clients drop the seemingly-idle connection
@@ -273,14 +212,7 @@ router.get('/stream', async (req: AuthRequest, res: Response) => {
   const readWindow = async () => {
     const [messages, pinned] = await Promise.all([
       prisma.chatMessage.findMany({ where: { channel }, orderBy: { createdAt: 'desc' }, take: limit, include: MESSAGE_INCLUDE }),
-      tab === 'community'
-        ? prisma.chatMessage.findMany({
-            where: { channel: 'community', pinnedUntil: { gt: new Date() } },
-            orderBy: { pinnedAt: 'desc' },
-            take: 5,
-            include: MESSAGE_INCLUDE,
-          })
-        : Promise.resolve([] as FullMessage[]),
+      Promise.resolve([] as FullMessage[]),
     ]);
     return {
       messages: messages.reverse().map((m) => serialize(m, viewerId)),
@@ -338,272 +270,6 @@ router.get('/stream', async (req: AuthRequest, res: Response) => {
     clearInterval(heartbeat);
   };
   req.on('close', cleanup);
-});
-
-// Community message validation. This encodes EXACTLY the same reject rules the
-// handler used to apply inline (content ≤2000; media needs a /uploads/chat/ URL;
-// polls need a question + 2–12 options; text needs non-empty content). `type` is
-// coerced — an unknown/missing type becomes 'text' (never rejected), matching
-// today. The schema is a passthrough so the handler's downstream normalization
-// (trim/slice/clamp + mention/reply handling) is preserved verbatim.
-const communityMessageSchema = z
-  .object({})
-  .passthrough()
-  .superRefine((b: any, ctx) => {
-    const type: 'text' | 'image' | 'audio' | 'poll' =
-      ['image', 'audio', 'poll'].includes(b.type) ? b.type : 'text';
-    const content = typeof b.content === 'string' ? b.content.trim() : '';
-
-    if (content.length > 2000) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mensagem muito longa (máx 2000 caracteres)' });
-      return;
-    }
-
-    if (type === 'image' || type === 'audio') {
-      if (typeof b.mediaUrl !== 'string' || !b.mediaUrl.startsWith('/uploads/chat/')) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mídia inválida' });
-      }
-    } else if (type === 'poll') {
-      const q = typeof b.poll?.question === 'string' ? b.poll.question.trim() : '';
-      const opts = Array.isArray(b.poll?.options)
-        ? b.poll.options.map((o: any) => String(o ?? '').trim()).filter(Boolean)
-        : [];
-      if (!q || opts.length < 2) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enquete precisa de pergunta e ao menos 2 opções' });
-      } else if (opts.length > 12) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Máximo de 12 opções' });
-      }
-    } else if (!content) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mensagem vazia' });
-    }
-  });
-
-/**
- * POST /api/chat/community
- * Body: { content?, replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec?,
- *         mentionUserIds?: string[], mentionsAll?: boolean,
- *         poll?: { question, options[], allowMultiple?, expiresHours? } }
- */
-router.post('/community', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!parseOr400(req, res, communityMessageSchema)) return;
-    const b = req.body || {};
-    const type: 'text' | 'image' | 'audio' | 'poll' =
-      ['image', 'audio', 'poll'].includes(b.type) ? b.type : 'text';
-    const isAdmin = isAdminRole(req.user!.role);
-
-    let content = typeof b.content === 'string' ? b.content.trim() : '';
-    if (content.length > 2000) return res.status(400).json({ error: 'Mensagem muito longa (máx 2000 caracteres)' });
-
-    let mediaUrl: string | null = null;
-    let mediaMime: string | null = null;
-    let mediaDurationSec: number | null = null;
-    let pollData: { question: string; options: string[]; allowMultiple: boolean; expiresAt: Date | null } | null = null;
-
-    if (type === 'image' || type === 'audio') {
-      if (typeof b.mediaUrl !== 'string' || !b.mediaUrl.startsWith('/uploads/chat/')) {
-        return res.status(400).json({ error: 'Mídia inválida' });
-      }
-      mediaUrl = b.mediaUrl;
-      mediaMime = typeof b.mediaMime === 'string' ? b.mediaMime.slice(0, 100) : null;
-      if (type === 'audio' && Number.isFinite(Number(b.mediaDurationSec))) {
-        mediaDurationSec = Math.min(Math.max(Math.round(Number(b.mediaDurationSec)), 0), 3600);
-      }
-    } else if (type === 'poll') {
-      const q = typeof b.poll?.question === 'string' ? b.poll.question.trim() : '';
-      const opts = Array.isArray(b.poll?.options)
-        ? b.poll.options.map((o: any) => String(o ?? '').trim()).filter(Boolean)
-        : [];
-      if (!q || opts.length < 2) return res.status(400).json({ error: 'Enquete precisa de pergunta e ao menos 2 opções' });
-      if (opts.length > 12) return res.status(400).json({ error: 'Máximo de 12 opções' });
-      const hours = Number(b.poll?.expiresHours);
-      pollData = {
-        question: q.slice(0, 300),
-        options: opts.slice(0, 12).map((o: string) => o.slice(0, 120)),
-        allowMultiple: !!b.poll?.allowMultiple,
-        expiresAt: hours && hours > 0 ? new Date(Date.now() + hours * 3600_000) : null,
-      };
-      content = pollData.question; // graceful fallback for non-poll-aware viewers
-    } else {
-      if (!content) return res.status(400).json({ error: 'Mensagem vazia' });
-    }
-
-    // @mentions — validate against real active users; @todos is admin-only.
-    const rawIds: string[] = Array.isArray(b.mentionUserIds)
-      ? b.mentionUserIds.filter((x: any) => typeof x === 'string').slice(0, 50)
-      : [];
-    const mentionsAll = !!b.mentionsAll && isAdmin;
-    let mentionIds: string[] = [];
-    if (rawIds.length) {
-      const found = await prisma.user.findMany({ where: { id: { in: rawIds }, isActive: true }, select: { id: true } });
-      mentionIds = found.map((u) => u.id).filter((id) => id !== req.user!.id);
-    }
-
-    // Only accept a reply to a message in the same channel.
-    let validReplyId: string | null = null;
-    if (b.replyToId) {
-      const parent = await prisma.chatMessage.findUnique({ where: { id: String(b.replyToId) }, select: { channel: true } });
-      if (parent && parent.channel === 'community') validReplyId = String(b.replyToId);
-    }
-
-    const created = await prisma.chatMessage.create({
-      data: {
-        senderId: req.user!.id,
-        channel: 'community',
-        type,
-        content,
-        mediaUrl,
-        mediaMime,
-        mediaDurationSec,
-        mentionsAll,
-        replyToId: validReplyId,
-        ...(mentionIds.length ? { mentions: { create: mentionIds.map((userId) => ({ userId })) } } : {}),
-        ...(pollData
-          ? {
-              poll: {
-                create: {
-                  question: pollData.question,
-                  allowMultiple: pollData.allowMultiple,
-                  expiresAt: pollData.expiresAt,
-                  options: { create: pollData.options.map((text, i) => ({ text, order: i })) },
-                },
-              },
-            }
-          : {}),
-      },
-      include: MESSAGE_INCLUDE,
-    });
-
-    res.json({ message: serialize(created, req.user!.id) });
-
-    // ── Push (fire-and-forget). Mentioned users get a distinct, higher-signal
-    // notification; everyone else gets the normal community ping. @todos pings
-    // the whole community with a dedicated title. ──
-    const senderName = created.sender?.name || 'Alguém';
-    const preview = (content || (type === 'image' ? '📷 Imagem' : type === 'audio' ? '🎤 Áudio' : 'Mensagem')).substring(0, 140);
-    (async () => {
-      const others = await prisma.user.findMany({ where: { id: { not: req.user!.id }, isActive: true }, select: { id: true } });
-      const otherIds = others.map((u) => u.id);
-      if (mentionsAll) {
-        // @todos bypasses the community mute → category 'mention' (always delivered).
-        await sendPushToUsers(otherIds, { title: `📣 ${senderName} marcou @todos`, body: preview, url: '/chat' }, 'mention');
-      } else if (mentionIds.length) {
-        const mentionSet = new Set(mentionIds);
-        // Mentioned members get a higher-signal push that bypasses the community mute.
-        await sendPushToUsers(mentionIds, { title: `💬 ${senderName} mencionou você`, body: preview, url: '/chat' }, 'mention');
-        await sendPushToUsers(otherIds.filter((id) => !mentionSet.has(id)), { title: `💬 ${senderName} na Comunidade`, body: preview, url: '/chat' }, 'community');
-      } else {
-        await sendPushToUsers(otherIds, { title: `💬 ${senderName} na Comunidade`, body: preview, url: '/chat' }, 'community');
-      }
-    })().catch((e) => console.error('[CHAT] community push error:', e));
-  } catch (error) {
-    console.error('[CHAT] Community send error:', error);
-    res.status(500).json({ error: 'Erro ao enviar mensagem' });
-  }
-});
-
-// ═══════════════════════════════════════
-// PIN / UNPIN  (admin only, community only)
-// ═══════════════════════════════════════
-
-// duration must map to a known window. Mirrors the original String(...||'')
-// coercion + PIN_DURATIONS lookup so the exact same values are accepted and the
-// same PT error is returned. Runs after the admin-role check (precedence kept).
-const pinSchema = z.object({}).passthrough().superRefine((b: any, ctx) => {
-  if (!PIN_DURATIONS[String(b.duration || '')]) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Duração inválida (use 1h, 1d, 7d ou 30d)' });
-  }
-});
-
-/**
- * POST /api/chat/messages/:id/pin  { duration: "1h" | "1d" | "7d" | "30d" }
- */
-router.post('/messages/:id/pin', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Apenas administradores podem fixar mensagens' });
-    if (!parseOr400(req, res, pinSchema)) return;
-    const hours = PIN_DURATIONS[String(req.body?.duration || '')];
-
-    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true, channel: true } });
-    if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
-    if (msg.channel !== 'community') return res.status(400).json({ error: 'Só é possível fixar na Comunidade' });
-
-    const updated = await prisma.chatMessage.update({
-      where: { id: msg.id },
-      data: { pinnedUntil: new Date(Date.now() + hours * 3600_000), pinnedAt: new Date(), pinnedById: req.user!.id },
-      include: MESSAGE_INCLUDE,
-    });
-    res.json({ message: serialize(updated, req.user!.id) });
-  } catch (error) {
-    console.error('[CHAT] Pin error:', error);
-    res.status(500).json({ error: 'Erro ao fixar mensagem' });
-  }
-});
-
-/**
- * DELETE /api/chat/messages/:id/pin  — unpin (admin only).
- */
-router.delete('/messages/:id/pin', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Apenas administradores podem desafixar' });
-    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true } });
-    if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
-    await prisma.chatMessage.update({ where: { id: msg.id }, data: { pinnedUntil: null, pinnedAt: null, pinnedById: null } });
-    res.json({ success: true });
-  } catch (error) {
-    console.error('[CHAT] Unpin error:', error);
-    res.status(500).json({ error: 'Erro ao desafixar mensagem' });
-  }
-});
-
-// ═══════════════════════════════════════
-// POLLS — voting
-// ═══════════════════════════════════════
-
-/**
- * POST /api/chat/polls/:id/vote  { optionIds: string[] }
- * Single-choice polls keep one vote (prior votes are replaced); multi-select
- * keeps the full set. An empty array clears the viewer's vote.
- */
-// optionIds documented as string[]. Kept non-rejecting on purpose: a missing or
-// non-array value normalizes to undefined → handled as "clear vote" exactly like
-// before (no new 400s). The handler still filters non-string elements.
-const voteSchema = z.object({
-  optionIds: z.array(z.any()).optional().catch(undefined),
-});
-router.post('/polls/:id/vote', async (req: AuthRequest, res: Response) => {
-  try {
-    const voteBody = parseOr400(req, res, voteSchema);
-    if (!voteBody) return;
-    const poll = await prisma.poll.findUnique({
-      where: { id: req.params.id },
-      include: { options: { select: { id: true } } },
-    });
-    if (!poll) return res.status(404).json({ error: 'Enquete não encontrada' });
-    if (poll.expiresAt && poll.expiresAt.getTime() < Date.now()) {
-      return res.status(400).json({ error: 'Esta enquete já encerrou' });
-    }
-
-    const optionIds: string[] = Array.isArray(voteBody.optionIds)
-      ? voteBody.optionIds.filter((x: any) => typeof x === 'string')
-      : [];
-    const valid = new Set(poll.options.map((o) => o.id));
-    const chosen = [...new Set(optionIds)].filter((id) => valid.has(id));
-    const finalChosen = poll.allowMultiple ? chosen : chosen.slice(0, 1);
-
-    await prisma.$transaction([
-      prisma.pollVote.deleteMany({ where: { pollId: poll.id, userId: req.user!.id } }),
-      ...(finalChosen.length
-        ? [prisma.pollVote.createMany({ data: finalChosen.map((optionId) => ({ pollId: poll.id, optionId, userId: req.user!.id })) })]
-        : []),
-    ]);
-
-    const msg = await prisma.chatMessage.findFirst({ where: { poll: { id: poll.id } }, include: MESSAGE_INCLUDE });
-    res.json({ message: msg ? serialize(msg, req.user!.id) : null });
-  } catch (error) {
-    console.error('[CHAT] Vote error:', error);
-    res.status(500).json({ error: 'Erro ao votar' });
-  }
 });
 
 // ═══════════════════════════════════════

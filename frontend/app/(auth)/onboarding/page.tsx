@@ -27,7 +27,7 @@ const features = [
   { icon: "🚀", name: "Disparador", desc: "Envio em massa via WhatsApp" },
   { icon: "📂", name: "Cofre", desc: "Scripts organizados" },
   { icon: "🎓", name: "Cursos", desc: "Área de membros com suas aulas" },
-  { icon: "💬", name: "Comunidade", desc: "Chat com outros alunos" },
+  { icon: "🛟", name: "Suporte", desc: "Fale direto com a equipe" },
   { icon: "🛟", name: "Suporte", desc: "Mentor direto" },
 ];
 

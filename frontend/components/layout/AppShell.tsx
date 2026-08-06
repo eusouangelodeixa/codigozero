@@ -46,7 +46,7 @@ const NAV_MAIN: NavItem[] = [
   { href: "/cofre", label: "Cofre", icon: CofreIcon },
   { href: "/forja", label: "Cursos", icon: ForjaIcon },
   { href: "/qg", label: "QG", icon: QGIcon },
-  { href: "/chat", label: "Chat", icon: ChatIcon },
+  { href: "/chat", label: "Suporte", icon: ChatIcon },
   {
     href: "/afiliacao",
     label: "Afiliação",
@@ -91,7 +91,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/cofre": "Cofre",
   "/forja": "Cursos",
   "/qg": "QG",
-  "/chat": "Chat",
+  "/chat": "Suporte",
   "/afiliacao": "Afiliação",
   "/ferramentas": "Ferramentas",
   "/assinatura": "Assinatura",

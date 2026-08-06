@@ -5,7 +5,23 @@ import { apiClient } from "@/lib/api";
 import { PageHeader, Card, Button, Skeleton } from "@/components/ui";
 import { CofreIcon, ForjaIcon, QGIcon, RadarIcon, DisparadorIcon, ChatIcon } from "@/components/Icons";
 import { Wrench } from "lucide-react";
+import { Tour, type TourStep } from "@/components/tour/Tour";
 import styles from "./dashboard.module.css";
+
+// ── Tour guiado da plataforma (dispara após o onboarding ou via ?tour=1) ──
+// Alvos invisíveis no dispositivo (ex.: sidebar no mobile) são pulados sozinhos.
+const TOUR_STEPS: TourStep[] = [
+  { target: "acao-do-dia", title: "Ação do dia", body: "A plataforma olha onde você está (assinatura, cursos, leads) e sugere o próximo melhor passo. Na dúvida, comece por aqui." },
+  { target: "kpis", title: "Seu progresso", body: "Cursos iniciados, concluídos, aulas assistidas e o progresso geral — sempre atualizados." },
+  { target: "meus-cursos", title: "Meus cursos", body: "Um clique em qualquer curso e você cai direto na área de membros, já logado, no ponto onde parou." },
+  { target: "nav-radar", title: "Radar", body: "Sua máquina de leads: informe nicho + cidade e o Radar varre o Google Maps e devolve a lista qualificada, pronta pra abordar." },
+  { target: "nav-disparador", title: "Disparador", body: "Envia sua campanha pro WhatsApp dos leads com intervalo seguro entre mensagens — sem risco de bloqueio." },
+  { target: "nav-cofre", title: "Cofre", body: "Scripts prontos de venda e abordagem, organizados por situação. Copia, adapta e usa." },
+  { target: "nav-forja", title: "Cursos", body: "A área de membros com todas as aulas, materiais e seu progresso — também disponível em members.czero.sbs." },
+  { target: "nav-qg", title: "Comunidades", body: "Discord, grupo exclusivo no WhatsApp e as mentorias ao vivo semanais. É aqui que você não anda sozinho." },
+  { target: "nav-chat", title: "Suporte", body: "Canal direto com a equipe — texto, foto ou áudio. Qualquer dúvida ou problema, chama por aqui." },
+  { target: "operacao", title: "Sua operação", body: "Os números do seu trabalho: leads extraídos, disparos enviados e as buscas de hoje no Radar." },
+];
 
 interface Metrics {
   totalLeads: number;
@@ -115,6 +131,28 @@ export default function DashboardPage() {
   const [verse, setVerse] = useState<Verse | null>(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("Membro");
+  const [tourOpen, setTourOpen] = useState(false);
+
+  // Tour: dispara vindo do onboarding (cz_tour_pending) ou via /dashboard?tour=1
+  // (jeito fácil de rever/testar a qualquer momento).
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("tour") === "1" || localStorage.getItem("cz_tour_pending") === "1") {
+        // Espera o primeiro paint pros alvos existirem.
+        setTimeout(() => setTourOpen(true), 600);
+      }
+    } catch {}
+  }, []);
+
+  const closeTour = () => {
+    setTourOpen(false);
+    try {
+      localStorage.removeItem("cz_tour_pending");
+      localStorage.setItem("cz_tour_done", "1");
+      window.history.replaceState(null, "", "/dashboard");
+    } catch {}
+  };
 
   useEffect(() => {
     try {
@@ -243,6 +281,7 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.page}>
+      {tourOpen && <Tour steps={TOUR_STEPS} onClose={closeTour} />}
       <PageHeader
         label="Início"
         title={`${greeting()}, ${userName}`}
@@ -253,7 +292,7 @@ export default function DashboardPage() {
       <BannerCarousel banners={banners} />
 
       {/* ── Hero (dynamic action of the day) ── */}
-      <div className={styles.hero}>
+      <div className={styles.hero} data-tour="acao-do-dia">
         <div className={styles.heroAccentLine} aria-hidden />
         <div className={styles.heroBody}>
           <div className={styles.heroText}>
@@ -276,7 +315,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPIs (plataforma multi-curso) ── */}
-      <div className={styles.metricsGrid}>
+      <div className={styles.metricsGrid} data-tour="kpis">
         <Card>
           <div className={styles.metric}>
             <div className={styles.metricHeader}>
@@ -355,7 +394,7 @@ export default function DashboardPage() {
               Abrir área de membros <ChevronRight size={13} />
             </button>
           </div>
-          <div className={styles.courseGrid}>
+          <div className={styles.courseGrid} data-tour="meus-cursos">
             {courses.map((c) => (
               <Card key={c.slug} as="button" interactive accentHover onClick={() => openCourse(c)}>
                 <div className={styles.courseRow}>
@@ -381,7 +420,7 @@ export default function DashboardPage() {
 
       {/* ── Operação (Radar / Disparador) ── */}
       <span className={styles.sectionLabel}>Sua operação</span>
-      <div className={styles.opsGrid}>
+      <div className={styles.opsGrid} data-tour="operacao">
         <Card>
           <div className={styles.opMetric}>
             <span className={styles.opIcon}><RadarIcon size={16} /></span>

@@ -6,8 +6,18 @@ import styles from "./login.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+// Painel de marca (lado esquerdo, só desktop) — o que a pessoa reencontra
+// ao entrar. Mesmos nomes do menu da plataforma.
+const HERO_POINTS = [
+  { icon: "🛰️", title: "Radar", desc: "Leads qualificados do Google Maps em minutos" },
+  { icon: "🚀", title: "Disparador", desc: "Campanhas no WhatsApp com ritmo seguro" },
+  { icon: "🎓", title: "Cursos e mentorias", desc: "Área de membros + sessões ao vivo semanais" },
+  { icon: "🛟", title: "Suporte direto", desc: "A equipe a uma mensagem de distância" },
+];
+
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "recover">("login");
+  const [showPass, setShowPass] = useState(false);
 
   // Login state
   const [email, setEmail] = useState("");
@@ -185,11 +195,41 @@ export default function LoginPage() {
 
   return (
     <div className={styles.container}>
+      {/* ── Painel de marca (desktop) ── */}
+      <aside className={styles.heroSide} aria-hidden>
+        <div className={styles.heroInner}>
+          <Logo size={34} />
+          <h1 className={styles.heroTitle}>
+            Sua operação de <span className={styles.heroHl}>IA</span> começa aqui.
+          </h1>
+          <p className={styles.heroDesc}>
+            Tudo que você precisa pra encontrar clientes, vender e entregar — num lugar só.
+          </p>
+          <div className={styles.heroList}>
+            {HERO_POINTS.map((p) => (
+              <div key={p.title} className={styles.heroItem}>
+                <span className={styles.heroItemIcon}>{p.icon}</span>
+                <span className={styles.heroItemText}>
+                  <strong>{p.title}</strong>
+                  <span>{p.desc}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className={styles.heroFoot}>Código Zero · IA na prática · @eusouangelodeixa</div>
+        </div>
+      </aside>
+
+      {/* ── Formulário ── */}
+      <div className={styles.formSide}>
       <div className={styles.card}>
         <div className={styles.brand}>
-          <Logo size={40} />
+          <span className={styles.brandLogoMobile}><Logo size={38} /></span>
+          <h2 className={styles.formTitle}>
+            {mode === "login" ? "Bem-vindo de volta" : "Recuperar acesso"}
+          </h2>
           <p className={styles.subtitle}>
-            {mode === "login" ? "Acesse sua área de membros" : "Recuperar acesso"}
+            {mode === "login" ? "Entre pra continuar de onde parou." : "Vamos te devolver o acesso em instantes."}
           </p>
         </div>
 
@@ -206,15 +246,25 @@ export default function LoginPage() {
                 autoComplete="email"
               />
 
-              <Input
-                label="Senha"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                autoComplete="current-password"
-              />
+              <div className={styles.passWrap}>
+                <Input
+                  label="Senha"
+                  type={showPass ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className={styles.passToggle}
+                  onClick={() => setShowPass((v) => !v)}
+                  aria-label={showPass ? "Ocultar senha" : "Mostrar senha"}
+                >
+                  {showPass ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
 
               {loginNotice && (
                 <div className={styles.notice} role="status">{loginNotice}</div>
@@ -377,6 +427,7 @@ export default function LoginPage() {
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   );

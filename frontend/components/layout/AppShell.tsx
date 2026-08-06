@@ -250,6 +250,7 @@ export function AppShell({
                     onClick={go(item.href)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}
+                    data-tour={`nav${item.href.replace(/\//g, "-")}`}
                   >
                     <span className={styles.navIcon}><Icon size={17} /></span>
                     <span className={styles.navLabel}>{item.label}</span>
@@ -345,6 +346,7 @@ export function AppShell({
                 onClick={go(item.href)}
                 className={cx(styles.bottomItem, active && styles.bottomItemActive)}
                 aria-current={active ? "page" : undefined}
+                data-tour={`nav${item.href.replace(/\//g, "-")}`}
               >
                 <Icon size={20} />
                 <span>{item.label}</span>

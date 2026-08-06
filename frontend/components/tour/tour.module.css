@@ -1,0 +1,141 @@
+/* Tour guiado — overlay, spotlight e tooltip */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+}
+
+.blocker {
+  position: absolute;
+  inset: 0;
+}
+
+.spotlight {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 200vmax rgba(0, 12, 11, 0.78),
+    0 0 0 2px var(--accent, #2dd4bf),
+    0 0 24px rgba(45, 212, 191, 0.35);
+  transition: top 260ms cubic-bezier(0.16, 1, 0.3, 1), left 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 260ms cubic-bezier(0.16, 1, 0.3, 1), height 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.tooltip {
+  position: fixed;
+  width: 356px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-elevated, #10161a);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  animation: tourIn 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tooltipSheet {
+  left: 16px !important;
+  right: 16px;
+  bottom: 16px !important;
+  top: auto !important;
+  width: auto;
+}
+
+@keyframes tourIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tooltipEyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent, #2dd4bf);
+  margin-bottom: 8px;
+}
+
+.skip {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-tertiary, #71717a);
+  cursor: pointer;
+}
+
+.skip:hover { color: var(--text-secondary, #a1a1aa); }
+
+.tooltipTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+
+.tooltipBody {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text-secondary, #a1a1aa);
+  margin-bottom: 14px;
+}
+
+.tooltipDots {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 160ms, transform 160ms;
+}
+
+.dotOn {
+  background: var(--accent, #2dd4bf);
+  transform: scale(1.2);
+}
+
+.tooltipActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btnGhost {
+  background: none;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.12));
+  color: var(--text-secondary, #a1a1aa);
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btnGhost:hover { color: var(--text-primary, #fff); }
+
+.btnPrimary {
+  background: var(--accent, #2dd4bf);
+  color: var(--accent-fg, #001412);
+  border: none;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btnPrimary:hover { filter: brightness(1.06); }

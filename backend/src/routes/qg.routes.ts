@@ -37,10 +37,6 @@ router.get('/info', authMiddleware, subscriptionMiddleware, async (_req: AuthReq
         nextSession: config.mentoriaSchedule,
         link: config.mentoriaLink,
       },
-      stats: {
-        currentUsers: config.currentUsers,
-        maxUsers: config.maxUsers,
-      },
     });
   } catch (error) {
     console.error('[QG] Info error:', error);

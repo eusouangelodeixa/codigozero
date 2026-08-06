@@ -29,8 +29,6 @@ interface SystemConfig {
   komunikaInstanceId?: string;
   komunikaVisitorAssistantId?: string;
   komunikaCheckoutAssistantId?: string;
-  milestoneAlertPhone?: string;
-  milestoneAlertName?: string;
   resendApiKey?: string;
   resendFrom?: string;
   resendWebhookSecret?: string;
@@ -71,12 +69,6 @@ const IconKomunika = () => (
     <path d="M9 14h.01M15 14h.01" />
     <path d="M12 8V4" />
     <circle cx="12" cy="3" r="1" />
-  </svg>
-);
-const IconAlert = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 01-3.46 0" />
   </svg>
 );
 const IconBeaker = () => (
@@ -736,33 +728,6 @@ export default function AdminConfig() {
               readOnly
               value={`${API}/api/webhooks/resend`}
               onFocus={(e) => e.target.select()}
-            />
-          </Field>
-        </div>
-      </Section>
-
-      {/* ── Alertas de milestones ── */}
-      <Section
-        title="Alertas de milestones"
-        subtitle="Notificação automática no WhatsApp quando uma meta da plataforma é batida."
-        icon={<IconAlert />}
-        defaultOpen={false}
-      >
-        <div className={styles.formGrid}>
-          <Field label="Telefone (WhatsApp do admin)">
-            <input
-              className={styles.input}
-              placeholder="Ex: 841234567"
-              value={config.milestoneAlertPhone || ""}
-              onChange={(e) => setField("milestoneAlertPhone", e.target.value)}
-            />
-          </Field>
-          <Field label="Nome do admin">
-            <input
-              className={styles.input}
-              placeholder="Ex: Angelo"
-              value={config.milestoneAlertName || ""}
-              onChange={(e) => setField("milestoneAlertName", e.target.value)}
             />
           </Field>
         </div>

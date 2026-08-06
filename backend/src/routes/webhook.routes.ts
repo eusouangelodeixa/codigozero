@@ -616,12 +616,6 @@ async function handleLojouWebhook(
             },
           });
 
-          // Increment user count
-          await prisma.systemConfig.upsert({
-            where: { id: 'singleton' },
-            update: { currentUsers: { increment: 1 } },
-            create: { id: 'singleton', currentUsers: 1, maxUsers: 50 },
-          });
         }
 
         // Record transaction. `amount` is always the gross total (principal +

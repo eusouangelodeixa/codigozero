@@ -78,7 +78,6 @@ export default function AdminLanding() {
         heroDesc: sec.heroDesc !== DEFAULTS.heroDesc ? sec.heroDesc : null,
         ctaText: sec.ctaText !== DEFAULTS.ctaText ? sec.ctaText : null,
         priceAmount: parseInt(sec.priceAmount) || 497,
-        maxVagas: parseInt(cfg.maxVagas) || 50,
         sections: sec,
         affiliateVslEmbedHtml: cfg.affiliateVslEmbedHtml || null,
         affiliateCreativesUrl: cfg.affiliateCreativesUrl || null,
@@ -98,7 +97,6 @@ export default function AdminLanding() {
       body: JSON.stringify({
         ...cfg,
         priceAmount: parseInt(sec.priceAmount) || cfg.priceAmount || 497,
-        maxVagas: parseInt(cfg.maxVagas) || 50,
         sections: sec,
       }),
     });
@@ -171,7 +169,6 @@ export default function AdminLanding() {
         heroDesc: null,
         ctaText: null,
         priceAmount: 497,
-        maxVagas: 50,
         sections: null,
       }),
     });

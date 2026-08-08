@@ -392,6 +392,27 @@
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 }
+
+/* Suporte fora do horário: ocupa o lugar do composer, mesma âncora visual. */
+.closedNotice {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.closedTitle {
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.closedText {
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
 .replyBar {
   display: flex;
   align-items: center;

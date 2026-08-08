@@ -77,7 +77,7 @@ export default function AdminLanding() {
         heroSubtitle: sec.heroSubtitle !== DEFAULTS.heroSubtitle ? sec.heroSubtitle : null,
         heroDesc: sec.heroDesc !== DEFAULTS.heroDesc ? sec.heroDesc : null,
         ctaText: sec.ctaText !== DEFAULTS.ctaText ? sec.ctaText : null,
-        priceAmount: parseInt(sec.priceAmount) || 497,
+        priceAmount: parseInt(sec.priceAmount) || 297,
         sections: sec,
         affiliateVslEmbedHtml: cfg.affiliateVslEmbedHtml || null,
         affiliateCreativesUrl: cfg.affiliateCreativesUrl || null,
@@ -96,7 +96,7 @@ export default function AdminLanding() {
       method: "PATCH", headers: hdr(),
       body: JSON.stringify({
         ...cfg,
-        priceAmount: parseInt(sec.priceAmount) || cfg.priceAmount || 497,
+        priceAmount: parseInt(sec.priceAmount) || cfg.priceAmount || 297,
         sections: sec,
       }),
     });
@@ -168,7 +168,7 @@ export default function AdminLanding() {
         heroSubtitle: null,
         heroDesc: null,
         ctaText: null,
-        priceAmount: 497,
+        priceAmount: 297,
         sections: null,
       }),
     });
@@ -536,7 +536,7 @@ export default function AdminLanding() {
             </div>
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>Preço Atual</label>
-              <input className={styles.formInput} value={sec.priceAmount || "497"} onChange={e => u("priceAmount", e.target.value)} />
+              <input className={styles.formInput} value={sec.priceAmount || "297"} onChange={e => u("priceAmount", e.target.value)} />
             </div>
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>Período</label>

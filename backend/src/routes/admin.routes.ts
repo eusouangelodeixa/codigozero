@@ -35,6 +35,7 @@ import { createCost, deleteCost, listCosts, countCosts, costTotals, COST_CATEGOR
 import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
 import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
+import { scheduleSaveContactReminder } from '../services/onboarding.service';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -836,6 +837,12 @@ router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
     void sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
       .catch((e) => console.error('[ADMIN] grant-trial whatsapp failed:', e?.message || e));
 
+    // Mesmo follow-up "guarde o nosso contacto" da compra: telemóveis escondem
+    // mensagens de números não gravados, e quem entra por acesso manual precisa
+    // tanto ou mais de receber os avisos.
+    void scheduleSaveContactReminder(user.id)
+      .catch((e) => console.error('[ADMIN] grant-trial save-contact scheduling failed:', e?.message || e));
+
     // Provisiona/actualiza o tenant Komunika com a MESMA janela de acesso
     // concedida aqui. Sem isto o acesso manual ficava so no Codigo Zero e a
     // pessoa entrava no Komunika sem plano — ou nem existia la.
@@ -1290,10 +1297,29 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {
     const { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, membersGroupId, membersGroupName, membersGroupInviteLink } = req.body;
     const dashboardBanners = sanitizeDashboardBanners(req.body?.dashboardBanners);
+
+    // Janela de atendimento do suporte. As horas são inteiros NOT NULL no
+    // schema, então valores fora de faixa (ou ausentes) viram `undefined` para
+    // o Prisma ignorar em vez de rebentar o upsert.
+    const hourOrUndef = (v: unknown, lo: number, hi: number) => {
+      if (v === undefined || v === null || v === '') return undefined;
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), lo), hi) : undefined;
+    };
+    const support = {
+      supportHoursEnabled:
+        typeof req.body?.supportHoursEnabled === 'boolean' ? req.body.supportHoursEnabled : undefined,
+      supportStartHour: hourOrUndef(req.body?.supportStartHour, 0, 23),
+      supportEndHour: hourOrUndef(req.body?.supportEndHour, 1, 24),
+      supportRearmHours: hourOrUndef(req.body?.supportRearmHours, 1, 72),
+      supportNotifyPhone: req.body?.supportNotifyPhone,
+      supportNotifyName: req.body?.supportNotifyName,
+    };
+
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support },
     });
     res.json({ config });
   } catch (error) {

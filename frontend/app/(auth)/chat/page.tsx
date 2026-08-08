@@ -54,6 +54,17 @@ interface Message {
 
 type Tab = "community" | "support";
 
+/** Janela de atendimento devolvida por GET /api/chat/support. */
+interface SupportStatus {
+  open: boolean;
+  enabled: boolean;
+  startHour: number;
+  endHour: number;
+  windowLabel: string;
+  nextOpenLabel: string | null;
+  nextOpenAt: string | null;
+}
+
 const avatarSrc = (url?: string) => (url ? (url.startsWith("http") ? url : `${API}${url}`) : "");
 const mediaSrc = (url?: string | null) => (url ? (url.startsWith("http") ? url : `${API}${url}`) : "");
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n).trimEnd() + "…" : s);
@@ -140,6 +151,8 @@ export default function ChatPage() {
   const [activeMsgId, setActiveMsgId] = useState<string | null>(null);
   const [pinPickerId, setPinPickerId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  // Janela de atendimento (horário comercial de Brasília), vinda do backend.
+  const [support, setSupport] = useState<SupportStatus | null>(null);
 
   // composer extras
   const [attachOpen, setAttachOpen] = useState(false);
@@ -212,6 +225,7 @@ export default function ChatPage() {
       if (!res.ok) return;
       const data = await res.json();
       applySync(data.messages || [], tab === "community" ? data.pinned || [] : []);
+      if (data.support) setSupport(data.support);
     } catch {}
   }, [tab, applySync]);
 
@@ -311,6 +325,13 @@ export default function ChatPage() {
         return true;
       }
       const d = await res.json().catch(() => ({}));
+      // A janela de atendimento pode fechar com a tela aberta — o backend
+      // devolve o estado novo junto do 403 para a UI congelar na hora.
+      if (res.status === 403 && d.supportClosed) {
+        if (d.support) setSupport(d.support);
+        toast.error("Suporte fechado", d.message);
+        return false;
+      }
       toast.error("Falha ao enviar", d.error);
     } catch {
       toast.error("Erro de conexão");
@@ -683,9 +704,14 @@ export default function ChatPage() {
     else grouped[grouped.length - 1].msgs.push(msg);
   });
 
-  const headerSubtitle = tab === "community"
-    ? "Converse com outros membros do Código Zero"
-    : "Chat privado com o mentor — tire suas dúvidas";
+  // O horário de atendimento fica sempre à vista: é a primeira coisa que o
+  // aluno precisa saber antes de esperar resposta.
+  const headerSubtitle =
+    support && support.enabled
+      ? `Atendimento: ${support.windowLabel}`
+      : "Chat privado com o mentor — tire suas dúvidas";
+
+  const supportClosed = !!support && support.enabled && !support.open;
 
   const showMentionBox = mentionQuery !== null && tab === "community";
   const mentionAllMatches = viewerIsAdmin && "todos".startsWith((mentionQuery || "").toLowerCase());
@@ -839,6 +865,17 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {supportClosed ? (
+        // Suporte congelado: o histórico continua legível, só o envio para.
+        // Dizemos o horário e quando voltamos, para ninguém ficar no escuro.
+        <div className={styles.closedNotice}>
+          <span className={styles.closedTitle}>🕗 Suporte fora do horário</span>
+          <span className={styles.closedText}>
+            Atendemos {support?.windowLabel}. Voltamos {support?.nextOpenLabel} — deixa a tua dúvida pronta que
+            respondemos assim que abrir.
+          </span>
+        </div>
+      ) : (
       <div className={styles.composer}>
         {replyingTo && (
           <div className={styles.replyBar}>
@@ -907,6 +944,7 @@ export default function ChatPage() {
           </div>
         )}
       </div>
+      )}
 
       {pollOpen && (
         <PollComposer

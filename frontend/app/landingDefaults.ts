@@ -8,7 +8,7 @@ export const LANDING_DEFAULTS = {
   heroTitle: "Construa e venda SaaS e automações — mesmo começando do absoluto zero.",
   heroSubtitle: "O caminho pra sair da estaca zero e faturar seus primeiros R$ 10 mil vendendo software que resolve problema real.",
   heroDesc: "O ecossistema que te entrega a ferramenta que **acha os clientes**, os **scripts que fecham** e a **comunidade que te ensina a construir** — pra você prestar serviço pra empresas em Moçambique e fechar o seu primeiro contrato.",
-  heroCtaText: "Quero entrar no Código Zero (497 MT/mês)",
+  heroCtaText: "Quero entrar no Código Zero (297 MT/mês)",
   heroSubCta: "Plataforma de ensino · assinatura mensal · M-Pesa, e-Mola ou Cartão · acesso na hora no teu WhatsApp.",
   ctaText: "Entrar no Código Zero",
 
@@ -95,13 +95,13 @@ export const LANDING_DEFAULTS = {
 
   // ── A oferta (Pricing) ───────────────────────────────────────────────
   scarcityLabel: "A oferta",
-  scarcityTitle: "Acesso a tudo por 497 MT/mês.",
-  scarcityDesc: "O Código Zero é uma plataforma de assinatura. **497 MT por mês** te dão acesso a tudo: Radar, Disparador, Scripts, aulas, lives, comunidade e suporte.",
+  scarcityTitle: "Acesso a tudo por 297 MT/mês.",
+  scarcityDesc: "O Código Zero é uma plataforma de assinatura. **297 MT por mês** te dão acesso a tudo: Radar, Disparador, Scripts, aulas, lives, comunidade e suporte.",
   priceFrom: "",
-  priceAmount: "497",
+  priceAmount: "297",
   pricePeriod: "MT/mês",
   priceSub: "É mais ou menos o **preço de um hambúrguer.** E tem um motivo pro preço ser esse: **eu não quero ninguém de fora por falta de dinheiro.** Quem quer construir, constrói.",
-  priceCtaText: "Garantir minha vaga (497 MT/mês)",
+  priceCtaText: "Garantir minha vaga (297 MT/mês)",
 
   // ── Close Friends (upsell exibido na pricing section) ──────────────
   closeFriendsLabel: "Close Friends",
@@ -132,7 +132,7 @@ export const LANDING_DEFAULTS = {
   faqLabel: "Perguntas frequentes",
   faqTitle: "O que costumam perguntar.",
   faqItems: [
-    { q: "O Código Zero é uma assinatura mensal? E se eu parar de pagar?", a: "Sim, é uma assinatura de **497 MT por mês**. Enquanto está ativa, você acessa tudo: plataforma, ferramentas, aulas e comunidade. Se parar de pagar, o acesso pausa e você volta quando quiser — sem fidelidade, sem multa, cancela num clique." },
+    { q: "O Código Zero é uma assinatura mensal? E se eu parar de pagar?", a: "Sim, é uma assinatura de **297 MT por mês**. Enquanto está ativa, você acessa tudo: plataforma, ferramentas, aulas e comunidade. Se parar de pagar, o acesso pausa e você volta quando quiser — sem fidelidade, sem multa, cancela num clique." },
     { q: "Preciso saber programar pra criar e vender SaaS ou automações?", a: "Não. A plataforma te ensina a montar SaaS e automações com ferramentas visuais e de IA, do zero e passo a passo. Quando aparece código, é copiar e colar. O objetivo é você entregar uma solução que funciona — não virar programador." },
     { q: "Como eu consigo os primeiros clientes?", a: "Dentro da plataforma você tem o **Radar**, que acha empresas com telefone, Instagram e site prontas pra abordar, e os **scripts** de prospecção já testados. A abordagem é por WhatsApp, sem gastar em anúncio, e as aulas mostram como conduzir a call e fechar a primeira venda." },
     { q: "Em quanto tempo dá pra faturar meus primeiros R$ 10 mil?", a: "Depende de você executar. Quem usa o Radar, dispara os scripts e aparece nas calls costuma ter conversa real com cliente nos primeiros dias. Chegar aos R$ 10 mil é questão de volume e de seguir o método — não prometo prazo mágico, prometo o caminho e as ferramentas." },
@@ -143,7 +143,7 @@ export const LANDING_DEFAULTS = {
   // ── CTA final ────────────────────────────────────────────────────────
   finalCtaTitle: "O acesso é imediato. A próxima call é no domingo.",
   finalCtaDesc: "Foi um prazer ter você até aqui. Agora é clicar e dar o próximo passo — eu te espero do outro lado.",
-  finalCtaText: "Assinar agora (497 MT/mês)",
+  finalCtaText: "Assinar agora (297 MT/mês)",
 
   // ── Footer ───────────────────────────────────────────────────────────
   footerDesc: "Código Zero — o ecossistema de tecnologia pra criar micronegócios de IA em Moçambique. Sem código, sem barreiras.",

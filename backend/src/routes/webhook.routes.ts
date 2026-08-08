@@ -35,6 +35,7 @@ import {
   deprovisionKomunika,
 } from '../services/komunika.service';
 import { ingestPollVote, ingestInboundText } from '../services/feedback.service';
+import { scheduleSaveContactReminder } from '../services/onboarding.service';
 import type Stripe from 'stripe';
 
 const router = Router();
@@ -765,6 +766,13 @@ async function handleLojouWebhook(
               console.error('[WEBHOOK] credentials e-mail failed (non-blocking):', e?.message || e),
             );
 
+            // Ask them to save our number 30–60 min from now (phones hide
+            // messages from unsaved contacts, so this protects every future
+            // announcement and the support thread).
+            scheduleSaveContactReminder(user.id).catch((e) =>
+              console.error('[WEBHOOK] save-contact scheduling failed (non-blocking):', e?.message || e),
+            );
+
             const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
             const komunikaKey = sysConfig?.komunikaAdminApiKey || env.KOMUNIKA_ADMIN_API_KEY;
             const komunikaUrl = env.KOMUNIKA_API_URL || 'https://api.komunika.site';
@@ -1408,6 +1416,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
   if (rawPassword) {
     sendCredentialsEmail({ name, email, rawPassword }).catch((e) =>
       console.error('[STRIPE-WEBHOOK/CHECKOUT] credentials e-mail failed (non-blocking):', e?.message || e),
+    );
+  }
+
+  // Same "save our contact" follow-up as the Lojou path.
+  if (rawPassword && provisionedUserId) {
+    scheduleSaveContactReminder(provisionedUserId).catch((e) =>
+      console.error('[STRIPE-WEBHOOK/CHECKOUT] save-contact scheduling failed (non-blocking):', e?.message || e),
     );
   }
 

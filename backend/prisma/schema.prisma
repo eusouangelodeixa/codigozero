@@ -73,6 +73,15 @@ model User {
   pwaInstalledAt     DateTime?
   pwaReminderSentAt  DateTime?
 
+  // ── "Salve o nosso contacto" (30–60 min depois da entrega de acessos) ──
+  // Telemóveis escondem mensagens de números não guardados, por isso pedimos
+  // ao comprador que grave o contacto pouco depois de receber as credenciais.
+  // saveContactDueAt é agendado no momento da entrega (jitter 30–60 min) e
+  // saveContactSentAt só é carimbado quando o envio confirma, para o cron
+  // poder retentar se a Komunika estiver fora do ar.
+  saveContactDueAt   DateTime?
+  saveContactSentAt  DateTime?
+
   // ── Notification preferences (per channel) ──────────────────────────
   // Honoured by sendPushToUser(category) and the WhatsApp/cron senders.
   // Defaults true so existing users keep receiving everything.
@@ -353,6 +362,22 @@ model SystemConfig {
   membersGroupId           String?
   membersGroupName         String?
   membersGroupInviteLink   String?
+
+  // ── Suporte: janela de atendimento ────────────────────────────────────
+  // O horário é o COMERCIAL BRASILEIRO (UTC-3, sem horário de verão desde
+  // 2019) — diferente do resto da plataforma, que raciocina em CAT (UTC+2).
+  // Fora da janela o suporte fica congelado: o aluno lê o histórico mas não
+  // envia, e a tela mostra quando reabre. Seg–Sex apenas.
+  supportHoursEnabled      Boolean @default(true)
+  supportStartHour         Int     @default(8)
+  supportEndHour           Int     @default(18)
+  // WhatsApp que recebe o aviso da PRIMEIRA mensagem de cada sessão de
+  // suporte (com os dados do assinante e o número dele para responder).
+  supportNotifyPhone       String?
+  supportNotifyName        String?
+  // Silêncio do aluno, em horas, a partir do qual a próxima mensagem volta a
+  // contar como início de sessão e dispara um novo aviso.
+  supportRearmHours        Int     @default(4)
 }
 
 // Mensagens do admin pro grupo de membros (texto / mídia / áudio-voz PTT),
@@ -435,7 +460,7 @@ model LandingConfig {
   heroSubtitle  String?
   heroDesc      String?
   ctaText       String?
-  priceAmount   Int     @default(497)
+  priceAmount   Int     @default(297)
   maxVagas      Int     @default(50)
   sections      Json?   // full page sections as JSON
   headScripts       String? // Tracking pixels for <head> (concatenated)

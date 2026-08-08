@@ -55,6 +55,73 @@ export async function sendFirstAccessWelcome(userId: string): Promise<void> {
   }
 }
 
+/**
+ * Schedule the "save our contact" WhatsApp for 30–60 minutes after the access
+ * credentials were delivered. Phones hide messages from unsaved numbers, so a
+ * buyer who never saves us silently stops seeing support and announcements.
+ *
+ * Called from every path that hands a NEW buyer their credentials. Idempotent:
+ * never re-arms once sent, and never overwrites a pending schedule.
+ */
+export async function scheduleSaveContactReminder(userId: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { saveContactDueAt: true, saveContactSentAt: true },
+  });
+  if (!user || user.saveContactSentAt || user.saveContactDueAt) return;
+
+  const delayMs = (30 + Math.random() * 30) * 60 * 1000; // 30–60 min
+  await prisma.user.update({
+    where: { id: userId },
+    data: { saveContactDueAt: new Date(Date.now() + delayMs) },
+  });
+  console.log(`[ONBOARDING] 📇 Save-contact reminder scheduled for user=${userId} in ${Math.round(delayMs / 60000)}min`);
+}
+
+/** Copy do pedido para gravar o contacto. */
+function saveContactMessage(name: string): string {
+  return [
+    `⚠️ ${firstName(name)}, recomendamos que você salve este contato como *Código Zero* ou *Czero*.`,
+    ``,
+    `Alguns celulares podem ocultar mensagens de números não salvos. Salvando este contato, você garante que receberá avisos importantes e terá nosso suporte sempre à mão.`,
+  ].join('\n');
+}
+
+/**
+ * Cron entrypoint: sends the scheduled "save our contact" messages that are due.
+ * Small batches with a gap between sends (the volume is naturally low — one per
+ * new buyer). `saveContactSentAt` is stamped only on a confirmed send; a failure
+ * leaves the row due so the next tick retries it.
+ */
+export async function processSaveContactReminders(): Promise<number> {
+  const now = new Date();
+  const due = await prisma.user.findMany({
+    where: {
+      saveContactSentAt: null,
+      saveContactDueAt: { not: null, lte: now },
+      phone: { not: '' },
+    },
+    select: { id: true, name: true, phone: true },
+    take: 5,
+  });
+  if (due.length === 0) return 0;
+
+  let sent = 0;
+  for (let i = 0; i < due.length; i++) {
+    const u = due[i];
+    const r = await sendWhatsAppMessage({ phone: u.phone, content: saveContactMessage(u.name) });
+    if (r.ok) {
+      await prisma.user.update({ where: { id: u.id }, data: { saveContactSentAt: new Date() } });
+      sent++;
+      console.log(`[ONBOARDING] 📇 Save-contact reminder sent to ${u.phone}`);
+    } else {
+      console.warn(`[ONBOARDING] save-contact send failed for user=${u.id} (status=${r.status}) — will retry`);
+    }
+    if (i < due.length - 1) await sleep(20000 + Math.floor(Math.random() * 25000));
+  }
+  return sent;
+}
+
 /** Copy for each nudge tier (0 = first reminder … 2 = last). */
 function nudgeMessage(name: string, tier: number): string {
   const link = loginUrl();

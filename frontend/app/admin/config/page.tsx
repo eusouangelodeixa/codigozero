@@ -36,6 +36,12 @@ interface SystemConfig {
   newsletterWelcomeMessage?: string;
   feedbackEnabled?: boolean;
   komunikaWebhookSecret?: string;
+  supportHoursEnabled?: boolean;
+  supportStartHour?: number;
+  supportEndHour?: number;
+  supportRearmHours?: number;
+  supportNotifyPhone?: string;
+  supportNotifyName?: string;
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
@@ -837,6 +843,83 @@ export default function AdminConfig() {
             />
           </div>
         </div>
+      </Section>
+
+      {/* ── Suporte: horário de atendimento + aviso da primeira mensagem ── */}
+      <Section
+        title="Suporte"
+        subtitle="Horário de atendimento (fuso de Brasília) e para onde vai o aviso quando um aluno abre conversa."
+        icon={<IconCommunity />}
+        defaultOpen={false}
+        actions={
+          <span className={config.supportHoursEnabled === false ? styles.statusEmpty : styles.statusOk}>
+            {config.supportHoursEnabled === false
+              ? "Sempre aberto"
+              : `Seg–Sex ${String(config.supportStartHour ?? 8).padStart(2, "0")}h–${String(config.supportEndHour ?? 18).padStart(2, "0")}h`}
+          </span>
+        }
+      >
+        <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={config.supportHoursEnabled !== false}
+            onChange={(e) => setField("supportHoursEnabled", e.target.checked)}
+          />
+          <span>Congelar o suporte fora do horário comercial</span>
+        </label>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14 }}>
+          <Field label="Abre às" hint="Hora de Brasília (UTC-3). Segunda a sexta.">
+            <input
+              className={styles.input}
+              type="number"
+              min={0}
+              max={23}
+              value={config.supportStartHour ?? 8}
+              onChange={(e) => setField("supportStartHour", Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Fecha às" hint="Depois desta hora o aluno não consegue enviar.">
+            <input
+              className={styles.input}
+              type="number"
+              min={1}
+              max={24}
+              value={config.supportEndHour ?? 18}
+              onChange={(e) => setField("supportEndHour", Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Rearmar aviso após (horas)" hint="Silêncio do aluno a partir do qual a próxima mensagem conta como nova conversa.">
+            <input
+              className={styles.input}
+              type="number"
+              min={1}
+              max={72}
+              value={config.supportRearmHours ?? 4}
+              onChange={(e) => setField("supportRearmHours", Number(e.target.value))}
+            />
+          </Field>
+        </div>
+
+        <Field
+          label="WhatsApp que recebe o aviso"
+          hint="Chega assim que um aluno abre conversa, com nome, e-mail, WhatsApp dele e a mensagem. Formato: 258XXXXXXXXX."
+        >
+          <input
+            className={styles.input}
+            placeholder="258841234567"
+            value={config.supportNotifyPhone || ""}
+            onChange={(e) => setField("supportNotifyPhone", e.target.value)}
+          />
+        </Field>
+        <Field label="Nome de quem atende" hint="Apenas identificação interna nos avisos.">
+          <input
+            className={styles.input}
+            placeholder="Angelo"
+            value={config.supportNotifyName || ""}
+            onChange={(e) => setField("supportNotifyName", e.target.value)}
+          />
+        </Field>
       </Section>
 
       {/* ── Boas-vindas (newsletter) das páginas de conteúdo ── */}

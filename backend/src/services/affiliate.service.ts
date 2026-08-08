@@ -7,9 +7,9 @@ const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as Prism
 // salePrice is the gross sale value used by quoteCommission() when no
 // explicit amount is passed. It mirrors the Lojou plan price for the
 // affiliate-dedicated product (nrUnJ / O Codigo Zero / zEJP6), currently
-// aligned with the main plan at 497 MZN.
+// aligned with the main plan at 297 MZN.
 export const AFFILIATE_RULES = {
-  salePrice: 497,
+  salePrice: 297,
   commissionRate: 0.60,          // affiliate gets 60% of the sale (gross)
   platformPercent: 0.10,          // platform fee = 10% of sale amount...
   platformFixed: 10,              // ...+ 10 MZN, deducted from gross commission

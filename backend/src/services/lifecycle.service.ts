@@ -69,8 +69,8 @@ export function buildSurveyContext(
   if (opts.scenario === 'visitor') {
     lines.push(
       name
-        ? `Lead ${name} preencheu o quiz de diagnóstico na landing page do Código Zero (497 MT/mês) mas NÃO concluiu a compra.`
-        : `Lead preencheu o quiz de diagnóstico na landing page do Código Zero (497 MT/mês) mas NÃO concluiu a compra.`,
+        ? `Lead ${name} preencheu o quiz de diagnóstico na landing page do Código Zero (297 MT/mês) mas NÃO concluiu a compra.`
+        : `Lead preencheu o quiz de diagnóstico na landing page do Código Zero (297 MT/mês) mas NÃO concluiu a compra.`,
     );
     if (situation) lines.push(`Situação atual: «${situation}».`);
     if (goal) lines.push(`Meta financeira (6 meses): «${goal}».`);
@@ -135,7 +135,7 @@ export function buildFallbackMessage(
     if (goal) L.push('', `Você colocou como meta *${goal}*. O Código Zero foi feito exatamente pra te levar até aí, passo a passo.`);
     else if (situation) L.push('', `Pela sua situação (*${situation}*), acredito que faça muito sentido pra você.`);
     if (objection) L.push('', `Se o que te segurou foi *${objection.toLowerCase()}*, me responde aqui que eu te ajudo a resolver.`);
-    if (checkoutUrl) L.push('', 'Se quiser começar agora (497 MT/mês):', checkoutUrl);
+    if (checkoutUrl) L.push('', 'Se quiser começar agora (297 MT/mês):', checkoutUrl);
   }
   L.push('', 'Qualquer dúvida, é só responder aqui. 🚀');
   return L.join('\n');

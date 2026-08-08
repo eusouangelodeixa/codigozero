@@ -8,9 +8,47 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
 import { optimizeImage } from '../lib/image';
 import { sendPushToUser, sendPushToUsers } from './auth.routes';
+import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { env } from '../config/env';
+import {
+  windowFromConfig,
+  isWithinSupportHours,
+  nextSupportOpening,
+  describeSupportWindow,
+  describeNextOpening,
+  type SupportWindow,
+} from '../lib/supportHours';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
+
+/** Config do suporte (janela + destino do aviso), lida do SystemConfig singleton. */
+async function loadSupportConfig() {
+  const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+  return {
+    win: windowFromConfig(cfg),
+    // Enquanto o número dedicado do suporte não for preenchido em /admin/config,
+    // cai no mesmo número que já recebe os alertas de meta — melhor do que o
+    // aviso simplesmente não sair.
+    notifyPhone: cfg?.supportNotifyPhone || cfg?.milestoneAlertPhone || null,
+  };
+}
+
+/** Payload que a tela do aluno usa para mostrar/congelar o atendimento. */
+function supportStatus(win: SupportWindow, now = new Date()) {
+  const open = isWithinSupportHours(now, win);
+  return {
+    open,
+    enabled: win.enabled,
+    startHour: win.startHour,
+    endHour: win.endHour,
+    windowLabel: describeSupportWindow(win),
+    nextOpenLabel: open ? null : describeNextOpening(now, win),
+    nextOpenAt: open ? null : nextSupportOpening(now, win).toISOString(),
+  };
+}
+
+const firstName = (name?: string | null) => (name || 'membro').split(' ')[0];
 
 // "Parse or 400" — run a Zod schema against the body; on failure reply 400 with
 // the first issue's (PT) message and return null so the route can bail early.
@@ -379,7 +417,15 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    res.json({ messages: messages.reverse().map((m) => serialize(m, req.user!.id)), channel });
+    const { win } = await loadSupportConfig();
+
+    res.json({
+      messages: messages.reverse().map((m) => serialize(m, req.user!.id)),
+      channel,
+      // A tela do aluno usa isto para mostrar o horário e congelar o composer
+      // fora da janela. Para o admin é só informativo — ele responde sempre.
+      support: supportStatus(win),
+    });
   } catch (error) {
     console.error('[CHAT] Support fetch error:', error);
     res.status(500).json({ error: 'Erro ao carregar mensagens de suporte' });
@@ -412,6 +458,83 @@ const supportMessageSchema = z
   });
 
 /**
+ * Primeira mensagem de uma sessão de suporte: avisa o admin no WhatsApp e
+ * responde ao aluno no chat a confirmar o encaminhamento.
+ *
+ * "Sessão" é derivada das próprias mensagens — se o aluno esteve calado mais do
+ * que `rearmHours`, a mensagem seguinte volta a contar como início de conversa.
+ * Não guardamos estado extra para isso: o histórico já é a fonte da verdade.
+ *
+ * Roda fora do ciclo da resposta HTTP (fire-and-forget) e nunca lança.
+ */
+async function notifyNewSupportSession(args: {
+  userId: string;
+  channel: string;
+  messageId: string;
+  preview: string;
+  win: SupportWindow;
+  notifyPhone: string | null;
+}): Promise<void> {
+  try {
+    const previous = await prisma.chatMessage.findFirst({
+      where: { channel: args.channel, senderId: args.userId, id: { not: args.messageId } },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    });
+    const rearmMs = args.win.rearmHours * 60 * 60 * 1000;
+    const isNewSession = !previous || Date.now() - previous.createdAt.getTime() > rearmMs;
+    if (!isNewSession) return;
+
+    const user = await prisma.user.findUnique({
+      where: { id: args.userId },
+      select: { name: true, email: true, phone: true, subscriptionStatus: true },
+    });
+    if (!user) return;
+
+    // 1) Aviso para o número do admin configurado em /admin/config.
+    if (args.notifyPhone) {
+      const alert = [
+        `🛟 *Nova conversa no Suporte*`,
+        ``,
+        `👤 *${user.name}*`,
+        `📱 WhatsApp: ${user.phone}`,
+        `✉️ ${user.email}`,
+        `📌 Assinatura: ${user.subscriptionStatus}`,
+        ``,
+        `💬 "${args.preview}"`,
+        ``,
+        `Responder: ${env.FRONTEND_URL || 'https://app.czero.sbs'}/admin/chat`,
+      ].join('\n');
+      const r = await sendWhatsAppMessage({ phone: args.notifyPhone, content: alert });
+      if (!r.ok) console.warn(`[CHAT] support alert not delivered (status=${r.status})`);
+    } else {
+      console.warn('[CHAT] supportNotifyPhone não configurado — aviso de suporte não enviado');
+    }
+
+    // 2) Resposta automática ao aluno, no próprio chat. Precisa de um remetente
+    //    com role de admin para aparecer como "Moderador" na bolha.
+    const responder =
+      (await prisma.user.findFirst({ where: { role: 'superadmin' }, orderBy: { createdAt: 'asc' }, select: { id: true } })) ||
+      (await prisma.user.findFirst({ where: { role: 'admin' }, orderBy: { createdAt: 'asc' }, select: { id: true } }));
+    if (!responder) return;
+
+    const reply = [
+      `Recebemos a tua mensagem, ${firstName(user.name)}! ✅`,
+      ``,
+      `Já encaminhei para um membro da equipa. O tempo médio de resposta é de *15 a 30 minutos* dentro do horário de atendimento.`,
+      ``,
+      `🕗 Atendimento: ${describeSupportWindow(args.win)}`,
+    ].join('\n');
+
+    await prisma.chatMessage.create({
+      data: { senderId: responder.id, channel: args.channel, type: 'text', content: reply },
+    });
+  } catch (error) {
+    console.error('[CHAT] support session notification failed:', error);
+  }
+}
+
+/**
  * POST /api/chat/support
  * Body: { content?, userId?(admin), replyToId?, type?, mediaUrl?, mediaMime?, mediaDurationSec? }
  * Support allows text + image + audio (no polls / mentions / pins).
@@ -422,6 +545,21 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
     const isAdmin = isAdminRole(req.user!.role);
     const targetUserId = isAdmin ? b.userId : req.user!.id;
     if (!targetUserId) return res.status(400).json({ error: 'userId obrigatório para admin' });
+
+    // Fora do horário de atendimento o suporte fica congelado: o aluno continua
+    // a ler o histórico, mas não envia. O admin nunca é bloqueado — ele pode
+    // responder a qualquer hora.
+    const { win, notifyPhone } = await loadSupportConfig();
+    const now = new Date();
+    if (!isAdmin && !isWithinSupportHours(now, win)) {
+      return res.status(403).json({
+        error: 'Suporte fora do horário de atendimento',
+        supportClosed: true,
+        support: supportStatus(win, now),
+        message: `O suporte atende ${describeSupportWindow(win)}. Voltamos ${describeNextOpening(now, win)} — deixa a tua dúvida pronta que respondemos assim que abrir.`,
+      });
+    }
+
     if (!parseOr400(req, res, supportMessageSchema)) return;
 
     const channel = `support_${targetUserId}`;
@@ -476,6 +614,17 @@ router.post('/support', async (req: AuthRequest, res: Response) => {
       const admins = await prisma.user.findMany({ where: { role: { in: ['admin', 'superadmin'] } }, select: { id: true } });
       sendPushToUsers(admins.map((a) => a.id), { title: '🛟 Nova mensagem de suporte', body: preview, url: '/chat' })
         .catch((e) => console.error('[CHAT] support push (admins) error:', e));
+
+      // Só a PRIMEIRA mensagem da sessão dispara o aviso no WhatsApp + a
+      // resposta automática — o resto da conversa segue silencioso.
+      void notifyNewSupportSession({
+        userId: targetUserId,
+        channel,
+        messageId: created.id,
+        preview,
+        win,
+        notifyPhone,
+      });
     }
   } catch (error) {
     console.error('[CHAT] Support send error:', error);

@@ -13,7 +13,7 @@ import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { processCentralAnnouncements } from '../lib/centralAnnounce';
 import { autoEnqueueExpired, processGroupRemovalQueue, processGroupMessageQueue } from '../lib/membersGroup';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
-import { processOnboardingNudges } from '../services/onboarding.service';
+import { processOnboardingNudges, processSaveContactReminders } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -935,6 +935,20 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Onboarding nudge tick (every 6h)');
+
+  // ── "Guarde o nosso contacto" (a cada 5 min) ──
+  // Envia o pedido agendado 30–60 min depois da entrega das credenciais. Sem
+  // janela diurna de propósito: o comprador acabou de interagir connosco, e o
+  // objectivo é chegar enquanto o número ainda está fresco na conversa dele.
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const sent = await processSaveContactReminders();
+      if (sent > 0) console.log(`[CRON] 📇 Save-contact reminders sent: ${sent}`);
+    } catch (error) {
+      console.error('[CRON] Save-contact tick failed:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Save-contact reminder tick (every 5min)');
 
   // ── Feedback pós-compra: enrollment (a cada 30min, NUNCA envia) ──
   // Enfileira compradores no D+14/D+21 com dueAts pré-escalonados 30–60min.

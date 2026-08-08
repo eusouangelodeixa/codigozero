@@ -25,7 +25,7 @@ export const AFFILIATE_PRODUCT = {
   productId: process.env.LOJOU_AFFILIATE_PRODUCT_ID || '3919',
   productPid: process.env.LOJOU_AFFILIATE_PRODUCT_PID || 'zEJP6',
   checkoutUrl:
-    process.env.LOJOU_AFFILIATE_CHECKOUT_URL || 'https://pay.lojou.app/p/zEJP6',
+    process.env.LOJOU_AFFILIATE_CHECKOUT_URL || 'https://pay.lojou.app/zEJP6',
 };
 
 // ── Code generation ───────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
 import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
 import { scheduleSaveContactReminder } from '../services/onboarding.service';
+import { lojouCheckoutUrl } from '../lib/lojouLinks';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -2848,7 +2849,7 @@ async function buildCheckoutUrlWithCoupon(opts: {
   phone: string;
   couponCode: string;
 }): Promise<string> {
-  const fallbackPublic = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}?coupon=${encodeURIComponent(opts.couponCode)}`;
+  const fallbackPublic = lojouCheckoutUrl(env.LOJOU_PRODUCT_PID, { coupon: opts.couponCode });
   if (!env.LOJOU_API_KEY) return fallbackPublic;
   try {
     const order = await lojouService.createOrder({
@@ -3022,7 +3023,7 @@ router.post('/cupons/preview', async (req: AuthRequest, res: Response) => {
     // Preview does NOT call Lojou — keeps the modal snappy and avoids
     // creating throwaway pending orders. Returns the public fallback
     // link so the admin can see roughly what will be in the message.
-    const previewLink = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}?coupon=${encodeURIComponent(coupon.code)}`;
+    const previewLink = lojouCheckoutUrl(env.LOJOU_PRODUCT_PID, { coupon: coupon.code });
     const firstName = (name || 'membro').split(' ')[0];
     const finalMessage = (message || DEFAULT_COUPON_MESSAGE)
       .replace(/\{\{\s*nome\s*\}\}/gi, firstName)

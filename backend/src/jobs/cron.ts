@@ -15,6 +15,7 @@ import { autoEnqueueExpired, processGroupRemovalQueue, processGroupMessageQueue 
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
 import { processOnboardingNudges, processSaveContactReminders } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
+import { lojouCheckoutUrl, isPermanentCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -166,7 +167,7 @@ export function startCronJobs() {
         let message = '';
         const name = user.name.split(' ')[0];
 
-        // Renewal link = the STANDARD public checkout (/p/{pid}). When the
+        // Renewal link = the STANDARD public checkout (pay.lojou.app/{pid}). When the
         // member was referred by a coproducer, use that coproducer's public
         // checkout so the renewal stays attributed (and paid out) to them.
         //
@@ -176,14 +177,16 @@ export function startCronJobs() {
         // the time the member taps it. The public product checkout never
         // expires and still attributes by pid. (Same reason we ignore any
         // previously-stored user.renewalUrl / checkoutUrl, which are tokens.)
-        let finalLink = `https://pay.lojou.app/p/${env.LOJOU_PRODUCT_PID}`;
+        let finalLink = lojouCheckoutUrl(env.LOJOU_PRODUCT_PID);
         if (user.referredByCoproducer) {
           const cop = await prisma.coproducerAccount.findUnique({
             where: { code: user.referredByCoproducer },
             select: { productPid: true, publicCheckoutUrl: true, enabled: true },
           });
           if (cop && cop.enabled) {
-            finalLink = cop.publicCheckoutUrl || `https://pay.lojou.app/p/${cop.productPid}`;
+            finalLink = cop.publicCheckoutUrl
+              ? normalizeLojouCheckoutUrl(cop.publicCheckoutUrl)
+              : lojouCheckoutUrl(cop.productPid);
           }
         }
 
@@ -428,18 +431,20 @@ export function startCronJobs() {
         // Link de checkout pro remarketing: NUNCA reusar link /token/ persistido
         // — ele EXPIRA em ~4h, então dias depois o lead abre e vê "erro/link com
         // problema" (foi o que um lead reclamou). Só reaproveita o persistido se
-        // já for /p/{pid} (permanente); senão monta o /p/{pid} permanente
-        // personalizado. Ver [[lojou-checkout-link-types]].
-        let checkoutUrl = lead.checkoutUrl && lead.checkoutUrl.includes('/p/') ? lead.checkoutUrl : '';
+        // for permanente; senão monta o link público personalizado.
+        // Ver [[lojou-checkout-link-types]].
+        let checkoutUrl = isPermanentCheckoutUrl(lead.checkoutUrl)
+          ? normalizeLojouCheckoutUrl(lead.checkoutUrl)
+          : '';
         if (!checkoutUrl) {
           let cleanPhone = (lead.phone || '').replace(/\D/g, '');
           if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
           const pid = process.env.LOJOU_PRODUCT_PID || 'uoEHz';
-          const u = new URL(`https://pay.lojou.app/p/${pid}`);
-          if (lead.name) u.searchParams.append('name', lead.name);
-          if (lead.email) u.searchParams.append('email', lead.email);
-          u.searchParams.append('phone', cleanPhone);
-          checkoutUrl = u.toString();
+          checkoutUrl = lojouCheckoutUrl(pid, {
+            name: lead.name,
+            email: lead.email,
+            phone: cleanPhone,
+          });
         }
 
         let sent = false;

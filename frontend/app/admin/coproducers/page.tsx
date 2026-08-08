@@ -308,7 +308,7 @@ export default function AdminCoproducers() {
               <Field label="Email do membro existente *" value={formEmail} onChange={setFormEmail} placeholder="email@example.com" />
               <Field label="PID Lojou do produto dele *" value={formPid} onChange={setFormPid} placeholder="Ex: abc123" hint="O webhook usa este PID pra atribuir as vendas a ele." />
               <Field label="Plan ID Lojou (opcional)" value={formPlanId} onChange={setFormPlanId} placeholder="Ex: nrUnJ" />
-              <Field label="URL pública do checkout (opcional)" value={formCheckoutUrl} onChange={setFormCheckoutUrl} placeholder="https://pay.lojou.app/p/abc123" hint="Usada como fallback quando a API do Lojou falhar." />
+              <Field label="URL pública do checkout (opcional)" value={formCheckoutUrl} onChange={setFormCheckoutUrl} placeholder="https://pay.lojou.app/abc123" hint="Usada como fallback quando a API do Lojou falhar." />
               <NumberField label="Split do coprodutor (%) — documentação" value={formSharePct} min={0} max={100} onChange={(v) => setFormSharePct(v === "" ? 0 : v)} />
 
               <SubBox title="Order bump (opcional)" desc="Se este coprodutor tem um bump próprio na Lojou (com pid separado), informe abaixo. Sem isso, ele usa o bump principal do sistema.">

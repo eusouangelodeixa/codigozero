@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
 import { getActivePrice } from '../lib/pricing';
 import { notifyCoproducer } from '../services/coproducer.service';
+import { lojouCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -209,12 +210,12 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
       //      o coprodutor já tem na própria página Lojou).
       //   2. Pedido prefilled via Lojou Orders API (caminho do produto
       //      principal — pega nome/email/telefone).
-      //   3. Página pública genérica /p/{pid} como último recurso.
+      //   3. Página pública genérica pay.lojou.app/{pid} como último recurso.
       if (coproducerAccount.publicCheckoutUrl) {
-        checkoutUrl = coproducerAccount.publicCheckoutUrl;
+        checkoutUrl = normalizeLojouCheckoutUrl(coproducerAccount.publicCheckoutUrl);
         await prisma.user.update({ where: { id: user.id }, data: { checkoutUrl } });
       } else if (LOJOU_KEY) {
-        const fallback = `https://pay.lojou.app/p/${coproducerAccount.productPid}`;
+        const fallback = lojouCheckoutUrl(coproducerAccount.productPid);
         try {
           const orderRes = await fetch(`${LOJOU_API}/orders`, {
             method: 'POST',
@@ -242,7 +243,7 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
           console.warn('[Landing/Coproducer] Order API threw, using public fallback:', e);
         }
       } else {
-        checkoutUrl = `https://pay.lojou.app/p/${coproducerAccount.productPid}`;
+        checkoutUrl = lojouCheckoutUrl(coproducerAccount.productPid);
       }
     } else if (LOJOU_KEY) {
       try {
@@ -354,7 +355,9 @@ router.get('/resolve-coproducer/:code', async (req: Request, res: Response) => {
     if (!acc || !acc.enabled) {
       return res.status(404).json({ error: 'Código de coprodução não encontrado' });
     }
-    const checkoutUrl = acc.publicCheckoutUrl || `https://pay.lojou.app/p/${acc.productPid}`;
+    const checkoutUrl = acc.publicCheckoutUrl
+      ? normalizeLojouCheckoutUrl(acc.publicCheckoutUrl)
+      : lojouCheckoutUrl(acc.productPid);
     res.json({
       code: acc.code,
       checkoutUrl,

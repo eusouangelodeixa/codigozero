@@ -1,7 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader, Card, Button, Input, Badge, EmptyState, useToast } from "@/components/ui";
-import styles from "../(auth)/afiliacao/afiliacao.module.css";
+// Cópia própria do módulo (antes importava o da Afiliação): as duas telas
+// evoluem em ritmos diferentes e o acoplamento fazia um redesign de Afiliação
+// mexer, sem querer, na tela de Sócios.
+import styles from "./socios.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 

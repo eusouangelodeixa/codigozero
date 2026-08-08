@@ -1,176 +1,367 @@
+/* ─────────────────────────────────────────────────────────
+   Ferramentas — Código Zero
+   Hub de ferramentas incluídas na assinatura. Herói = Komunika.
+   Só tokens do design system: nada de px cru para espaçamento
+   e nenhum gradiente decorativo (regra do DS para o app).
+   ───────────────────────────────────────────────────────── */
+
 .page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-6);
 }
 
-.grid {
-  display: grid;
-  /* min(100%, 340px) evita o mínimo rígido estourar em telas <340px */
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  gap: 16px;
-  align-items: stretch;
+/* ═══════════════════════════════════════════════════════
+   HERÓI — Komunika
+   Padding próprio (Card com padding="none") porque o herói
+   respira mais que um card comum no desktop, e encolhe de
+   verdade no mobile.
+   ═══════════════════════════════════════════════════════ */
+
+/* Seletor duplicado de propósito: o Card injeta `.padNone` (padding: 0) e a
+   ordem entre os dois CSS Modules no bundle não é garantida — dobrar a classe
+   sobe a especificidade e o padding do herói sempre vence. */
+.heroCard.heroCard {
+  padding: var(--space-8);
 }
 
-/* ── Tool card ── */
-.card {
-  position: relative;
+.heroBody {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
-  transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out);
-}
-.card:hover {
-  border-color: var(--accent-border);
+  gap: var(--space-6);
 }
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.logo {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  flex-shrink: 0;
-}
-
-.titleWrap {
-  min-width: 0;
-  flex: 1;
-}
-.title {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-}
-.subtitle {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.badge {
-  flex-shrink: 0;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: var(--accent-dim);
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
-}
-.badgePending {
-  background: rgba(148, 163, 184, 0.12);
-  color: var(--text-tertiary);
-  border-color: var(--border-strong);
-}
-
-.desc {
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.features {
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.feature {
+.heroTop {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
-.check {
+
+.mark {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
   background: var(--accent-dim);
   border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  user-select: none;
+}
+
+.heroMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.eyebrow {
+  font-size: var(--type-label);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.heroTitle {
+  font-size: var(--type-h2);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.heroSubtitle {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.heroStatus {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.heroDesc {
+  font-size: var(--type-body);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  max-width: 68ch;
+}
+
+/* ── O que dá pra fazer lá dentro ── */
+.features {
+  display: grid;
+  /* min() evita o mínimo rígido estourar o container em telas estreitas */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-3);
+}
+
+.feature {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+}
+
+.featureIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+}
+
+.featureCopy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.featureTitle {
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.featureText {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Limites do plano ── */
+.plan {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.planLabel {
+  font-size: var(--type-label);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.planChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  background: var(--bg-glass);
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip svg {
   color: var(--accent);
   flex-shrink: 0;
 }
 
-.footer {
-  margin-top: auto;
+/* ── CTA ── */
+.ctaRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border-top: 1px solid var(--border-strong);
-  padding-top: 16px;
-}
-.limits {
-  font-size: 12px;
-  color: var(--text-tertiary);
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
 
-.cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  cursor: pointer;
-  border-radius: 12px;
-  padding: 9px 16px;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--accent-fg);
-  background: var(--accent);
-  transition: transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out), opacity 140ms var(--ease-out);
-  white-space: nowrap;
-}
-.cta:hover:not(:disabled) {
-  transform: scale(1.02);
-  box-shadow: 0 0 0 4px var(--accent-glow);
-}
-.cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.ctaHint {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  line-height: 1.5;
 }
 
 .spin {
   animation: ferramentas-spin 0.8s linear infinite;
 }
+
 @keyframes ferramentas-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
+/* ── Aviso: acesso ainda sendo preparado ── */
 .note {
-  font-size: 11.5px;
-  color: var(--text-tertiary);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  color: var(--color-warning);
+  font-size: var(--type-small);
+  line-height: 1.5;
 }
 
-/* ── "Em breve" placeholder ── */
-.placeholder {
+.note svg {
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PRIMEIROS PASSOS
+   ═══════════════════════════════════════════════════════ */
+
+.stepsCard.stepsCard {
+  padding: var(--card-padding);
+}
+
+.stepsBody {
   display: flex;
   flex-direction: column;
+  gap: var(--space-6);
+}
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sectionLabel {
+  font-size: var(--type-label);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.sectionTitle {
+  font-size: var(--type-h3);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.sectionDesc {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-5);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stepHead {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 200px;
-  padding: 24px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 16px;
-  color: var(--text-tertiary);
-  text-align: center;
-  font-size: 13px;
+  gap: var(--space-2);
+}
+
+.stepIcon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.stepNum {
+  font-family: var(--font-mono);
+  font-size: var(--type-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.stepTitle {
+  font-size: var(--type-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.stepText {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESPONSIVO
+   ═══════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .heroCard.heroCard { padding: var(--space-5); }
+  .heroBody { gap: var(--space-5); }
+  .steps { gap: var(--space-4); }
+}
+
+@media (max-width: 640px) {
+  /* O badge cai pra própria linha: alinhado à esquerda fica menos órfão. */
+  .heroStatus { margin-left: 0; }
+
+  /* CTA no alcance do polegar: largura total, dica embaixo. */
+  .ctaRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .ctaRow button { width: 100%; }
+  .ctaHint { text-align: center; }
+}
+
+@media (max-width: 480px) {
+  .heroCard.heroCard { padding: var(--space-4); }
+  .mark {
+    width: 48px;
+    height: 48px;
+    font-size: 1.5rem;
+  }
+  .plan {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
 }

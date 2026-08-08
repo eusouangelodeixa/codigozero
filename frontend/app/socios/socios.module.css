@@ -1,0 +1,315 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.heroBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.heroTitle {
+  font-size: var(--type-h2);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bullets li {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.bullets strong { color: var(--text-primary); }
+.bullets em { color: var(--accent); font-style: normal; }
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: var(--type-small);
+  font-weight: 500;
+  text-decoration: none;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+.secondaryLink:hover {
+  background: var(--bg-glass);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.fineprint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.55;
+}
+
+/* ── Link card ── */
+.linkCardInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.linkLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.linkLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.linkBox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 14px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.linkText {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--type-mono);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.codeLine {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.codeLine strong {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+.creativesLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--type-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+}
+.creativesLink:hover {
+  background: var(--bg-glass);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+/* ── Stats grid ── */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--grid-gap);
+}
+
+.statBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.statValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.statValueAccent {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.statHint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ── Withdraw CTA + form ── */
+.withdrawCta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.withdrawForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionTitle {
+  font-size: var(--type-h3);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.segment {
+  display: inline-flex;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.segmentItem {
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  font-size: var(--type-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.segmentItem:hover { color: var(--text-primary); }
+
+.segmentActive {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.quote {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: var(--type-small);
+}
+.quote strong { color: var(--accent); font-weight: 700; }
+
+/* ── Tables ── */
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--type-small);
+}
+.table thead th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default);
+}
+.table tbody td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.table tbody tr:last-child td { border-bottom: none; }
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+  .statsGrid { grid-template-columns: repeat(2, 1fr); }
+  .formRow { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 640px) {
+  .statsGrid { grid-template-columns: 1fr 1fr; }
+  .formRow { grid-template-columns: 1fr; }
+  .linkCardInner { flex-direction: column; align-items: stretch; }
+  .table thead { display: none; }
+  .table tbody tr {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .table tbody td { border-bottom: none; padding: 4px 0; }
+  .table tbody td::before {
+    content: attr(data-label);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-tertiary);
+    display: block;
+    margin-bottom: 2px;
+  }
+}
+
+@media (max-width: 480px) {
+  .statsGrid { grid-template-columns: 1fr; }
+  .statValue, .statValueAccent { font-size: 1.25rem; }
+}

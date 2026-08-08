@@ -1,183 +1,476 @@
 /* ─────────────────────────────────────────────────────────
    Instalar (PWA) — Código Zero
+   Quem chega aqui veio de um WhatsApp e está com pressa:
+   hierarquia curta, passos numerados e nomes de botão do
+   sistema em destaque.
    ───────────────────────────────────────────────────────── */
 
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-10);
   max-width: 720px;
   margin: 0 auto;
   width: 100%;
 }
 
-.pushCard {
+/* ── Seção (label caps → headline → conteúdo) ── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sectionLabel {
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-size: var(--type-h2);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+/* ── Seletor de plataforma (segmented control) ── */
+.switchRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.switch {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+}
+
+.switchBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-full);
+  font-size: var(--type-small);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  transition: color var(--motion-fast), background var(--motion-fast);
+}
+
+.switchBtn:hover { color: var(--text-primary); }
+
+.switchBtnActive {
+  background: var(--accent-dim);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.switchBtnActive:hover { color: var(--accent); }
+
+.detectHint {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+/* ── Instalação nativa (Chrome / beforeinstallprompt) ── */
+.quickInstall {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   flex-wrap: wrap;
 }
 
-.pushIcon {
-  width: 44px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--accent-dim);
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
-  flex-shrink: 0;
-}
-
-.pushBody {
+.quickBody {
   flex: 1;
-  min-width: 240px;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
-.pushTitle {
-  font-size: var(--type-body);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.pushHint {
-  font-size: var(--type-small);
-  color: var(--text-tertiary);
-  line-height: 1.5;
-}
-
-/* ── Platform picker ── */
-.platformPicker {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
-}
-
-.platformBtn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: var(--space-6) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  background: var(--bg-glass);
-  cursor: pointer;
-  transition: background var(--motion-base), border-color var(--motion-base), transform var(--motion-fast);
-}
-
-.platformBtn:hover {
-  background: var(--bg-glass-hover);
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
-
-.platformBtnActive {
-  border-color: var(--accent) !important;
-  background: var(--accent-dim) !important;
-  box-shadow: 0 0 0 4px var(--accent-glow);
-}
-
-.platformEmoji {
-  font-size: 1.75rem;
-  line-height: 1;
-}
-
-.platformLabel {
+.quickTitle {
   font-size: var(--type-body);
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
-.platformBtnActive .platformLabel { color: var(--accent); }
+.quickText {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
 
-/* ── Steps ── */
+/* ── Passos numerados ── */
 .stepsList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  animation: fadeIn 320ms var(--ease-out);
+  padding: var(--space-2) 0;
+  animation: stepsIn 320ms var(--ease-out);
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+@keyframes stepsIn {
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .step {
+  position: relative;
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--bg-glass);
-  border: 1px solid var(--border-default);
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+/* Trilho ligando os números — dá a leitura de sequência sem ruído visual. */
+.step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-5) + 15px);
+  top: calc(var(--space-4) + 34px);
+  bottom: calc(var(--space-4) * -1 + var(--space-1));
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: var(--border-default);
 }
 
 .stepNumber {
+  position: relative;
+  z-index: 1;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--accent-dim);
-  color: var(--accent);
-  border: 1px solid var(--accent-border);
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-size: var(--type-small);
   font-weight: 700;
-  font-size: 13px;
-  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
 .stepContent {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
 }
 
 .stepTitle {
   font-size: var(--type-body);
   font-weight: 600;
-  color: var(--text-primary);
   letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
 .stepText {
   font-size: var(--type-small);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+/* Nome exato do botão do sistema — é onde as pessoas se perdem. */
+.uiName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 1px var(--space-2);
+  margin: 0 1px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Estado "já instalado" ── */
+.doneCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.doneIcon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  color: var(--color-success);
+}
+
+.doneBody {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.doneTitle {
+  font-size: var(--type-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.doneText {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
-.stepHighlight {
-  display: inline;
-  padding: 1px 6px;
-  border-radius: 4px;
+.linkBtn {
+  align-self: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--motion-fast);
+}
+
+.linkBtn:hover { color: var(--text-primary); }
+
+/* ── Notificações ── */
+.pushCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.pushHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.pushIcon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.pushIconOn {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: var(--color-success);
+}
+
+.pushBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pushTitle {
+  font-size: var(--type-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.pushText {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.benefits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.benefit {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.benefitIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
   background: var(--accent-dim);
   color: var(--accent);
+}
+
+.pushActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pushDone {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-small);
   font-weight: 600;
+  color: var(--color-success);
+}
+
+/* ── Callouts (bloqueado / informativo) ── */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--bg-glass);
+}
+
+.calloutIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.calloutBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.calloutTitle {
+  font-size: var(--type-small);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.calloutText {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  min-width: 0;
+}
+
+.calloutText strong { color: var(--text-primary); font-weight: 600; }
+
+.calloutWarning {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.calloutWarning .calloutIcon { color: var(--color-warning); }
+
+.calloutInfo {
+  background: var(--accent-glow);
+  border-color: var(--accent-border);
+}
+
+.calloutInfo .calloutIcon { color: var(--accent); }
+
+/* ── Saída ── */
+.footerCta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.footerHint {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  text-align: center;
+  line-height: 1.5;
 }
 
 /* ═══════════════════════ RESPONSIVE ═══════════════════════ */
 
 @media (max-width: 640px) {
-  .pushCard { gap: var(--space-3); }
-  .pushBody { min-width: 0; flex-basis: 100%; }
-  .platformBtn { padding: var(--space-5) var(--space-3); gap: 8px; }
-  .platformEmoji { font-size: 1.5rem; }
-  .platformLabel { font-size: var(--type-small); }
+  .page { gap: var(--space-8); }
+
+  .switch {
+    align-self: stretch;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .switchBtn { padding: var(--space-2) var(--space-3); }
+
+  .step { padding: var(--space-4); gap: var(--space-3); }
+
+  .step:not(:last-child)::before {
+    left: calc(var(--space-4) + 15px);
+  }
+
+  .doneCard { gap: var(--space-3); }
+
+  .linkBtn {
+    align-self: flex-start;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .quickInstall > :global(button) { width: 100%; }
 }
 
-@media (max-width: 480px) {
-  .platformPicker { grid-template-columns: 1fr; gap: var(--space-2); }
-  .platformBtn { flex-direction: row; justify-content: flex-start; padding: var(--space-4); gap: var(--space-3); }
-  .step { padding: var(--space-3); gap: var(--space-3); }
-  .stepNumber { width: 28px; height: 28px; font-size: 12px; }
+@media (max-width: 400px) {
+  .stepNumber { width: 28px; height: 28px; }
+
+  .step:not(:last-child)::before {
+    left: calc(var(--space-4) + 13px);
+    top: calc(var(--space-4) + 30px);
+  }
+
+  .uiName { white-space: normal; }
 }

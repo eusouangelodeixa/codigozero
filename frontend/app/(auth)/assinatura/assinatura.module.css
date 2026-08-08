@@ -1,170 +1,558 @@
 /* ─────────────────────────────────────────────────────────
    Assinatura — Código Zero
+   Premium Dark Terminal: superfícies em vidro, hierarquia
+   label-caps → headline → corpo, CTA primário branco.
    ───────────────────────────────────────────────────────── */
 
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
   width: 100%;
 }
 
-/* ── Status hero ── */
-.statusHero {
-  position: relative;
+/* ── Skeleton de carregamento ───────────────────────────── */
+.loading {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-8);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-default);
-  overflow: hidden;
-  isolation: isolate;
-  text-align: center;
   align-items: center;
-}
-
-.statusActive  { background: radial-gradient(120% 80% at 50% 0%, rgba(34,197,94,0.12), transparent 60%), var(--bg-surface); border-color: rgba(34,197,94,0.2); }
-.statusWarning { background: radial-gradient(120% 80% at 50% 0%, rgba(245,158,11,0.12), transparent 60%), var(--bg-surface); border-color: rgba(245,158,11,0.2); }
-.statusDanger  { background: radial-gradient(120% 80% at 50% 0%, rgba(239,68,68,0.12), transparent 60%), var(--bg-surface); border-color: rgba(239,68,68,0.2); }
-
-.statusIcon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-}
-
-.statusIconActive  { background: rgba(34,197,94,0.18);  color: var(--color-success); }
-.statusIconWarning { background: rgba(245,158,11,0.18); color: var(--color-warning); }
-.statusIconDanger  { background: rgba(239,68,68,0.18);  color: var(--color-error); }
-
-.statusMessage {
-  font-size: var(--type-body);
-  color: var(--text-secondary);
-  line-height: 1.5;
-  max-width: 50ch;
-}
-
-.statusActions {
-  margin-top: var(--space-3);
-  display: flex;
-  gap: var(--space-2);
-  justify-content: center;
+  gap: var(--space-6);
   flex-wrap: wrap;
 }
 
-/* ── Plan details ── */
-.section { display: flex; flex-direction: column; gap: var(--space-5); }
-
-.sectionTitle {
-  font-size: var(--type-h3);
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
-}
-
-.detailsGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-
-.detail {
+.loadingCopy {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 200px;
 }
 
-.detailLabel {
-  font-size: 10.5px;
+/* ═════════════════════════════════════════════════════════
+   HERÓI — estado, data e valor numa olhada
+   ═════════════════════════════════════════════════════════ */
+
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-default);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Halo de estado — sutil, só o suficiente para a cor "cantar" antes do texto. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(90% 70% at 12% 0%, var(--hero-glow, transparent), transparent 65%);
+  pointer-events: none;
+}
+
+.heroActive  { --hero-glow: rgba(34, 197, 94, 0.14);  border-color: rgba(34, 197, 94, 0.22); }
+.heroWarning { --hero-glow: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.22); }
+.heroDanger  { --hero-glow: rgba(239, 68, 68, 0.14);  border-color: rgba(239, 68, 68, 0.22); }
+
+.heroTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.heroCopy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
+
+.heroHeadline {
+  font-size: var(--type-h2);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.heroBody {
+  font-size: var(--type-body);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 46ch;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-top: var(--space-1);
+}
+
+.heroActionsHint {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+}
+
+/* ── Anel / mostrador de estado ─────────────────────────── */
+.dial {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  flex-shrink: 0;
+}
+
+.dialActive  { color: var(--color-success); }
+.dialWarning { color: var(--color-warning); }
+.dialDanger  { color: var(--color-error); }
+
+.dialArc { transition: stroke-dasharray 0.6s var(--ease-out); }
+
+.dialCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.dialValue {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+.dialLabel {
+  font-size: var(--type-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+}
+
+.dialGlyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-full);
+  /* fallback para browsers sem color-mix */
+  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  color: currentColor;
+}
+
+/* ── Fatos: plano, valor, datas ─────────────────────────── */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-5);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.factLabel {
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.factValue {
+  font-size: var(--type-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.factValueAccent { color: var(--accent); }
+
+.factSuffix {
+  font-size: var(--type-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* ═════════════════════════════════════════════════════════
+   SEÇÕES
+   ═════════════════════════════════════════════════════════ */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Cabeçalho + ação lado a lado (portal do gateway). */
+.rowSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.sectionHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sectionLabel {
+  font-size: var(--type-label);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
 
-.detailValue {
-  font-size: var(--type-body);
-  font-weight: 500;
+.sectionTitle {
+  font-size: var(--type-h3);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
-.detailValueAccent { color: var(--accent); font-weight: 600; }
+.sectionDesc {
+  font-size: var(--type-small);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 52ch;
+}
 
-/* ── Included list ── */
+/* ── Passos de renovação ────────────────────────────────── */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+}
+
+.stepNum {
+  font-family: var(--font-mono);
+  font-size: var(--type-mono);
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.stepCopy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.stepTitle {
+  font-size: var(--type-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stepDesc {
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── O que está incluído ────────────────────────────────── */
 .includedGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.included {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+  min-width: 0;
+}
+
+.included:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-default);
+}
+
+.includedOff {
+  opacity: 0.6;
+}
+
+.includedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+.includedOff .includedIcon {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-tertiary);
+  border-color: var(--border-default);
+}
+
+.includedCopy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.includedTitle {
+  font-size: var(--type-body);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.includedDesc {
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── Histórico de pagamentos (à prova de mobile) ────────── */
+.payList {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
-.includedRow {
+.payItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+
+.payLine {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: rgba(255,255,255,0.02);
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.payDate {
+  font-size: var(--type-body);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.payAmount {
+  font-size: var(--type-body);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.payTags {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.payMethod {
   font-size: var(--type-small);
   color: var(--text-secondary);
 }
 
-.includedRowOff {
+.payRef {
+  font-family: var(--font-mono);
+  font-size: var(--type-small);
   color: var(--text-tertiary);
-  opacity: 0.55;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
-.includedCheck {
-  width: 18px;
-  height: 18px;
+.payReceipt {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
+  gap: var(--space-2);
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-border);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
   margin-left: auto;
+  min-height: 32px;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
 }
 
-.includedCheckOn  { background: rgba(34,197,94,0.16);  color: var(--color-success); }
-.includedCheckOff { background: rgba(239,68,68,0.12);  color: var(--color-error); }
-
-/* ── Danger zone ── */
-.dangerCard {
-  border-color: rgba(239,68,68,0.15) !important;
+.payReceipt:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
 }
 
-.dangerTitle { color: var(--color-error); }
+.payToggle {
+  align-self: flex-start;
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  min-height: 36px;
+  transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
+}
 
-/* ── Cancel modal flow ── */
+.payToggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-glass-hover);
+  border-color: var(--border-strong);
+}
+
+/* ── Zona discreta: cancelar ────────────────────────────── */
+.quietZone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.quietText {
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+  min-width: 0;
+}
+
+.quietAction {
+  font-size: var(--type-small);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  min-height: 36px;
+  transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
+}
+
+.quietAction:hover {
+  color: var(--color-error);
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+/* ═════════════════════════════════════════════════════════
+   MODAL DE CANCELAMENTO (3 passos)
+   ═════════════════════════════════════════════════════════ */
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stepTrack {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.stepPip {
+  height: 3px;
+  flex: 1;
+  border-radius: var(--radius-full);
+  background: var(--border-default);
+  transition: background var(--motion-base);
+}
+
+.stepPipOn { background: var(--text-primary); }
+
 .reasonsList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .reasonItem {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-default);
-  background: rgba(255,255,255,0.02);
-  cursor: pointer;
+  background: var(--bg-glass);
+  text-align: left;
   font-size: var(--type-small);
   color: var(--text-secondary);
+  min-height: 44px;
   transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 
+.reasonItem:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
 .reasonItemActive {
-  background: rgba(239,68,68,0.06);
-  border-color: rgba(239,68,68,0.25);
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.25);
   color: var(--text-primary);
 }
 
@@ -179,9 +567,7 @@
   flex-shrink: 0;
 }
 
-.reasonItemActive .reasonRadio {
-  border-color: var(--color-error);
-}
+.reasonItemActive .reasonRadio { border-color: var(--color-error); }
 
 .reasonRadioDot {
   width: 8px;
@@ -190,172 +576,136 @@
   background: var(--color-error);
 }
 
+.offerLoading {
+  text-align: center;
+  padding: var(--space-6);
+  font-size: var(--type-small);
+  color: var(--text-tertiary);
+}
+
 .offerCard {
   padding: var(--space-5);
   border-radius: var(--radius-lg);
-  background: rgba(45,212,191,0.06);
+  background: var(--accent-glow);
   border: 1px solid var(--accent-border);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.offerTitle {
-  font-size: var(--type-body);
+.offerLabel {
+  font-size: var(--type-label);
   font-weight: 600;
-  color: var(--text-primary);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
+
+.offerText {
+  font-size: var(--type-small);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.offerHighlight { color: var(--accent); }
 
 .offerCode {
-  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--radius-md);
-  background: rgba(45,212,191,0.1);
+  background: var(--accent-dim);
   border: 1px dashed var(--accent);
-  text-align: center;
+  font-family: var(--font-mono);
   font-size: 1.25rem;
   font-weight: 700;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.12em;
   color: var(--accent);
-  font-family: var(--font-mono);
+  min-height: 44px;
+  transition: background var(--motion-fast);
 }
 
+.offerCode:hover { background: rgba(45, 212, 191, 0.22); }
+
 .offerHint {
-  font-size: 11.5px;
+  font-size: var(--type-small);
+  line-height: 1.5;
   color: var(--text-tertiary);
   text-align: center;
 }
 
 .warningList {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--type-small);
-  color: var(--text-tertiary);
-}
-
-@media (max-width: 540px) {
-  .detailsGrid { grid-template-columns: 1fr; }
-  .includedGrid { grid-template-columns: 1fr; }
-}
-
-/* ── Subscription validity bar (status hero) ───────────────── */
-.validityTrack {
-  width: 100%;
-  max-width: 320px;
-  height: 6px;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
-  margin-top: 4px;
-}
-.validityFill {
-  height: 100%;
-  border-radius: 9999px;
-  background: currentColor;
-  opacity: 0.9;
-  transition: width 0.4s ease;
-}
-
-/* ── Smart days-to-expire ring (status hero) ───────────────── */
-.ringWrap {
-  position: relative;
-  width: 136px;
-  height: 136px;
-  margin-bottom: 4px;
-}
-.ringCenter {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-}
-.ringDays {
-  font-size: 2.6rem;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-.ringLabel {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-tertiary);
-}
-
-/* ── Payment history ───────────────────────────────────────── */
-.payList {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  font-size: var(--type-small);
+  color: var(--text-secondary);
 }
-.payRow {
+
+.warningList li {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-default);
+  align-items: flex-start;
+  gap: var(--space-2);
 }
-.payInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.payDate {
-  font-size: var(--type-body);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.payMeta {
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.payDot {
-  opacity: 0.5;
-}
-.payRef {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-.payRight {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
+
+.warningList li::before {
+  content: "✕";
+  color: var(--color-error);
+  font-weight: 700;
   flex-shrink: 0;
 }
-.payAmount {
-  font-size: var(--type-body);
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
+
+/* ═════════════════════════════════════════════════════════
+   RESPONSIVO
+   ═════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .hero {
+    padding: var(--space-6);
+    gap: var(--space-5);
+  }
+
+  .heroTop {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--space-5);
+  }
+
+  .heroCopy { align-items: center; }
+
+  .heroActions {
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
+  }
+
+  .heroActions > button { width: 100%; }
+
+  .facts {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+    padding-top: var(--space-5);
+  }
+
+  .rowSection { align-items: stretch; }
+  .rowSection > button { width: 100%; }
+
+  /* No mobile o valor sobe para a primeira linha e a referência quebra
+     livremente — nada estoura a largura do card. */
+  .payAmount { margin-left: auto; }
+  .payReceipt { margin-left: auto; }
+
+  .quietZone {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    gap: var(--space-3);
+  }
 }
-.payReceipt {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--accent);
-  background: rgba(45, 212, 191, 0.08);
-  border: 1px solid var(--accent-border);
-  padding: 5px 11px;
-  border-radius: 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--motion-fast);
-}
-.payReceipt:hover {
-  background: rgba(45, 212, 191, 0.16);
+
+@media (max-width: 380px) {
+  .facts { grid-template-columns: 1fr; }
 }

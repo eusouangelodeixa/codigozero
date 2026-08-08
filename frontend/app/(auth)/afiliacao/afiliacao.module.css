@@ -1,102 +1,212 @@
+/* ═══════════════════════════════════════════════════════════
+   AFILIAÇÃO — Programa de Afiliados
+   Premium Dark Terminal. Hierarquia: label-caps → headline → corpo.
+   Nada de gradiente decorativo, nada de px cru de espaçamento.
+   ═══════════════════════════════════════════════════════════ */
+
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  min-width: 0;
 }
 
-.heroBlock {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
+/* ── Primitivos compartilhados ──────────────────────────── */
 
-.heroTitle {
-  font-size: var(--type-h2);
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-
-.bullets {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.bullets li {
-  font-size: var(--type-small);
+/* Label-caps do padrão de hierarquia (label → headline → corpo).
+   text-secondary, não tertiary: 11px em caps precisa de contraste. */
+.eyebrow {
+  font-size: var(--type-label);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  line-height: 1.6;
-}
-.bullets strong { color: var(--text-primary); }
-.bullets em { color: var(--accent); font-style: normal; }
-
-.heroActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
 }
 
-.secondaryLink {
+.currency {
+  font-size: 0.42em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  margin-left: var(--space-2);
+  opacity: 0.65;
+}
+
+/* Link "pasta de criativos" — vive nas actions do PageHeader. */
+.ghostLink {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-4);
   border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: var(--type-small);
   font-weight: 500;
-  text-decoration: none;
-  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
+  transition: background var(--motion-fast), color var(--motion-fast),
+    border-color var(--motion-fast);
 }
-.secondaryLink:hover {
+.ghostLink:hover {
   background: var(--bg-glass);
   border-color: var(--accent-border);
   color: var(--accent);
 }
 
+/* Fineprint — UMA única ocorrência por tela, sempre no rodapé. */
 .fineprint {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  line-height: 1.55;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 82ch;
+}
+.fineprint strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
-/* ── Link card ── */
-.linkCardInner {
-  display: flex;
+/* ═══════════════════════════════════════════════════════════
+   ESTADO 1 — Não inscrito (a oferta em poucos segundos)
+   ═══════════════════════════════════════════════════════════ */
+
+.pitch {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: var(--space-8);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
 }
 
-.linkLeft {
+.pitchMain {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  flex: 1;
+  gap: var(--space-4);
   min-width: 0;
 }
 
-.linkLabel {
-  font-size: 10.5px;
+.pitchValue {
+  font-size: var(--type-hero);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.pitchLead {
+  font-size: var(--type-body);
+  color: var(--text-secondary);
+  line-height: 1.65;
+  max-width: 46ch;
+}
+.pitchLead strong {
+  color: var(--text-primary);
   font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+}
+
+.pitchActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-glass);
+  min-width: 0;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+.fact:last-child {
+  border-bottom: none;
+}
+
+.factValue {
+  font-size: var(--type-h3);
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.factLabel {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ESTADO 2 — Inscrito
+   Herói = saldo sacável + link. O resto é secundário.
+   ═══════════════════════════════════════════════════════════ */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: var(--grid-gap);
+  align-items: stretch;
+}
+
+/* Dupla classe = especificidade suficiente para vencer .card
+   independente da ordem de injeção dos CSS Modules. */
+.payoutCard.payoutCard {
+  background: var(--accent-glow);
+  border-color: var(--accent-border);
+}
+
+.payoutInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  min-width: 0;
+}
+
+.payoutValue {
+  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.payoutHint {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.payoutAction {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.linkInner {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  height: 100%;
+  min-width: 0;
 }
 
 .linkBox {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 10px 14px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   background: var(--bg-glass);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -105,6 +215,7 @@
 
 .linkText {
   flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--type-mono);
   color: var(--text-primary);
@@ -113,203 +224,317 @@
   text-overflow: ellipsis;
 }
 
-.codeLine {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-.codeLine strong {
-  font-family: var(--font-mono);
-  color: var(--accent);
-  letter-spacing: 0.05em;
-}
-
-.creativesLink {
-  display: inline-flex;
+.linkMeta {
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
+  flex-wrap: wrap;
   font-size: var(--type-small);
-  font-weight: 500;
   color: var(--text-secondary);
-  text-decoration: none;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 }
-.creativesLink:hover {
-  background: var(--bg-glass);
+
+.codeChip {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   color: var(--accent);
-  border-color: var(--accent-border);
 }
 
-/* ── Stats grid ── */
-.statsGrid {
+/* ── Faixa de números secundários ───────────────────────── */
+
+.statsRow {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--grid-gap);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.statBlock {
+.stat {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-6);
+  border-right: 1px solid var(--border-subtle);
+  min-width: 0;
 }
-
-.statLabel {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
+.stat:last-child {
+  border-right: none;
 }
 
 .statValue {
-  font-size: 1.5rem;
+  font-size: var(--type-h2);
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.02em;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
-}
-
-.statValueAccent {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .statHint {
-  font-size: 11px;
-  color: var(--text-tertiary);
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  line-height: 1.45;
 }
 
-/* ── Withdraw CTA + form ── */
-.withdrawCta {
+/* ── Cabeçalho de card (título + controles) ─────────────── */
+
+.cardHead {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.withdrawForm {
-  display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--card-padding);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.sectionTitle {
+.cardTitle {
   font-size: var(--type-h3);
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
-  margin: 0;
 }
 
-.formRow {
+/* ── Formulário de saque ────────────────────────────────── */
+
+.withdrawInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.formGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
-.label {
-  font-size: 12.5px;
-  font-weight: 600;
+.methodRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.fieldLabel {
+  font-size: var(--type-label);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  display: block;
-  margin-bottom: 6px;
 }
 
 .segment {
   display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
   background: var(--bg-glass);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: 2px;
 }
 
 .segmentItem {
-  border: none;
+  min-height: 40px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-sm);
   background: transparent;
-  padding: 8px 14px;
+  color: var(--text-secondary);
   font-size: var(--type-small);
   font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 6px;
   transition: background var(--motion-fast), color var(--motion-fast);
 }
-.segmentItem:hover { color: var(--text-primary); }
+.segmentItem:hover {
+  color: var(--text-primary);
+}
 
 .segmentActive {
   background: var(--accent-dim);
   color: var(--accent);
 }
 
+/* Cotação ao vivo da taxa — pequeno extrato antes de confirmar. */
 .quote {
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  background: var(--accent-dim);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  background: var(--accent-glow);
   border: 1px solid var(--accent-border);
-  color: var(--accent);
-  font-size: var(--type-small);
+  border-radius: var(--radius-md);
 }
-.quote strong { color: var(--accent); font-weight: 700; }
 
-/* ── Tables ── */
+.quoteRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+}
+.quoteRow dd {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.quoteTotal {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--accent-border);
+}
+.quoteTotal dt {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: var(--type-body);
+}
+.quoteTotal dd {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: var(--type-h3);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* ── Tabelas (histórico + indicações) ───────────────────── */
+
+/* O card recorta; o wrapper rola. Nunca estoura a página. */
+.tableCard {
+  overflow: hidden;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Sem min-width artificial: as células são `nowrap`, então a própria tabela
+   define a largura mínima e o wrapper rola só quando realmente precisa. */
 .table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--type-small);
 }
+
 .table thead th {
   text-align: left;
-  font-size: 10.5px;
+  font-size: var(--type-label);
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-tertiary);
-  padding: 8px 10px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
 }
+
 .table tbody td {
-  padding: 10px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+  white-space: nowrap;
 }
-.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+.table tbody tr:hover td {
+  background: var(--bg-glass);
+}
 
-/* ── Responsive ── */
-@media (max-width: 1024px) {
-  .statsGrid { grid-template-columns: repeat(2, 1fr); }
-  .formRow { grid-template-columns: 1fr 1fr; }
+.table th:first-child,
+.table td:first-child {
+  padding-left: var(--card-padding);
+}
+.table th:last-child,
+.table td:last-child {
+  padding-right: var(--card-padding);
+}
+
+.num {
+  text-align: right;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: normal;
+  min-width: 10rem;
+}
+
+.emptyWrap {
+  padding: var(--space-6) var(--card-padding);
+}
+
+/* ── Loading ────────────────────────────────────────────── */
+
+.skelStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVO
+   ═══════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  .pitch {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 640px) {
-  .statsGrid { grid-template-columns: 1fr 1fr; }
-  .formRow { grid-template-columns: 1fr; }
-  .linkCardInner { flex-direction: column; align-items: stretch; }
-  .table thead { display: none; }
-  .table tbody tr {
-    display: flex;
-    flex-direction: column;
-    padding: 12px 0;
+  .statsRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stat {
+    padding: var(--space-4) var(--card-padding);
+    border-right: none;
     border-bottom: 1px solid var(--border-subtle);
   }
-  .table tbody td { border-bottom: none; padding: 4px 0; }
-  .table tbody td::before {
-    content: attr(data-label);
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-tertiary);
-    display: block;
-    margin-bottom: 2px;
+  .stat:last-child {
+    border-bottom: none;
+  }
+  .formGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cardHead {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .pitchActions > * {
+    width: 100%;
+  }
+  .formActions > * {
+    width: 100%;
   }
 }
 
 @media (max-width: 480px) {
-  .statsGrid { grid-template-columns: 1fr; }
-  .statValue, .statValueAccent { font-size: 1.25rem; }
+  .linkBox {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+  .linkBox > button {
+    width: 100%;
+  }
+  .segment {
+    width: 100%;
+  }
+  .segmentItem {
+    flex: 1;
+    padding: 0 var(--space-3);
+  }
 }

@@ -1568,7 +1568,10 @@ router.post('/komunika-test', async (req: AuthRequest, res: Response) => {
       },
       {
         scenario: type === 'visitor' ? 'visitor' : 'checkout',
-        checkoutUrl: 'https://pay.lojou.app/token/49_Oqg8fBHum',
+        // Link permanente, como nos envios reais — o de teste era um /token/
+        // colado à mão, que já expirou há muito e mostrava ao admin uma
+        // mensagem com link morto.
+        checkoutUrl: lojouCheckoutUrl(env.LOJOU_PRODUCT_PID),
         orderId: 'TESTE-0001',
       },
     );

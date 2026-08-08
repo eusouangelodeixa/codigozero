@@ -1,4 +1,6 @@
 import { sendWhatsAppMessage } from '../lib/whatsapp';
+import { lojouCheckoutUrl, isPermanentCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
+import { env } from '../config/env';
 
 /**
  * Shared customer-lifecycle messaging, so Lojou and Stripe behave identically.
@@ -15,6 +17,21 @@ type LifecycleUser = {
 };
 
 const firstName = (name?: string | null) => (name || 'membro').split(' ')[0];
+
+/**
+ * Link de checkout seguro para uso ASSÍNCRONO.
+ *
+ * O `renewalUrl`/`checkoutUrl` guardado no utilizador costuma ser um link
+ * `/token/`, que expira em ~4h — e estas mensagens (SDR, recuperação,
+ * cancelamento) chegam horas ou dias depois, com o lead a abrir um link morto.
+ * Só reaproveitamos o guardado quando é permanente; caso contrário caímos no
+ * checkout público do produto. Ver [[lojou-checkout-link-types]].
+ */
+function safeCheckoutUrl(user: LifecycleUser | null | undefined): string {
+  const stored = user?.renewalUrl || user?.checkoutUrl || '';
+  if (isPermanentCheckoutUrl(stored)) return normalizeLojouCheckoutUrl(stored);
+  return lojouCheckoutUrl(env.LOJOU_PRODUCT_PID);
+}
 
 /**
  * Build the Komunika `customFields` payload from a user's quiz answers, so a
@@ -34,7 +51,7 @@ export function buildSurveyCustomFields(
     experience: sa.experience || '',
     budget: sa.budget || '',
     urgency: sa.urgency || '',
-    checkout_url: user?.renewalUrl || user?.checkoutUrl || '',
+    checkout_url: safeCheckoutUrl(user),
     ...extra,
   };
 }

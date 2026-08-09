@@ -16,6 +16,7 @@ import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.
 import { processOnboardingNudges, processSaveContactReminders } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
 import { lojouCheckoutUrl, isPermanentCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
+import { reconcilePendingOrders, reconcileMissingApproved } from '../services/lojouReconcile';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -499,100 +500,21 @@ export function startCronJobs() {
     }
   });
 
-  // ── Lojou Conciliation (01:00 daily) ──
+  // ── Conciliação com a Lojou (01:00) ──
+  // A versão antiga filtrava as encomendas por `o.product_pid`, campo que a
+  // LISTA da Lojou nunca devolve — logo descartava tudo e nunca conciliou nada.
+  // A lógica correcta (confirmar o produto no DETALHE de cada encomenda, porque
+  // a conta é partilhada com outros produtos) vive agora em services/lojouReconcile.
   cron.schedule('0 1 * * *', async () => {
-    console.log('[CRON] 🔄 Running Lojou conciliation...');
-
-    const LOJOU_API = `${process.env.LOJOU_API_URL || 'https://api.lojou.app'}/v1`;
-    const LOJOU_KEY = process.env.LOJOU_API_KEY;
-    const LOJOU_PRODUCT_PID = process.env.LOJOU_PRODUCT_PID;
-
-    if (!LOJOU_KEY) {
-      console.log('[CRON] ⚠️ No Lojou API key — skipping conciliation');
-      return;
-    }
-
     try {
-      // Fetch approved orders from Lojou
-      const res = await fetch(`${LOJOU_API}/orders?status=approved&per_page=100`, {
-        headers: { 'Authorization': `Bearer ${LOJOU_KEY}` },
-      });
-
-      if (!res.ok) {
-        console.warn(`[CRON] Lojou orders fetch failed: ${res.status}`);
-        return;
-      }
-
-      const data = await res.json();
-      const allOrders = data.data || data.orders || [];
-
-      // Filter to only include orders from THIS product (Código Zero)
-      const lojouOrders = LOJOU_PRODUCT_PID
-        ? allOrders.filter((o: any) => {
-            const pid = o.product_pid || o.product?.pid || o.productPid || '';
-            return pid === LOJOU_PRODUCT_PID;
-          })
-        : allOrders;
-
-      console.log(`[CRON] Lojou: ${allOrders.length} total orders, ${lojouOrders.length} for product ${LOJOU_PRODUCT_PID || 'ALL'}`);
-
-      let fixed = 0;
-      let mismatches = 0;
-
-      for (const order of lojouOrders) {
-        const orderId = String(order.id || order.order_number);
-        const email = order.customer?.email;
-        const phone = order.customer?.phone || order.customer?.cellphone;
-
-        // Check if we have this transaction
-        const localTx = await prisma.transaction.findUnique({ where: { orderId } });
-
-        if (!localTx) {
-          // Missing transaction — webhook was lost
-          console.log(`[CRON] 🔧 Missing order ${orderId} (${email}) — creating...`);
-
-          // Find or create user
-          let user = null;
-          if (email) user = await prisma.user.findUnique({ where: { email } });
-          if (!user && phone) user = await prisma.user.findFirst({ where: { phone } });
-
-          if (user && user.subscriptionStatus !== 'active') {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: {
-                subscriptionStatus: 'active',
-                isActive: true,
-                subscriptionEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                lojouOrderId: orderId,
-              },
-            });
-            console.log(`[CRON] ✅ Reactivated ${email} from conciliation`);
-            fixed++;
-          }
-
-          // Record the transaction
-          await prisma.transaction.create({
-            data: {
-              orderId,
-              userEmail: email,
-              userPhone: phone,
-              userName: order.customer?.name || 'Conciliation',
-              amount: order.amount || (await getActivePrice()),
-              status: 'approved',
-              paymentMethod: 'conciliation',
-              metadata: order,
-            },
-          }).catch(() => {}); // ignore duplicate
-        } else if (localTx.status !== 'approved') {
-          // Status mismatch
-          console.warn(`[CRON] ⚠️ Mismatch: order ${orderId} is approved at Lojou but ${localTx.status} locally`);
-          mismatches++;
-        }
-      }
-
-      console.log(`[CRON] ✅ Conciliation done — ${fixed} fixed, ${mismatches} mismatches, ${lojouOrders.length} total orders checked`);
+      const pend = await reconcilePendingOrders();
+      const miss = await reconcileMissingApproved();
+      console.log(
+        `[CRON] 🔄 Conciliação Lojou — pendentes verificados: ${pend.checked}, fechados: ${pend.settled}, ` +
+        `aprovados recuperados: ${pend.approvedFound + miss.approvedFound}, alertas: ${pend.alerts + miss.alerts}`,
+      );
     } catch (error) {
-      console.error('[CRON] ❌ Lojou conciliation failed:', error);
+      console.error('[CRON] ❌ Conciliação Lojou falhou:', error);
     }
   });
 

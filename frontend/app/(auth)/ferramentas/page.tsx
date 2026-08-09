@@ -74,6 +74,10 @@ const PRIMEIROS_PASSOS: { n: string; icon: LucideIcon; title: string; text: stri
 export default function FerramentasPage() {
   const toast = useToast();
   const [komunikaActive, setKomunikaActive] = useState(false);
+  // Sem Komunika há DOIS casos diferentes, e tratá-los igual confundia:
+  // quem assina e ainda está a ser provisionado ("preparando"), e quem entrou
+  // só por um curso, que nunca terá — esse precisa é de conhecer o produto.
+  const [assinante, setAssinante] = useState(false);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
 
@@ -82,7 +86,12 @@ export default function FerramentasPage() {
   useEffect(() => {
     fetch(`${API}/api/auth/me`, { headers: hdr() })
       .then((r) => r.json())
-      .then((d) => { if (d?.user) setKomunikaActive(!!d.user.komunikaActive); })
+      .then((d) => {
+        if (d?.user) {
+          setKomunikaActive(!!d.user.komunikaActive);
+          setAssinante(["active", "grace_period"].includes(String(d.user.subscriptionStatus || "")));
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -153,8 +162,10 @@ export default function FerramentasPage() {
                 <Badge variant="neutral" size="sm">Verificando…</Badge>
               ) : komunikaActive ? (
                 <Badge variant="accent" size="sm" dot>Ativo</Badge>
-              ) : (
+              ) : assinante ? (
                 <Badge variant="warning" size="sm" dot pulse>Preparando</Badge>
+              ) : (
+                <Badge variant="neutral" size="sm">Não incluído</Badge>
               )}
             </span>
           </div>
@@ -192,25 +203,44 @@ export default function FerramentasPage() {
           </div>
 
           <div className={styles.ctaRow}>
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={openKomunika}
-              disabled={loading || opening || !komunikaActive}
-              iconStart={opening ? <Loader2 size={16} className={styles.spin} /> : undefined}
-              iconEnd={opening ? undefined : <ExternalLink size={16} />}
-            >
-              {opening ? "Abrindo…" : "Abrir Komunika"}
-            </Button>
+            {komunikaActive || assinante ? (
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={openKomunika}
+                disabled={loading || opening || !komunikaActive}
+                iconStart={opening ? <Loader2 size={16} className={styles.spin} /> : undefined}
+                iconEnd={opening ? undefined : <ExternalLink size={16} />}
+              >
+                {opening ? "Abrindo…" : "Abrir Komunika"}
+              </Button>
+            ) : (
+              // Sem direito à ferramenta: em vez de um botão morto, leva ao
+              // site do Komunika para conhecer e assinar.
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={() => { window.location.href = "https://komunika.site"; }}
+                iconEnd={<ExternalLink size={16} />}
+              >
+                Conhecer o Komunika
+              </Button>
+            )}
             <span className={styles.ctaHint}>
-              Abre logado com a sua conta do Código Zero — sem login extra.
+              {komunikaActive || assinante
+                ? "Abre logado com a sua conta do Código Zero — sem login extra."
+                : "Incluído para quem assina o Código Zero."}
             </span>
           </div>
 
           {!loading && !komunikaActive && (
             <p className={styles.note}>
               <Info size={15} strokeWidth={1.8} aria-hidden />
-              <span>Seu acesso está sendo preparado — tente novamente em alguns minutos.</span>
+              <span>
+                {assinante
+                  ? "Seu acesso está sendo preparado — tente novamente em alguns minutos."
+                  : "O Komunika não faz parte do seu acesso atual. Ele vem incluído na assinatura do Código Zero."}
+              </span>
             </p>
           )}
         </div>

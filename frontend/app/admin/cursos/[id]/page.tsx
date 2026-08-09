@@ -41,6 +41,7 @@ type Mod = {
 type Course = {
   id: string; name: string; slug: string; status: string; modules: Mod[];
   accessType?: string; productPid?: string | null; webhookToken?: string | null;
+  includedTools?: string[] | null;
 };
 
 function UploadBtn({
@@ -302,6 +303,27 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
               </p>
             </div>
           )}
+        </div>
+
+        <div className={styles.formGroup} style={{ marginTop: 4 }}>
+          <label className={styles.formLabel}>Ferramentas que este curso libera</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 4 }}>
+            <input
+              type="checkbox"
+              checked={course.includedTools === null || course.includedTools === undefined
+                ? true
+                : course.includedTools.includes("komunika")}
+              onChange={(e) =>
+                saveAccess({ includedTools: e.target.checked ? ["komunika"] : [] })
+              }
+            />
+            <span>Komunika (automação de WhatsApp)</span>
+          </label>
+          <p className={styles.formHint}>
+            Desmarque para turmas que compraram só o curso. Sem isto, o aluno vê no lugar do botão um convite para
+            conhecer o Komunika — e passa a ter a ferramenta no dia em que assinar o Código Zero. Não mexe em quem já
+            é assinante.
+          </p>
         </div>
 
         {(course.accessType || "subscription") === "paid" && (

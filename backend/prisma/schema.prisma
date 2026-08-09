@@ -249,6 +249,12 @@ model Course {
   // pago NÃO pode usar o webhook principal: aquele não valida pid nenhum e
   // trataria a compra como assinatura completa da plataforma.
   webhookToken String? @unique
+  // Ferramentas da plataforma que um aluno GANHA por entrar neste curso.
+  // null = tudo (é o comportamento de sempre — não mexer nos cursos que já
+  // existem). Lista vazia = nenhuma. Ex.: ["komunika"].
+  // Serve para turmas que compram só o curso: o COD, por exemplo, não dá
+  // Komunika; para ter, a pessoa assina o Código Zero à parte.
+  includedTools Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -87,6 +87,18 @@ export async function bulkEnroll(args: {
   batch?: string | null;
 }): Promise<BulkResult> {
   const result: BulkResult = { total: args.entries.length, created: 0, reused: 0, skipped: [] };
+
+  // `includedTools` nulo = tudo incluído (comportamento histórico dos cursos
+  // que já existiam). Lista presente = só o que estiver lá dentro.
+  let incluiKomunika = true;
+  if (args.courseId) {
+    const curso = await prisma.course.findUnique({
+      where: { id: args.courseId },
+      select: { includedTools: true },
+    });
+    const tools = curso?.includedTools as unknown;
+    if (Array.isArray(tools)) incluiKomunika = tools.map(String).includes('komunika');
+  }
   const agora = new Date();
   const fim = args.platformDays > 0
     ? new Date(agora.getTime() + args.platformDays * 24 * 60 * 60 * 1000)
@@ -158,8 +170,10 @@ export async function bulkEnroll(args: {
         });
       }
 
-      // Mesmo tenant Komunika que uma compra normal provisiona.
-      if (fim) {
+      // Komunika só se o curso da turma o incluir. Uma turma que comprou
+      // apenas o curso (COD) não ganha a ferramenta — para a ter, assina o
+      // Código Zero à parte, e aí o fluxo normal provisiona.
+      if (fim && incluiKomunika) {
         void syncKomunikaOnApprovedOrder(user.id).catch((e) =>
           console.error('[TURMA] komunika falhou:', e?.message || e),
         );

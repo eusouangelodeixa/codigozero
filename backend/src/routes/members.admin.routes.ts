@@ -164,12 +164,16 @@ router.get('/courses/:id', async (req: AuthRequest, res: Response) => {
 router.patch('/courses/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { name, slug, status, sortOrder, coverUrl, config, accessType, productPid } = req.body || {};
+    const { name, slug, status, sortOrder, coverUrl, config, accessType, productPid, includedTools } = req.body || {};
     const data: Record<string, unknown> = {};
     // 'paid' = vendido à parte (só entra quem tem CourseAccess);
     // 'subscription' = incluído no plano, como sempre foi.
     if (accessType === 'paid' || accessType === 'subscription') data.accessType = accessType;
     if (productPid !== undefined) data.productPid = String(productPid || '').trim() || null;
+    // null = tudo (não mexe nos cursos antigos); array = só o que estiver lá.
+    if (includedTools !== undefined) {
+      data.includedTools = Array.isArray(includedTools) ? includedTools.map(String) : null;
+    }
     if (typeof name === 'string' && name.trim()) data.name = name.trim();
     if (typeof slug === 'string' && slug.trim()) data.slug = await uniqueCourseSlug(slug, id);
     if (status === 'draft' || status === 'published') data.status = status;

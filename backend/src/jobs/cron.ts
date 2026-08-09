@@ -17,6 +17,7 @@ import { processOnboardingNudges, processSaveContactReminders } from '../service
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
 import { lojouCheckoutUrl, isPermanentCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
 import { reconcilePendingOrders, reconcileMissingApproved } from '../services/lojouReconcile';
+import { processCredentialDeliveries } from '../services/credentialDelivery.service';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -876,6 +877,18 @@ export function startCronJobs() {
     }
   });
   console.log('[CRON] ⏰ Save-contact reminder tick (every 5min)');
+
+  // ── Fila de credenciais de turma (a cada minuto, 1 por vez) ──
+  // E-mail primeiro; WhatsApp só quando a quota do dia acaba, e aí com 15–20
+  // min entre pessoas (o número é partilhado — rajada = ban).
+  cron.schedule('* * * * *', async () => {
+    try {
+      await processCredentialDeliveries();
+    } catch (error) {
+      console.error('[CRON] Fila de credenciais falhou:', error);
+    }
+  });
+  console.log('[CRON] ⏰ Fila de entrega de credenciais (1/min)');
 
   // ── Feedback pós-compra: enrollment (a cada 30min, NUNCA envia) ──
   // Enfileira compradores no D+14/D+21 com dueAts pré-escalonados 30–60min.

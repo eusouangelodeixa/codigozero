@@ -159,6 +159,7 @@ model User {
   leads              Lead[]
   lessonProgress     LessonProgress[]
   courseAccesses     CourseAccess[]
+  credentialDelivery CredentialDelivery?
   chatMessages       ChatMessage[]      @relation("ChatSender")
   messageReactions   MessageReaction[]
   pinnedMessages     ChatMessage[]      @relation("ChatPinnedBy")
@@ -264,6 +265,39 @@ model Course {
 ///
 /// Cobre a turma de mentoria (curso vitalício + 1 mês de plataforma) e os
 /// cursos vendidos à parte (a compra cria a linha).
+/// Fila de entrega de credenciais.
+///
+/// Existe porque uma turma inteira não pode receber tudo de uma vez: o e-mail
+/// tem tecto diário e o WhatsApp sai por um número partilhado, onde uma rajada
+/// é o caminho curto para o ban. A entrega passa a ser assíncrona e persistida
+/// — sobrevive a restart, ao contrário de um laço em memória, e uma turma
+/// grande pode demorar horas (ou dias, no WhatsApp) sem perder ninguém.
+///
+/// A senha NÃO é guardada aqui de propósito: é gerada no momento do envio e
+/// gravada no utilizador nesse instante. Guardar credenciais em claro à espera
+/// numa tabela seria pior do que o problema que resolve.
+model CredentialDelivery {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// email | whatsapp — começa sempre em email; só cai para whatsapp quando a
+  /// quota diária de e-mail acaba.
+  channel   String   @default("email")
+  /// pending | sent | failed
+  status    String   @default("pending")
+  attempts  Int      @default(0)
+  /// Quando pode sair. No WhatsApp é espaçado 15–20 min entre pessoas.
+  dueAt     DateTime @default(now())
+  sentAt    DateTime?
+  lastError String?
+  /// Rótulo da origem (ex.: "turma-cod") — para o admin saber de onde veio.
+  batch     String?
+  createdAt DateTime @default(now())
+
+  @@index([status, dueAt])
+}
+
 model CourseAccess {
   id          String    @id @default(uuid())
   userId      String
@@ -447,6 +481,18 @@ model SystemConfig {
   metaPixelId              String?
   metaCapiToken            String?
   metaTestEventCode        String?
+
+  // ── Orçamento diário de e-mail (Resend) ───────────────────────────────
+  // A entrega de credenciais de uma turma vai TODA por e-mail primeiro; o
+  // WhatsApp é o plano B, porque o número é partilhado e uma rajada leva ban.
+  // `emailQuotaDate` é o dia (YYYY-MM-DD) a que `emailQuotaUsed` se refere —
+  // muda o dia, o contador zera sozinho. `emailQuotaExhausted` é ligado
+  // quando o próprio Resend recusa por limite (429), mesmo antes do contador
+  // bater no tecto.
+  emailDailyLimit          Int      @default(100)
+  emailQuotaDate           String?
+  emailQuotaUsed           Int      @default(0)
+  emailQuotaExhausted      Boolean  @default(false)
 
   // ── Suporte: janela de atendimento ────────────────────────────────────
   // O horário é o COMERCIAL BRASILEIRO (UTC-3, sem horário de verão desde

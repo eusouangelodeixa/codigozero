@@ -56,6 +56,12 @@ export async function sendEmail(opts: {
     });
 
     const data = await res.json().catch(() => null);
+    // Limite da conta atingido: fecha o e-mail para o resto do dia, para a
+    // fila de credenciais passar a WhatsApp em vez de bater na parede.
+    if (res.status === 429) {
+      const { markEmailQuotaExhausted } = await import('../services/credentialDelivery.service');
+      void markEmailQuotaExhausted();
+    }
     if (res.ok) {
       const to = Array.isArray(opts.to) ? opts.to.join(',') : opts.to;
       console.log(`[EMAIL] ✅ Sent to ${to} (id=${data?.id ?? 'n/a'})`);

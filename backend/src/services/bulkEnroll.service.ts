@@ -1,11 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { grantCourseAccess } from './courseAccess.service';
 import { normalizeMzPhone, sendWhatsAppMessage } from '../lib/whatsapp';
-import {
-  generateUserPassword,
-  sendCredentialsEmail,
-  sendCredentialsViaWhatsApp,
-} from './payment.service';
+import { generateUserPassword } from './payment.service';
+import { enqueueCredentialDelivery } from './credentialDelivery.service';
 import { scheduleSaveContactReminder } from './onboarding.service';
 import { syncKomunikaOnApprovedOrder } from './komunika.service';
 import { randomUUID } from 'crypto';
@@ -68,16 +65,13 @@ export function parseBulkList(raw: string): { entries: BulkEntry[]; skipped: Bul
   return { entries, skipped };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 /**
  * Cria/actualiza os alunos e concede os acessos.
  *
- * As credenciais são enviadas em segundo plano, ESPAÇADAS: o número da
- * Komunika é partilhado por toda a operação e um disparo em rajada para uma
- * turma inteira é o caminho mais curto para levar ban (ver a pauta de pacing
- * dos outros envios). Por isso o endpoint responde assim que as contas
- * existem, e as mensagens saem devagar a seguir.
+ * As credenciais NÃO saem daqui: cada aluno entra numa fila persistida
+ * (credentialDelivery.service), que entrega por e-mail primeiro e só recorre
+ * ao WhatsApp quando a quota diária de e-mail acaba. O endpoint responde
+ * assim que as contas existem.
  */
 export async function bulkEnroll(args: {
   entries: BulkEntry[];
@@ -89,6 +83,8 @@ export async function bulkEnroll(args: {
   /** Código do coprodutor a vincular (comissões futuras + link de renovação). */
   coproducerCode?: string | null;
   grantedById?: string | null;
+  /** Rótulo da leva, para o admin identificar a origem na fila. */
+  batch?: string | null;
 }): Promise<BulkResult> {
   const result: BulkResult = { total: args.entries.length, created: 0, reused: 0, skipped: [] };
   const agora = new Date();
@@ -96,7 +92,7 @@ export async function bulkEnroll(args: {
     ? new Date(agora.getTime() + args.platformDays * 24 * 60 * 60 * 1000)
     : null;
 
-  const paraEnviar: Array<{ name: string; email: string; phone: string; rawPassword: string }> = [];
+  const paraEnviar: Array<{ userId: string }> = [];
 
   for (let i = 0; i < args.entries.length; i++) {
     const entry = args.entries[i];
@@ -170,7 +166,7 @@ export async function bulkEnroll(args: {
       }
       void scheduleSaveContactReminder(user.id).catch(() => {});
 
-      paraEnviar.push({ name: user.name, email: user.email, phone, rawPassword: raw });
+      paraEnviar.push({ userId: user.id });
     } catch (err: any) {
       result.skipped.push({
         line: i + 1,
@@ -180,18 +176,13 @@ export async function bulkEnroll(args: {
     }
   }
 
-  // Envio espaçado, fora do ciclo do pedido.
-  void (async () => {
-    for (let i = 0; i < paraEnviar.length; i++) {
-      const p = paraEnviar[i];
-      void sendCredentialsEmail({ name: p.name, email: p.email, rawPassword: p.rawPassword }).catch(() => {});
-      if (p.phone) {
-        await sendCredentialsViaWhatsApp({ phone: p.phone, email: p.email, rawPassword: p.rawPassword }).catch(() => {});
-      }
-      if (i < paraEnviar.length - 1) await sleep(20000 + Math.floor(Math.random() * 25000));
-    }
-    console.log(`[TURMA] credenciais entregues a ${paraEnviar.length} aluno(s)`);
-  })();
+  // Entrega assíncrona e persistida: e-mail primeiro, WhatsApp só quando a
+  // quota do dia acaba (ver credentialDelivery.service). A senha de cada um é
+  // gerada no momento do envio, não aqui — por isso não guardamos nada.
+  for (const p of paraEnviar) {
+    await enqueueCredentialDelivery(p.userId, args.batch || 'turma');
+  }
+  console.log(`[TURMA] ${paraEnviar.length} aluno(s) na fila de entrega`);
 
   return result;
 }

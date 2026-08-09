@@ -25,6 +25,15 @@ export const metadata: Metadata = {
   },
   description: APP_DESC,
   applicationName: "Código Zero",
+  // Verificação de domínio do Meta (destrava a priorização de eventos para
+  // iOS). TEM de sair no HTML do servidor: o Meta ignora a tag se ela for
+  // inserida por JavaScript depois do carregamento — que é como os pixels são
+  // injetados aqui (ver components/TrackingInjector.tsx).
+  verification: {
+    other: {
+      "facebook-domain-verification": "oat9iv6yyix97l8arv4rbj12hyjmcm",
+    },
+  },
   authors: [{ name: "Código Zero" }],
   keywords: [
     "código zero",

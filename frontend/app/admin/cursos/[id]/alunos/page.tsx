@@ -269,7 +269,7 @@ export default function AlunosDoCurso({ params }: { params: Promise<{ id: string
         </div>
         <button
           type="button"
-          onClick={() => router.push("/admin/turma")}
+          onClick={() => router.push(`/admin/cursos/${id}/alunos/importar`)}
           style={{
             display: "block", width: "100%", marginTop: 14, background: "none", border: "none",
             color: "var(--accent)", cursor: "pointer", fontSize: 14,

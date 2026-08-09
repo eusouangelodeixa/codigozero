@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { useRouter } from "next/navigation";
 import { AdminPage, Section } from "@/components/admin";
 import k from "@/components/admin/kit.module.css";
 
@@ -12,7 +13,6 @@ const hdr = () => ({
 });
 
 type Aluno = { nome: string; email: string; whatsapp: string };
-type Curso = { id: string; name: string; status: string };
 type Coprodutor = { code: string; displayName?: string | null };
 type Resultado = {
   total: number;
@@ -49,15 +49,18 @@ function mapearColunas(cabecalho: unknown[]): Partial<Record<keyof Aluno, number
   return mapa;
 }
 
-export default function ImportarTurma() {
+export default function ImportarTurma({ params }: { params: Promise<{ id: string }> }) {
+  // O curso vem da rota: chegámos aqui de dentro dele, como na Kiwify — não
+  // faz sentido voltar a escolhê-lo numa lista.
+  const { id: cursoId } = use(params);
+  const router = useRouter();
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [aviso, setAviso] = useState<string | null>(null);
   const [nomeArquivo, setNomeArquivo] = useState<string | null>(null);
   const [colado, setColado] = useState("");
 
-  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [curso, setCurso] = useState<{ name: string } | null>(null);
   const [coprodutores, setCoprodutores] = useState<Coprodutor[]>([]);
-  const [cursoId, setCursoId] = useState("");
   const [dias, setDias] = useState(30);
   const [coprodutor, setCoprodutor] = useState("");
   const [vitalicio, setVitalicio] = useState(true);
@@ -67,15 +70,15 @@ export default function ImportarTurma() {
   const inputArquivo = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch(`${API}/api/admin/members/courses`, { headers: hdr() })
+    fetch(`${API}/api/admin/members/courses/${cursoId}`, { headers: hdr() })
       .then((r) => r.json())
-      .then((d) => setCursos(d.courses || []))
+      .then((d) => setCurso(d.course ? { name: d.course.name } : null))
       .catch(() => {});
     fetch(`${API}/api/admin/coproducers`, { headers: hdr() })
       .then((r) => r.json())
       .then((d) => setCoprodutores(d.coproducers || d.accounts || []))
       .catch(() => {});
-  }, []);
+  }, [cursoId]);
 
   /** Lê CSV, XLS ou XLSX pela mesma via — o SheetJS trata os três. */
   const lerArquivo = async (file: File) => {
@@ -167,7 +170,7 @@ export default function ImportarTurma() {
         body: JSON.stringify({
           list,
           platformDays: dias,
-          courseId: cursoId || undefined,
+          courseId: cursoId,
           courseLifetime: vitalicio,
           coproducerCode: coprodutor || undefined,
         }),
@@ -191,8 +194,14 @@ export default function ImportarTurma() {
 
   return (
     <AdminPage
-      title="Importar turma"
-      desc="Cadastra vários alunos de uma vez: acesso ao curso, tempo de plataforma e vínculo com o coprodutor."
+      eyebrow="Alunos"
+      title={curso ? `Importar alunos · ${curso.name}` : "Importar alunos"}
+      desc="Sobe a lista de uma vez: acesso ao curso, tempo de plataforma e vínculo com o coprodutor."
+      actions={
+        <button type="button" className={k.btnSecondary} onClick={() => router.push(`/admin/cursos/${cursoId}/alunos`)}>
+          ← Alunos
+        </button>
+      }
     >
       <Section title="1. O arquivo" subtitle="CSV, XLS ou XLSX. A primeira linha precisa ter os títulos das colunas.">
         <div className={k.cellMuted} style={{ marginBottom: 16, lineHeight: 1.7 }}>
@@ -308,19 +317,6 @@ export default function ImportarTurma() {
 
       <Section title="3. O que eles recebem" subtitle="O curso pode ser vitalício mesmo que a plataforma expire.">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-          <label style={{ display: "block" }}>
-            <span className={k.cellMuted}>Curso</span>
-            <select
-              value={cursoId}
-              onChange={(e) => setCursoId(e.target.value)}
-              style={{ width: "100%", marginTop: 6, padding: 10, borderRadius: "var(--radius-md)", background: "var(--bg-elevated)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-            >
-              <option value="">Nenhum (só plataforma)</option>
-              {cursos.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}{c.status !== "published" ? " (rascunho)" : ""}</option>
-              ))}
-            </select>
-          </label>
 
           <label style={{ display: "block" }}>
             <span className={k.cellMuted}>Dias de plataforma</span>

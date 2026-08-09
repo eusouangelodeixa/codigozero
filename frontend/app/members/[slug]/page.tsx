@@ -9,6 +9,7 @@ import { BannerCarousel, ContinueRow, ModuleCarousel } from "@/components/member
 import { useCourse } from "@/lib/members/useCourse";
 import { membersUser } from "@/lib/members/api";
 import { memberGo } from "@/lib/members/nav";
+import { Lock } from "lucide-react";
 
 export default function CourseHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
@@ -44,6 +45,31 @@ export default function CourseHome({ params }: { params: Promise<{ slug: string 
         }}
       >
         <BannerCarousel slides={config.home.banner.slides} />
+
+        {/* Curso pago que este aluno ainda não comprou: a estante fica à
+            vista, com cadeado nos módulos fechados, e aqui explica-se porquê.
+            Esconder o conteúdo por completo não vende nada. */}
+        {data.course.locked && (
+          <div
+            style={{
+              margin: "0 0 22px",
+              padding: "16px 18px",
+              borderRadius: 12,
+              border: "1px solid var(--accent-border, rgba(255,255,255,0.14))",
+              background: "var(--accent-dim, rgba(255,255,255,0.05))",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <Lock size={18} />
+            <div style={{ flex: 1, minWidth: 220, lineHeight: 1.6 }}>
+              <strong>Curso bloqueado.</strong>{" "}
+              As aulas de amostra estão liberadas — o resto abre depois da compra.
+            </div>
+          </div>
+        )}
         {config.home.sections.map((sec) => {
           if (sec.type === "continue") {
             return <ContinueRow key={sec.id} title={sec.title || "Continuar assistindo"} item={data.continue} onOpen={openLesson} />;

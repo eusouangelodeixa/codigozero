@@ -8,7 +8,7 @@ import { mergeMemberConfig, type MemberConfig } from "@/lib/members/defaults";
 import type { ContinueItem, MemberModule } from "@/components/members/widgets";
 
 export type CoursePayload = {
-  course: { id: string; slug: string; name: string; config: unknown };
+  course: { id: string; slug: string; name: string; config: unknown; locked?: boolean; accessType?: string };
   modules: MemberModule[];
   continue: ContinueItem;
 };

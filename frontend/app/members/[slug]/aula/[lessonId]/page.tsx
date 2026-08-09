@@ -4,7 +4,7 @@
 // Aulas|Conteúdo (mobile) e drawer de módulos (desktop). Registra
 // visualização ao abrir ({viewed:true} → continuar assistindo).
 import { use, useEffect, useState } from "react";
-import { ArrowLeft, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import k from "@/components/members/kit.module.css";
 import { ThemeVars } from "@/components/members/ThemeVars";
 import { LessonDrawer, MaterialList, StarRating, fmtDur } from "@/components/members/widgets";
@@ -52,7 +52,30 @@ export default function LessonPage({ params }: { params: Promise<{ slug: string;
       .catch((e) => setErr(e?.message || "Erro ao carregar aula"));
   }, [lessonId]);
 
-  if (err) return <div className={k.centerLoad} style={{ minHeight: "100dvh" }}>{err}</div>;
+  // O backend recusa a aula de módulo fechado (403) — sem isto o aluno via só
+  // "Erro ao carregar aula" e não entendia que era bloqueio, não avaria.
+  if (err) {
+    const bloqueada = /bloquead/i.test(err);
+    return (
+      <div className={k.centerLoad} style={{ minHeight: "100dvh", flexDirection: "column", gap: 14, textAlign: "center", padding: 24 }}>
+        {bloqueada ? (
+          <>
+            <Lock size={26} />
+            <div style={{ maxWidth: 420, lineHeight: 1.6 }}>
+              <strong>Esta aula faz parte do conteúdo pago.</strong>
+              <br />
+              As aulas de amostra continuam abertas — o resto liberta depois da compra.
+            </div>
+            <button type="button" className={k.courseBtn} onClick={() => memberGo(`/${slug}`)}>
+              Voltar ao curso
+            </button>
+          </>
+        ) : (
+          err
+        )}
+      </div>
+    );
+  }
   if (!payload || !config || !course) {
     return <div className={k.centerLoad} style={{ minHeight: "100dvh" }}>Carregando aula…</div>;
   }

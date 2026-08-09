@@ -2,7 +2,7 @@
 // Widgets de conteúdo da área de membros — todos puros/props-driven (zero
 // fetch): as páginas do aluno E o preview do editor os alimentam.
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronUp, Play, FileText, Link as LinkIcon, Download, Star } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Play, FileText, Link as LinkIcon, Download, Star, Lock } from "lucide-react";
 import k from "./kit.module.css";
 import type { MemberBannerSlide } from "@/lib/members/defaults";
 
@@ -16,6 +16,8 @@ export type MemberLesson = {
   rating?: number | null;
 };
 export type MemberModule = {
+  /** Fechado para este aluno (curso pago que ele ainda não comprou). */
+  locked?: boolean;
   id: string;
   title: string;
   description?: string | null;
@@ -117,6 +119,13 @@ export function ModuleCarousel({
                 <img className={k.posterImg} src={m.coverUrl} alt={m.title} />
               ) : (
                 <div className={k.posterFallback}>{m.title}</div>
+              )}
+              {/* Mostrar o que está fechado (em vez de esconder) é o que dá
+                  vontade de comprar — a estante fica visível, o conteúdo não. */}
+              {m.locked && (
+                <span className={k.posterLock} aria-label="Bloqueado">
+                  <Lock size={18} />
+                </span>
               )}
               <div className={k.posterBar}>
                 <div className={k.posterBarFill} style={{ width: `${pct}%` }} />
@@ -331,7 +340,10 @@ export function CourseCard({
   onOpen,
   previewMode,
 }: {
-  course: { slug: string; name: string; coverUrl?: string | null; pct?: number; totalLessons?: number };
+  course: {
+    slug: string; name: string; coverUrl?: string | null; pct?: number; totalLessons?: number;
+    locked?: boolean;
+  };
   onOpen?: (slug: string) => void;
   previewMode?: boolean;
 }) {
@@ -345,7 +357,7 @@ export function CourseCard({
       <div className={k.courseBody}>
         <h3 className={k.courseTitle}>{course.name}</h3>
         <button type="button" className={k.courseBtn} onClick={() => !previewMode && onOpen?.(course.slug)}>
-          Acessar <Play size={15} fill="currentColor" />
+          {course.locked ? (<>Ver o curso <Lock size={14} /></>) : (<>Acessar <Play size={15} fill="currentColor" /></>)}
         </button>
         {typeof course.pct === "number" && course.totalLessons ? (
           <>

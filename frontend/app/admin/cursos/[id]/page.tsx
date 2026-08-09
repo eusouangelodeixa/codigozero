@@ -34,10 +34,14 @@ type Mod = {
   title: string;
   description?: string | null;
   coverUrl?: string | null;
+  isFree?: boolean;
   sortOrder: number;
   lessons: Lesson[];
 };
-type Course = { id: string; name: string; slug: string; status: string; modules: Mod[] };
+type Course = {
+  id: string; name: string; slug: string; status: string; modules: Mod[];
+  accessType?: string; productPid?: string | null; webhookToken?: string | null;
+};
 
 function UploadBtn({
   label,
@@ -122,6 +126,30 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || "Erro");
     return d;
+  };
+
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+
+  // Guarda tipo de acesso / pid. Recarrega para o ecrã reflectir o que ficou.
+  const saveAccess = async (patch: Record<string, unknown>) => {
+    try {
+      await api(`/api/admin/members/courses/${id}`, "PATCH", patch);
+      toast.success("Acesso atualizado");
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
+  const gerarWebhook = async () => {
+    try {
+      const d = await api(`/api/admin/members/courses/${id}/webhook-token`, "POST");
+      setWebhookUrl(d.webhookUrl);
+      toast.success("URL gerada — cole na Lojou");
+      load();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   };
 
   // ── Módulos ──
@@ -238,6 +266,83 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
         </div>
       }
     >
+      {/* ── Acesso e venda ──────────────────────────────────────────────── */}
+      <div className={styles.card} style={{ marginBottom: 18 }}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardTitle}>Acesso e venda</span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Como se ganha acesso</label>
+            <select
+              className={styles.formInput}
+              value={course.accessType || "subscription"}
+              onChange={(e) => saveAccess({ accessType: e.target.value })}
+            >
+              <option value="subscription">Incluído na assinatura</option>
+              <option value="paid">Vendido à parte (precisa comprar)</option>
+            </select>
+            <p className={styles.formHint}>
+              Quem recebeu acesso vitalício continua a entrar em qualquer um dos casos.
+            </p>
+          </div>
+
+          {(course.accessType || "subscription") === "paid" && (
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>PID do produto na Lojou</label>
+              <input
+                className={styles.formInput}
+                defaultValue={course.productPid || ""}
+                placeholder="uoEHz"
+                onBlur={(e) => saveAccess({ productPid: e.target.value.trim() })}
+              />
+              <p className={styles.formHint}>
+                Confere se a venda recebida é mesmo deste curso. Sem ele, o webhook de outro produto libertaria este.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {(course.accessType || "subscription") === "paid" && (
+          <div className={styles.formGroup} style={{ marginTop: 4 }}>
+            <label className={styles.formLabel}>URL do webhook deste curso</label>
+            {webhookUrl ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <code
+                  style={{
+                    flex: 1, minWidth: 260, padding: "10px 12px", borderRadius: 8,
+                    background: "var(--bg-elevated)", border: "1px solid var(--border-default)",
+                    fontSize: 12, wordBreak: "break-all",
+                  }}
+                >
+                  {webhookUrl}
+                </code>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => {
+                    void navigator.clipboard.writeText(webhookUrl);
+                    toast.success("Copiado");
+                  }}
+                >
+                  Copiar
+                </button>
+              </div>
+            ) : (
+              <button type="button" className={styles.btnSecondary} onClick={gerarWebhook}>
+                Gerar URL do webhook
+              </button>
+            )}
+            <p className={styles.formHint}>
+              Cole na Lojou, no produto deste curso. É uma rota EXCLUSIVA dele — o webhook principal do Código Zero não
+              confere produto nenhum e daria a plataforma inteira a quem comprasse só o curso. Gerar de novo invalida a
+              anterior.
+            </p>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 18, alignItems: "start" }}>
         {/* Coluna de módulos */}
         <div className={styles.card}>
@@ -395,6 +500,19 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
               </button>
             )}
           </div>
+        </div>
+        <div className={styles.formGroup}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={!!modEdit.isFree}
+              onChange={(e) => setModEdit((m) => ({ ...m, isFree: e.target.checked }))}
+            />
+            <span>Amostra grátis — abre para quem ainda não comprou</span>
+          </label>
+          <p className={styles.formHint}>
+            Só faz diferença em curso vendido à parte. Os outros módulos aparecem com cadeado.
+          </p>
         </div>
         <div className={styles.btnRow}>
           <button type="button" className={styles.btnSecondary} onClick={() => setModOpen(false)}>Cancelar</button>

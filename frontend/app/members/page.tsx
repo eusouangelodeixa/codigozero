@@ -9,6 +9,7 @@ import { absMediaUrl, membersFetch, membersUser, requireMembersAuth } from "@/li
 import { memberGo } from "@/lib/members/nav";
 
 type CourseRow = {
+  locked?: boolean;
   id: string;
   slug: string;
   name: string;

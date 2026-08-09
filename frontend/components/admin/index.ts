@@ -19,3 +19,5 @@ export { DataTable } from "./DataTable";
 export type { Column } from "./DataTable";
 export { StatusBadge, SearchInput, SegmentedControl, Pagination, RowActions } from "./controls";
 export type { RowAction } from "./controls";
+
+export { AdminTabs } from "./AdminTabs";

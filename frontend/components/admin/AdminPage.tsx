@@ -1,6 +1,7 @@
 "use client";
 import { type ReactNode } from "react";
 import k from "./kit.module.css";
+import { AdminTabs } from "./AdminTabs";
 
 /** Shell de página do admin: cabeçalho consistente (eyebrow/título/descrição +
  *  ação primária à direita), slot opcional de KPIs, e o conteúdo. Toda página
@@ -30,6 +31,9 @@ export function AdminPage({
         </div>
         {actions && <div className={k.headerActions}>{actions}</div>}
       </header>
+      {/* Abas dos assuntos que saíram do menu lateral. Aparecem sozinhas
+          conforme a rota — as páginas não sabem que existem. */}
+      <AdminTabs />
       {kpis}
       {children}
     </div>

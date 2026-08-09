@@ -149,24 +149,26 @@ const I = {
   ),
 };
 
+// Ordenado por FREQUÊNCIA de uso, não por arrumação temática: o que se abre
+// todos os dias fica em cima e a um clique. Custos, E-mails, Status e Saques
+// saíram daqui — viraram abas das páginas do mesmo assunto (AdminTabs). As
+// rotas continuam as mesmas, porque os avisos do sistema apontam para elas.
 const NAV: NavGroup[] = [
   {
     label: "Operação",
     items: [
-      { href: "/admin",         label: "Dashboard",  icon: I.Dashboard },
-      { href: "/admin/finance", label: "Financeiro", icon: I.Finance },
-      { href: "/admin/feedback", label: "Feedback",  icon: I.Feedback },
-      { href: "/admin/custos",  label: "Custos",     icon: I.Receipt, superadmin: true },
-      { href: "/admin/status",  label: "Status",     icon: I.Status },
+      { href: "/admin",          label: "Dashboard",  icon: I.Dashboard },
+      { href: "/admin/finance",  label: "Financeiro", icon: I.Finance },
+      { href: "/admin/chat",     label: "Suporte",    icon: I.Chat },
     ],
   },
   {
     label: "Pessoas",
     items: [
-      { href: "/admin/users", label: "Usuários",         icon: I.Users },
-      { href: "/admin/grupo", label: "Grupo de Membros", icon: I.Users },
-      { href: "/admin/leads", label: "Leads",            icon: I.Leads },
-      { href: "/admin/chat",  label: "Suporte",          icon: I.Chat },
+      { href: "/admin/users",    label: "Usuários",         icon: I.Users },
+      { href: "/admin/leads",    label: "Leads",            icon: I.Leads },
+      { href: "/admin/grupo",    label: "Grupo de Membros", icon: I.Users },
+      { href: "/admin/feedback", label: "Feedback",         icon: I.Feedback },
     ],
   },
   {
@@ -185,14 +187,12 @@ const NAV: NavGroup[] = [
       { href: "/admin/afiliados",   label: "Afiliados",    icon: I.Affiliates },
       { href: "/admin/coproducers", label: "Coprodutores", icon: I.Coproducers },
       { href: "/admin/socios",      label: "Sócios",       icon: I.Pie },
-      { href: "/admin/saques",      label: "Saques",       icon: I.Withdrawals },
     ],
   },
   {
     label: "Sistema",
     items: [
       { href: "/admin/broadcast", label: "Broadcast",     icon: I.Broadcast },
-      { href: "/admin/emails",    label: "E-mails",       icon: I.Mail },
       { href: "/admin/cupons",    label: "Cupons",        icon: I.Coupons },
       { href: "/admin/config",    label: "Configurações", icon: I.Config },
     ],
@@ -212,6 +212,7 @@ interface User {
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -263,10 +264,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         <nav className={styles.sidebarNav}>
-          {NAV.map((group) => (
+          {NAV.map((group) => {
+            // Só o grupo da página actual fica aberto. Com tudo expandido, 20
+            // itens do mesmo peso competem pela atenção e nenhum se destaca.
+            const doGrupo = group.items.some((i) => pathname === i.href || pathname.startsWith(i.href + "/"));
+            const aberto = abertos[group.label] ?? doGrupo;
+            return (
             <div key={group.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span className={styles.navGroupLabel}>{group.label}</span>
-              {group.items.filter((item) => !item.superadmin || user?.role === "superadmin").map((item) => (
+              <button
+                type="button"
+                className={styles.navGroupLabel}
+                onClick={() => setAbertos((a) => ({ ...a, [group.label]: !aberto }))}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left" }}
+              >
+                <span>{group.label}</span>
+                <span style={{ opacity: 0.5, fontSize: 10 }}>{aberto ? "▾" : "▸"}</span>
+              </button>
+              {aberto && group.items.filter((item) => !item.superadmin || user?.role === "superadmin").map((item) => (
                 <button
                   key={item.href}
                   type="button"
@@ -279,7 +293,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 </button>
               ))}
             </div>
-          ))}
+            );
+          })}
         </nav>
 
         <div className={styles.sidebarFooter}>

@@ -82,6 +82,15 @@ model User {
   fbc                String?
   landingUrl         String?
 
+  // Origem da visita que gerou o lead. Guardado no nosso lado (além do Meta)
+  // porque responde a pergunta que o Gerenciador não responde bem: QUAL anúncio
+  // gerou esta venda em concreto, e quanto ela rendeu de facto.
+  utmSource          String?
+  utmMedium          String?
+  utmCampaign        String?
+  utmContent         String?
+  utmTerm            String?
+
   // ── "Salve o nosso contacto" (30–60 min depois da entrega de acessos) ──
   // Telemóveis escondem mensagens de números não guardados, por isso pedimos
   // ao comprador que grave o contacto pouco depois de receber as credenciais.

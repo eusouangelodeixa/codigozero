@@ -74,6 +74,10 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
     if (typeof fbp === 'string' && fbp.trim()) attribution.fbp = fbp.trim().slice(0, 200);
     if (typeof fbc === 'string' && fbc.trim()) attribution.fbc = fbc.trim().slice(0, 500);
     if (typeof landingUrl === 'string' && landingUrl.trim()) attribution.landingUrl = landingUrl.trim().slice(0, 500);
+    for (const key of ['utmSource', 'utmMedium', 'utmCampaign', 'utmContent', 'utmTerm'] as const) {
+      const v = (req.body as any)?.[key];
+      if (typeof v === 'string' && v.trim()) attribution[key] = v.trim().slice(0, 200);
+    }
 
     const contactPhone = whatsapp || phone || `+258${Date.now().toString().slice(-9)}`;
 

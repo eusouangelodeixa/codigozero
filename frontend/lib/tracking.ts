@@ -64,13 +64,26 @@ function ensureFbc(): string | undefined {
   return value;
 }
 
-/** Identificadores de atribuição para mandar ao backend junto do evento. */
-export function getAttribution(): { fbp?: string; fbc?: string; landingUrl?: string } {
+/**
+ * Identificadores de atribuição para mandar ao backend junto do evento.
+ *
+ * Além dos cookies do Meta, levamos os UTM da visita: eles respondem a pergunta
+ * que o Gerenciador de Eventos responde mal — QUAL anúncio gerou esta venda em
+ * concreto — e ficam no nosso banco, independentes da plataforma.
+ */
+export function getAttribution(): Record<string, string | undefined> {
   if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  const utm = (key: string) => params.get(key)?.slice(0, 200) || undefined;
   return {
     fbp: readCookie("_fbp"),
     fbc: ensureFbc(),
     landingUrl: window.location.href,
+    utmSource: utm("utm_source"),
+    utmMedium: utm("utm_medium"),
+    utmCampaign: utm("utm_campaign"),
+    utmContent: utm("utm_content"),
+    utmTerm: utm("utm_term"),
   };
 }
 

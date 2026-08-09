@@ -261,6 +261,9 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
           <button type="button" className={styles.btnSecondary} onClick={() => router.push("/admin/cursos")}>
             ← Cursos
           </button>
+          <button type="button" className={styles.btnSecondary} onClick={() => router.push(`/admin/cursos/${id}/alunos`)}>
+            Alunos
+          </button>
           <button type="button" className={styles.btnPrimary} onClick={() => router.push(`/admin/cursos/${id}/editor`)}>
             Editor visual →
           </button>

@@ -17,6 +17,8 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
 import { optimizeImage } from '../lib/image';
 import { sendPushBroadcast } from './auth.routes';
+import { newCourseWebhookToken } from './courseWebhook.routes';
+import { env } from '../config/env';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -162,8 +164,12 @@ router.get('/courses/:id', async (req: AuthRequest, res: Response) => {
 router.patch('/courses/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { name, slug, status, sortOrder, coverUrl, config } = req.body || {};
+    const { name, slug, status, sortOrder, coverUrl, config, accessType, productPid } = req.body || {};
     const data: Record<string, unknown> = {};
+    // 'paid' = vendido à parte (só entra quem tem CourseAccess);
+    // 'subscription' = incluído no plano, como sempre foi.
+    if (accessType === 'paid' || accessType === 'subscription') data.accessType = accessType;
+    if (productPid !== undefined) data.productPid = String(productPid || '').trim() || null;
     if (typeof name === 'string' && name.trim()) data.name = name.trim();
     if (typeof slug === 'string' && slug.trim()) data.slug = await uniqueCourseSlug(slug, id);
     if (status === 'draft' || status === 'published') data.status = status;
@@ -175,6 +181,31 @@ router.patch('/courses/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[ADMIN-MEMBERS] patch course failed:', error);
     return res.status(500).json({ error: 'Erro ao salvar curso' });
+  }
+});
+
+// POST /api/admin/members/courses/:id/webhook-token — gera (ou roda) o token
+// da rota de venda deste curso e devolve a URL pronta a colar na Lojou.
+//
+// Cada curso tem a SUA rota: o webhook principal não valida produto nenhum e
+// trataria a compra do curso como assinatura completa da plataforma.
+router.post('/courses/:id/webhook-token', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const webhookToken = newCourseWebhookToken();
+    const course = await prisma.course.update({
+      where: { id },
+      data: { webhookToken },
+      select: { id: true, name: true, webhookToken: true, productPid: true },
+    });
+    const base = (env.FRONTEND_URL || 'https://app.czero.sbs').replace(/\/$/, '');
+    return res.json({
+      course,
+      webhookUrl: `${base}/api/webhooks/course/${webhookToken}`,
+    });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] webhook token failed:', error);
+    return res.status(500).json({ error: 'Erro ao gerar webhook do curso' });
   }
 });
 
@@ -221,8 +252,9 @@ router.post('/courses/:id/modules', async (req: AuthRequest, res: Response) => {
 // PATCH /api/admin/members/modules/:id { title?, description?, coverUrl?, sortOrder? }
 router.patch('/modules/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, coverUrl, sortOrder } = req.body || {};
+    const { title, description, coverUrl, sortOrder, isFree } = req.body || {};
     const data: Record<string, unknown> = {};
+    if (typeof isFree === 'boolean') data.isFree = isFree;
     if (typeof title === 'string' && title.trim()) data.title = title.trim();
     if (description !== undefined) data.description = description || null;
     if (coverUrl !== undefined) data.coverUrl = coverUrl || null;

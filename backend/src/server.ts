@@ -15,6 +15,7 @@ import qgRoutes from './routes/qg.routes';
 import webhookRoutes from './routes/webhook.routes';
 import landingRoutes from './routes/landing.routes';
 import trackRoutes from './routes/track.routes';
+import courseWebhookRoutes from './routes/courseWebhook.routes';
 import adminRoutes from './routes/admin.routes';
 import chatRoutes from './routes/chat.routes';
 import affiliateRoutes from './routes/affiliate.routes';
@@ -170,6 +171,9 @@ app.use('/api/chat', authMiddleware, blockWithdrawOnly, chatRoutes);
 app.use('/api/affiliate', affiliateRoutes);
 app.use('/api/komunika', authMiddleware, blockWithdrawOnly, komunikaRoutes);
 app.use('/api/webhooks', webhookRoutes);
+// Venda de curso avulso — rota POR CURSO (o webhook principal não valida
+// produto e daria a plataforma inteira a quem comprou só o curso).
+app.use('/api/webhooks', courseWebhookRoutes);
 
 // ── Health Check ──
 // Probes the DB with a trivial query so load balancers / uptime checks detect

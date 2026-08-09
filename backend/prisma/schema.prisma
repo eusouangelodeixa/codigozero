@@ -158,6 +158,7 @@ model User {
 
   leads              Lead[]
   lessonProgress     LessonProgress[]
+  courseAccesses     CourseAccess[]
   chatMessages       ChatMessage[]      @relation("ChatSender")
   messageReactions   MessageReaction[]
   pinnedMessages     ChatMessage[]      @relation("ChatPinnedBy")
@@ -233,9 +234,56 @@ model Course {
   status    String   @default("draft") // draft | published
   sortOrder Int      @default(0)
   config    Json?    // { theme, branding, menu, home } — ver MemberConfig no frontend
+
+  // ── Como se ganha acesso a este curso ────────────────────────────────
+  // 'subscription' = incluído na assinatura (comportamento histórico: todo
+  //                  assinante activo vê o curso publicado).
+  // 'paid'         = vendido à parte; só entra quem tiver CourseAccess.
+  // Em qualquer dos casos um CourseAccess individual dá entrada — é o que
+  // permite acesso VITALÍCIO, que sobrevive ao fim da assinatura.
+  accessType   String  @default("subscription")
+  // pid do produto na Lojou, para confirmar que a venda é mesmo deste curso.
+  productPid   String?
+  // Token da rota de webhook própria (/api/webhooks/course/{token}). Curso
+  // pago NÃO pode usar o webhook principal: aquele não valida pid nenhum e
+  // trataria a compra como assinatura completa da plataforma.
+  webhookToken String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   modules   Module[]
+  accesses  CourseAccess[]
+}
+
+/// Direito de acesso de uma pessoa a um curso.
+///
+/// É o que faltava na área de membros: até aqui o acesso era binário —
+/// assinante activo via tudo o que estava publicado. Com isto passam a existir
+/// dois eixos independentes: a assinatura, que expira, e o direito ao curso,
+/// que pode ser VITALÍCIO (`expiresAt` nulo) e sobreviver ao fim dela.
+///
+/// Cobre a turma de mentoria (curso vitalício + 1 mês de plataforma) e os
+/// cursos vendidos à parte (a compra cria a linha).
+model CourseAccess {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  /// manual (admin) | import (turma) | purchase (webhook do curso)
+  source      String    @default("manual")
+  /// null = vitalício; com data, expira como uma assinatura.
+  expiresAt   DateTime?
+  /// Pedido que desbloqueou, quando veio de compra.
+  orderId     String?
+  /// Admin que concedeu, quando foi manual ou importação.
+  grantedById String?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
 }
 
 model Module {
@@ -246,6 +294,9 @@ model Module {
   description String?
   icon        String?  // legado (emoji) — a UI nova usa coverUrl
   coverUrl    String?  // poster vertical do carrossel de módulos
+  // Amostra: visível a quem ainda não comprou. Os restantes aparecem com
+  // cadeado — mostrar o que está por trás vende melhor do que esconder.
+  isFree      Boolean  @default(false)
   sortOrder   Int      @default(0)
   lessons     Lesson[]
 

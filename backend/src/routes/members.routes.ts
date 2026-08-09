@@ -1,17 +1,28 @@
 /**
  * API do ALUNO da área de membros (members.czero.sbs).
  *
- * Auth por rota (não no mount): login-config e sso/exchange são públicos; o
- * resto exige token + assinatura ativa (mesma régua da Forja antiga). Regra
- * de acesso v1: todo assinante ativo vê TODOS os cursos published — não há
- * entitlements por curso.
+ * Auth por rota (não no mount): login-config e sso/exchange são públicos.
+ *
+ * O acesso deixou de ser binário. Antes bastava assinatura activa para ver
+ * tudo o que estava publicado; agora somam-se dois eixos — a assinatura (que
+ * expira) e o direito ao curso (CourseAccess, que pode ser vitalício). Por
+ * isso as rotas de curso NÃO usam `subscriptionMiddleware`: ele responderia
+ * 403 antes de qualquer lógica e cortaria justamente quem tem acesso
+ * vitalício mas já não é assinante. O gate correcto está em
+ * services/courseAccess.service.ts, por curso.
  */
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
-import { subscriptionMiddleware } from '../middlewares/subscription.middleware';
+import {
+  activeCourseAccessIds,
+  hasFullAccess,
+  isVisible,
+  moduleUnlocked,
+  hasAnyCourseAccess,
+} from '../services/courseAccess.service';
 import { blockWithdrawOnly } from '../middlewares/withdrawOnly.guard';
 import { consumeMembersSsoCode } from '../lib/membersSso';
 
@@ -22,7 +33,8 @@ const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as Prism
 const PAID_STATUSES = ['active', 'grace_period', 'overdue', 'canceled'];
 const PRIVILEGED_ROLES = ['admin', 'superadmin', 'coproducer'];
 
-const memberGuards = [authMiddleware, blockWithdrawOnly, subscriptionMiddleware] as const;
+// Sem gate de assinatura aqui de propósito — ver o comentário do topo.
+const memberGuards = [authMiddleware, blockWithdrawOnly] as const;
 
 // ── Públicas ────────────────────────────────────────────────────────────────
 
@@ -69,7 +81,12 @@ router.post('/sso/exchange', async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.isActive) return res.status(401).json({ error: 'Conta indisponível' });
     // Re-checa a régua de pagante — o código não pode contornar o gate do login.
-    if (!PRIVILEGED_ROLES.includes(user.role) && !PAID_STATUSES.includes(user.subscriptionStatus)) {
+    // Mesma excepção do login: direito vitalício a um curso também dá entrada.
+    const podeEntrar =
+      PRIVILEGED_ROLES.includes(user.role) ||
+      PAID_STATUSES.includes(user.subscriptionStatus) ||
+      (await hasAnyCourseAccess(user.id));
+    if (!podeEntrar) {
       return res.status(403).json({ error: 'Esta conta não tem uma assinatura ativa.' });
     }
 
@@ -99,7 +116,7 @@ router.post('/sso/exchange', async (req: Request, res: Response) => {
 router.get('/courses', ...memberGuards, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const courses = await prisma.course.findMany({
+    const allCourses = await prisma.course.findMany({
       where: { status: 'published' },
       orderBy: { sortOrder: 'asc' },
       select: {
@@ -107,9 +124,15 @@ router.get('/courses', ...memberGuards, async (req: AuthRequest, res: Response) 
         slug: true,
         name: true,
         coverUrl: true,
+        accessType: true,
         modules: { select: { lessons: { select: { id: true } } } },
       },
     });
+    const owned = await activeCourseAccessIds(userId);
+    const viewer = { id: userId, role: req.user!.role, subscriptionStatus: req.user!.subscriptionStatus };
+    // Curso pago aparece mesmo bloqueado (é vitrine); curso do plano só
+    // aparece a quem pode abrir.
+    const courses = allCourses.filter((c) => isVisible(viewer, c, owned));
     const completed = await prisma.lessonProgress.findMany({
       where: { userId, completed: true },
       select: { lessonId: true },
@@ -127,6 +150,8 @@ router.get('/courses', ...memberGuards, async (req: AuthRequest, res: Response) 
           coverUrl: c.coverUrl,
           totalLessons: lessonIds.length,
           completedLessons: done,
+          locked: !hasFullAccess(viewer, c, owned),
+          accessType: c.accessType || 'subscription',
           pct: lessonIds.length ? Math.round((done / lessonIds.length) * 100) : 0,
         };
       }),
@@ -159,6 +184,14 @@ router.get('/courses/:slug', ...memberGuards, async (req: AuthRequest, res: Resp
     });
     if (!course) return res.status(404).json({ error: 'Curso não encontrado' });
 
+    const owned = await activeCourseAccessIds(userId);
+    const viewer = { id: userId, role: req.user!.role, subscriptionStatus: req.user!.subscriptionStatus };
+    const fullAccess = hasFullAccess(viewer, course, owned);
+    // Curso do plano sem acesso nenhum não é vitrine — é porta fechada.
+    if (!fullAccess && (course.accessType || 'subscription') !== 'paid') {
+      return res.status(403).json({ error: 'Assinatura inativa', subscriptionStatus: req.user!.subscriptionStatus });
+    }
+
     const lessonIds = course.modules.flatMap((m) => m.lessons.map((l) => l.id));
     const progress = await prisma.lessonProgress.findMany({
       where: { userId, lessonId: { in: lessonIds } },
@@ -178,7 +211,13 @@ router.get('/courses/:slug', ...memberGuards, async (req: AuthRequest, res: Resp
     });
 
     return res.json({
-      course: { id: course.id, slug: course.slug, name: course.name, config: course.config },
+      course: {
+        id: course.id, slug: course.slug, name: course.name, config: course.config,
+        accessType: course.accessType || 'subscription',
+        // A UI mostra a estante inteira e põe cadeado no que está fechado —
+        // ver o que se está a perder vende melhor do que não ver nada.
+        locked: !fullAccess,
+      },
       modules: course.modules.map((m) => {
         const lessons = m.lessons.map((l) => {
           const p = byLesson.get(l.id);
@@ -192,7 +231,10 @@ router.get('/courses/:slug', ...memberGuards, async (req: AuthRequest, res: Resp
           sortOrder: m.sortOrder,
           totalLessons: lessons.length,
           completedLessons: lessons.filter((l) => l.completed).length,
-          lessons,
+          locked: !moduleUnlocked(fullAccess, m),
+          // Aula de módulo bloqueado não leva vídeo nenhum no payload: o
+          // cadeado tem de valer no servidor, não só no ecrã.
+          lessons: moduleUnlocked(fullAccess, m) ? lessons : lessons.map((l) => ({ ...l, locked: true })),
         };
       }),
       continue: cont
@@ -217,10 +259,28 @@ router.get('/lessons/:id', ...memberGuards, async (req: AuthRequest, res: Respon
     const userId = req.user!.id;
     const lesson = await prisma.lesson.findUnique({
       where: { id: String(req.params.id) },
-      include: { module: { include: { course: { select: { id: true, slug: true, status: true } } } } },
+      include: {
+        module: {
+          include: { course: { select: { id: true, slug: true, status: true, accessType: true } } },
+        },
+      },
     });
     if (!lesson || lesson.module.course.status !== 'published') {
       return res.status(404).json({ error: 'Aula não encontrada' });
+    }
+
+    // O cadeado tem de valer aqui: sem esta verificação bastava adivinhar (ou
+    // reaproveitar) um id de aula para receber o vídeo de um módulo pago.
+    const owned = await activeCourseAccessIds(userId);
+    const viewer = { id: userId, role: req.user!.role, subscriptionStatus: req.user!.subscriptionStatus };
+    const fullAccess = hasFullAccess(viewer, lesson.module.course, owned);
+    if (!moduleUnlocked(fullAccess, lesson.module)) {
+      return res.status(403).json({
+        error: 'Aula bloqueada',
+        locked: true,
+        courseSlug: lesson.module.course.slug,
+        accessType: lesson.module.course.accessType || 'subscription',
+      });
     }
 
     // Lista achatada do curso na ordem módulo.sortOrder → aula.sortOrder

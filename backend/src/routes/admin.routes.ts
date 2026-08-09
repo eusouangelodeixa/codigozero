@@ -36,6 +36,7 @@ import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
 import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
 import { scheduleSaveContactReminder } from '../services/onboarding.service';
+import { bulkEnroll, parseBulkList } from '../services/bulkEnroll.service';
 import { invalidateMetaConfigCache } from '../services/meta.service';
 import { lojouCheckoutUrl } from '../lib/lojouLinks';
 
@@ -1295,6 +1296,69 @@ function sanitizeDashboardBanners(raw: unknown): { id: string; imageUrl: string;
   }
   return out;
 }
+
+/**
+ * POST /api/admin/users/bulk-enroll — matricula uma TURMA de uma vez.
+ *
+ * Body: { list, platformDays, courseId?, courseLifetime?, coproducerCode? }
+ * `list` é texto colado: uma pessoa por linha (nome, e-mail, telefone em
+ * qualquer ordem, separados por vírgula/;/tab).
+ *
+ * Dá as duas coisas de prazos diferentes: assinatura por N dias e o curso
+ * (vitalício por omissão). Quando os N dias acabam, fica só o curso.
+ */
+router.post('/users/bulk-enroll', async (req: AuthRequest, res: Response) => {
+  try {
+    const { list, platformDays, courseId, courseLifetime, coproducerCode } = req.body || {};
+    if (typeof list !== 'string' || !list.trim()) {
+      return res.status(400).json({ error: 'Cole a lista de alunos.' });
+    }
+
+    const dias = Number.isFinite(Number(platformDays)) ? Math.max(0, Math.floor(Number(platformDays))) : 30;
+    if (dias > 3650) return res.status(400).json({ error: 'Duração inválida.' });
+
+    if (courseId) {
+      const existe = await prisma.course.findUnique({ where: { id: String(courseId) }, select: { id: true } });
+      if (!existe) return res.status(400).json({ error: 'Curso não encontrado.' });
+    }
+    if (coproducerCode) {
+      const cop = await prisma.coproducerAccount.findUnique({
+        where: { code: String(coproducerCode) },
+        select: { code: true, enabled: true },
+      });
+      if (!cop) return res.status(400).json({ error: 'Coprodutor não encontrado.' });
+      if (!cop.enabled) return res.status(400).json({ error: 'Esse coprodutor está desactivado.' });
+    }
+
+    const { entries, skipped } = parseBulkList(list);
+    if (entries.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma linha utilizável na lista.', skipped });
+    }
+    if (entries.length > 500) {
+      return res.status(400).json({ error: 'Máximo de 500 alunos por importação.' });
+    }
+
+    const result = await bulkEnroll({
+      entries,
+      platformDays: dias,
+      courseId: courseId ? String(courseId) : null,
+      // Sem `courseLifetime: false` explícito, o curso é vitalício — é o que a
+      // turma comprou.
+      courseExpiresAt: courseLifetime === false && dias > 0
+        ? new Date(Date.now() + dias * 24 * 60 * 60 * 1000)
+        : null,
+      coproducerCode: coproducerCode ? String(coproducerCode) : null,
+      grantedById: req.user!.id,
+    });
+
+    result.skipped = [...skipped, ...result.skipped];
+    console.log(`[TURMA] ${result.created} criados, ${result.reused} reaproveitados, ${result.skipped.length} ignorados`);
+    return res.json(result);
+  } catch (error) {
+    console.error('[ADMIN] bulk-enroll failed:', error);
+    return res.status(500).json({ error: 'Erro ao matricular a turma' });
+  }
+});
 
 router.patch('/system', async (req: AuthRequest, res: Response) => {
   try {

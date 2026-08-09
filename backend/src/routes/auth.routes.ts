@@ -24,6 +24,7 @@ import {
   sendPushBroadcast,
   sendPushToSuperAdmins,
 } from '../services/push.service';
+import { hasAnyCourseAccess } from '../services/courseAccess.service';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -117,7 +118,15 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     // they could authenticate and only hit the paywall deeper in the app. Paid
     // statuses (incl. overdue/canceled) still log in so they can reach /blocked
     // and renew. Admin/superadmin/coproducer don't hold a member subscription.
-    if (!PRIVILEGED_ROLES.includes(user.role) && !isPaidSubscriber(user.subscriptionStatus)) {
+    // Excepção: quem comprou um curso avulso, ou ganhou acesso vitalício numa
+    // turma, não tem assinatura nenhuma — e mesmo assim TEM de conseguir
+    // entrar, senão o direito que lhe vendemos fica inacessível.
+    const temCurso =
+      !PRIVILEGED_ROLES.includes(user.role) && !isPaidSubscriber(user.subscriptionStatus)
+        ? await hasAnyCourseAccess(user.id)
+        : false;
+
+    if (!PRIVILEGED_ROLES.includes(user.role) && !isPaidSubscriber(user.subscriptionStatus) && !temCurso) {
       return res.status(403).json({
         error: 'Esta conta ainda não tem uma assinatura ativa. Conclua o pagamento para liberar o acesso à plataforma.',
       });

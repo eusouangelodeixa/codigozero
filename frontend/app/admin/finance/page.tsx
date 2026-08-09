@@ -71,6 +71,7 @@ interface Tx {
   coproducerId?: string | null;
   coproducer?: { id: string; code: string; displayName: string | null; user: { name: string } } | null;
   grossAmount?: number | null;
+  netAmount?: number | null;
   lojouFee?: number | null;
   coproducerFee?: number | null;
   gateway?: string | null;
@@ -406,7 +407,14 @@ export default function AdminFinance() {
     },
     {
       key: "liquido", header: "Líquido", align: "right", mono: true, mobileLabel: "Líquido",
-      render: (tx) => <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{fmtMoney(tx.amount)}</span>,
+      // O que sobra depois da taxa da Lojou e do split. Antes esta coluna
+      // mostrava `tx.amount`, que é o BRUTO — a linha exibia 497 com uma taxa
+      // de −60 ao lado, sem fechar conta. Cancelada/pendente não é dinheiro,
+      // por isso fica traço em vez de um valor que nunca existiu.
+      render: (tx) =>
+        tx.netAmount != null
+          ? <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{fmtMoney(tx.netAmount)}</span>
+          : <span className={k.cellMuted}>—</span>,
     },
     {
       key: "status", header: "Status", mobileLabel: "Status",

@@ -656,6 +656,7 @@ async function handleLojouWebhook(
             grossAmount: fees.grossAmount,
             lojouFee: fees.lojouFee,
             coproducerFee: fees.coproducerFee,
+            netAmount: fees.netAmount,
           },
           create: {
             orderId: String(orderId),
@@ -674,6 +675,7 @@ async function handleLojouWebhook(
             grossAmount: fees.grossAmount,
             lojouFee: fees.lojouFee,
             coproducerFee: fees.coproducerFee,
+            netAmount: fees.netAmount,
           },
         });
 
@@ -1408,6 +1410,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
       gateway: 'stripe',
       stripePaymentIntentId: paymentIntentId ?? null,
       grossAmount: amount,
+      // Sem taxa conhecida no Stripe (ela vem noutra API), o líquido fica igual
+      // ao bruto — melhor do que ficar nulo e sumir dos totais da receita.
+      netAmount: amount,
       // Stripe fees are reported separately on the BalanceTransaction —
       // we leave the column null here rather than guess at the rate
       // (varies by country / card type). The finance UI displays "—".

@@ -302,12 +302,18 @@ model Transaction {
   paymentMethod String?
   metadata      Json?
   // ── Gross + fee breakdown (audit) ─────────────────────────────────────
-  // amount above is the NET we receive (after Lojou fee + coproducer split).
+  // amount above is the GROSS charged; o líquido fica em `netAmount`.
   // These columns let the admin see the full economic picture without
   // having to parse metadata payloads.
   grossAmount     Float?   // sum of product + bump prices the customer paid
   lojouFee        Float?   // platform fee deducted (10% × gross + 10 per item)
   coproducerFee   Float?   // coproducer split deducted (sharePct × principal)
+  // O que SOBRA de facto (bruto − taxa Lojou − split do coprodutor). Antes isto
+  // era calculado e deitado fora: o painel rotulava `amount` como "Líquido",
+  // mas `amount` é o BRUTO — a receita aparecia inflada pela taxa (~11%).
+  // `amount` continua a ser o bruto de propósito: a comissão de sócios parte
+  // dele e desconta a taxa por conta própria (partner.service.ts).
+  netAmount       Float?
   // ── Order bump audit fields ──────────────────────────────────────────
   orderBumpPid    String?  // e.g. "JQQWc" for Close Friends
   orderBumpAmount Float?   // bump amount only, so reports can split principal vs bump

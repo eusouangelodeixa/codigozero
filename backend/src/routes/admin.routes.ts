@@ -520,6 +520,7 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           userPhone: true,
           amount: true,
           grossAmount: true,
+          netAmount: true,
           lojouFee: true,
           coproducerFee: true,
           status: true,

@@ -73,6 +73,15 @@ model User {
   pwaInstalledAt     DateTime?
   pwaReminderSentAt  DateTime?
 
+  // ── Atribuição de anúncios (Meta) ───────────────────────────────────
+  // Capturados no navegador quando a pessoa vira lead e guardados aqui porque
+  // a COMPRA acontece depois, num webhook, sem browser do outro lado: sem o
+  // par fbp/fbc o Meta não consegue ligar a venda ao anúncio que a gerou.
+  // `landingUrl` é o event_source_url dessa mesma visita.
+  fbp                String?
+  fbc                String?
+  landingUrl         String?
+
   // ── "Salve o nosso contacto" (30–60 min depois da entrega de acessos) ──
   // Telemóveis escondem mensagens de números não guardados, por isso pedimos
   // ao comprador que grave o contacto pouco depois de receber as credenciais.
@@ -362,6 +371,16 @@ model SystemConfig {
   membersGroupId           String?
   membersGroupName         String?
   membersGroupInviteLink   String?
+
+  // ── Meta / Conversions API ────────────────────────────────────────────
+  // O pixel do navegador continua a vir de `LandingConfig.bodyScripts`; estes
+  // campos são para o envio server-side (que sobrevive a bloqueadores e é o
+  // único caminho possível para a compra, que acontece num webhook).
+  // `metaTestEventCode` só deve ficar preenchido enquanto se testa no
+  // "Eventos de teste" do Gerenciador — em produção fica vazio.
+  metaPixelId              String?
+  metaCapiToken            String?
+  metaTestEventCode        String?
 
   // ── Suporte: janela de atendimento ────────────────────────────────────
   // O horário é o COMERCIAL BRASILEIRO (UTC-3, sem horário de verão desde

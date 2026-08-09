@@ -14,6 +14,7 @@ import cofreRoutes from './routes/cofre.routes';
 import qgRoutes from './routes/qg.routes';
 import webhookRoutes from './routes/webhook.routes';
 import landingRoutes from './routes/landing.routes';
+import trackRoutes from './routes/track.routes';
 import adminRoutes from './routes/admin.routes';
 import chatRoutes from './routes/chat.routes';
 import affiliateRoutes from './routes/affiliate.routes';
@@ -138,6 +139,8 @@ app.use('/api/radar', authMiddleware, blockWithdrawOnly, radarRoutes);
 app.use('/api/cofre', authMiddleware, blockWithdrawOnly, cofreRoutes);
 app.use('/api/qg', authMiddleware, blockWithdrawOnly, qgRoutes);
 app.use('/api/landing', landingRoutes);
+// Espelho server-side dos eventos do pixel (Meta CAPI). Público, como a landing.
+app.use('/api/track', trackRoutes);
 // Content / lead-magnet pages: public read+capture (/api/content) and admin
 // CRUD (/api/admin/content-pages). The admin router runs auth+admin internally.
 app.use('/api/content', contentPublicRoutes);

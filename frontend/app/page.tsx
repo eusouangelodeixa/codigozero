@@ -8,6 +8,7 @@ import {
 import { Logo } from "@/components/Logo";
 import styles from "./landing.module.css";
 import { LANDING_DEFAULTS as DEFAULTS } from "./landingDefaults";
+import { track, trackOnce, attachVslTracking, getAttribution } from "@/lib/tracking";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -246,6 +247,28 @@ export default function LandingPage({
     };
   }, [coproducerContext?.headScripts]);
 
+  // ── Rastreio do funil ─────────────────────────────────────────────────
+  // Cada etapa vira um evento no pixel + no CAPI. Sem isto o Meta só via um
+  // PageView e nunca soube que existia quiz, diagnóstico ou VSL.
+  useEffect(() => {
+    if (gateOpen === true && surveyStep === 0) {
+      trackOnce("hook_view", "ViewContent", { content_name: "hook", content_category: "landing" });
+    }
+    if (gateOpen === true && surveyStep === 1) {
+      trackOnce("quiz_start", "QuizStart", { content_name: "quiz" });
+    }
+    if (gateOpen === true && surveyStep > SURVEY_STEPS.length) {
+      trackOnce("quiz_complete", "QuizComplete", { content_name: "quiz", step: SURVEY_STEPS.length });
+    }
+    if (gateOpen === false) {
+      trackOnce("vsl_view", "ViewContent", { content_name: "vsl", content_category: "landing" });
+    }
+  }, [gateOpen, surveyStep, SURVEY_STEPS.length]);
+
+  // O CTA vive DENTRO do VSL (a Kilax é que o desenha), por isso não há botão
+  // nosso para ouvir: apanhamos o clique pela ponte de postMessage do player.
+  useEffect(() => attachVslTracking(), []);
+
   const handleGateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
@@ -265,6 +288,9 @@ export default function LandingPage({
       surveyAnswers,
       ...(affiliateContext?.code ? { affiliateCode: affiliateContext.code } : {}),
       ...(coproducerContext?.code ? { coproducerCode: coproducerContext.code } : {}),
+      // Cookies do clique do anúncio: guardados no lead para a COMPRA (que
+      // acontece depois, num webhook sem browser) poder ser atribuída.
+      ...getAttribution(),
     };
 
     const leadRecord: Record<string, any> = { ...payload, savedAt: new Date().toISOString(), _v: LEAD_VERSION };
@@ -281,6 +307,20 @@ export default function LandingPage({
         leadRecord.checkoutUrl = data.checkoutUrl;
         localStorage.setItem("cz_lead", JSON.stringify(leadRecord));
       }
+
+      // O evento que a campanha precisa para optimizar. Vai com os dados de
+      // correspondência (e-mail/telefone/nome) — hasheados no backend antes de
+      // chegarem ao Meta — porque é isso que faz a atribuição funcionar.
+      const [firstName, ...restName] = (formData.name || "").trim().split(" ");
+      const identity = {
+        email: formData.email,
+        phone: finalWhatsapp,
+        firstName,
+        lastName: restName.join(" ") || null,
+        externalId: data?.leadId ? String(data.leadId) : undefined,
+      };
+      track("Lead", { content_name: "landing_gate", currency: "MZN" }, identity);
+      track("CompleteRegistration", { content_name: "quiz_landing", status: "completed" }, identity);
     } catch (err) {
       console.warn("[Landing] API call failed, lead saved locally:", err);
     } finally {
@@ -291,6 +331,9 @@ export default function LandingPage({
 
   const handleSurveyOptionClick = (questionId: string, optionText: string) => {
     setSurveyAnswers(prev => ({ ...prev, [questionId]: optionText }));
+    // Cada resposta é um degrau do funil: dá para ver onde as pessoas largam e
+    // montar público de quem começou o quiz e não terminou.
+    track("QuizStep", { step: surveyStep, step_id: questionId, answer: optionText });
     // Move to next step smoothly
     setTimeout(() => {
       setSurveyStep(prev => prev + 1);

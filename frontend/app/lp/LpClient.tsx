@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import styles from "./lp.module.css";
 import { LP_DEFAULTS, type LpConfig, type LpSurveyStep } from "./lpDefaults";
+import { track, trackOnce, getAttribution } from "@/lib/tracking";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 const LEAD_KEY = "cz_lp_lead";
@@ -82,8 +83,18 @@ export default function LpClient() {
     if (whatsapp.replace(/\D/g, "").length < 8) { setErr("Confere o número do WhatsApp."); return; }
     setSubmitting(true); setErr("");
     try {
-      await postLead({ name: name.trim(), whatsapp: whatsapp.trim() });
+      await postLead({ name: name.trim(), whatsapp: whatsapp.trim(), ...getAttribution() });
       saveLead({ name: name.trim(), whatsapp: whatsapp.trim() });
+
+      // Captura da LP dos Reels — mesmo evento da landing principal, para as
+      // duas fontes alimentarem a mesma optimização.
+      const [firstName, ...restName] = name.trim().split(" ");
+      track(
+        "Lead",
+        { content_name: "lp_reels", currency: "MZN" },
+        { phone: whatsapp.trim(), firstName, lastName: restName.join(" ") || null },
+      );
+
       setStage("survey"); setQi(0);
     } catch (e: any) {
       setErr(e?.message || "Erro de conexão. Tente de novo.");
@@ -93,6 +104,7 @@ export default function LpClient() {
   // Each survey tap records the answer and advances; the last one finalizes.
   const chooseOption = async (value: string) => {
     const key = steps[qi]?.key || `q${qi}`;
+    track("QuizStep", { step: qi + 1, step_id: key, answer: value, content_name: "lp_reels" });
     const next = { ...answers, [key]: value };
     setAnswers(next);
     if (qi < steps.length - 1) { setQi(qi + 1); return; }

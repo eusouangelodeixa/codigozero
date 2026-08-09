@@ -36,6 +36,7 @@ import { initiateSdrOutbound } from '../services/sdr.service';
 import { buildSurveyContext } from '../services/lifecycle.service';
 import { sendCredentialsEmail, sendCredentialsViaWhatsApp, generateUserPassword } from '../services/payment.service';
 import { scheduleSaveContactReminder } from '../services/onboarding.service';
+import { invalidateMetaConfigCache } from '../services/meta.service';
 import { lojouCheckoutUrl } from '../lib/lojouLinks';
 
 const router = Router();
@@ -1307,6 +1308,14 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
       const n = Number(v);
       return Number.isFinite(n) ? Math.min(Math.max(Math.round(n), lo), hi) : undefined;
     };
+    // Meta / Conversions API. Guardados aqui (e não em env) para o Angelo
+    // poder trocar o token sem deploy.
+    const meta = {
+      metaPixelId: req.body?.metaPixelId,
+      metaCapiToken: req.body?.metaCapiToken,
+      metaTestEventCode: req.body?.metaTestEventCode,
+    };
+
     const support = {
       supportHoursEnabled:
         typeof req.body?.supportHoursEnabled === 'boolean' ? req.body.supportHoursEnabled : undefined,
@@ -1319,9 +1328,13 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
 
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support, ...meta },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support, ...meta },
     });
+    // O serviço do Meta cacheia a config por 60s; sem isto o token novo só
+    // valeria no minuto seguinte, e quem acabou de o colar acharia que falhou.
+    invalidateMetaConfigCache();
+
     res.json({ config });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao atualizar config do sistema' });

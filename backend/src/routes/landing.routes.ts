@@ -65,7 +65,15 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
   try {
     const body = parseOr400(req, res, leadSchema);
     if (!body) return;
-    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode, phoneCode } = body as any;
+    const { name, phone, whatsapp, email, surveyAnswers, affiliateCode, coproducerCode, phoneCode, fbp, fbc, landingUrl } = body as any;
+
+    // Atribuição do Meta: capturada no navegador e guardada agora porque a
+    // COMPRA acontece depois, num webhook sem browser — sem este par o Meta
+    // não liga a venda ao anúncio. Ver services/meta.service.ts.
+    const attribution: Record<string, string> = {};
+    if (typeof fbp === 'string' && fbp.trim()) attribution.fbp = fbp.trim().slice(0, 200);
+    if (typeof fbc === 'string' && fbc.trim()) attribution.fbc = fbc.trim().slice(0, 500);
+    if (typeof landingUrl === 'string' && landingUrl.trim()) attribution.landingUrl = landingUrl.trim().slice(0, 500);
 
     const contactPhone = whatsapp || phone || `+258${Date.now().toString().slice(-9)}`;
 
@@ -132,6 +140,9 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
           ...(coproducerAccount && !user.referredByCoproducer
             ? { referredByCoproducer: coproducerAccount.code }
             : {}),
+          // Sempre a mais recente: se voltou pela landing com outro clique de
+          // anúncio, é esse que deve levar o crédito da compra.
+          ...attribution,
         },
       });
     } else {
@@ -147,6 +158,7 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
           ...(surveyAnswers && { surveyAnswers }),
           ...(affiliateAccount ? { referredByCode: affiliateAccount.code } : {}),
           ...(coproducerAccount ? { referredByCoproducer: coproducerAccount.code } : {}),
+          ...attribution,
         },
       });
 

@@ -42,6 +42,9 @@ interface SystemConfig {
   supportRearmHours?: number;
   supportNotifyPhone?: string;
   supportNotifyName?: string;
+  metaPixelId?: string;
+  metaCapiToken?: string;
+  metaTestEventCode?: string;
 }
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
@@ -843,6 +846,57 @@ export default function AdminConfig() {
             />
           </div>
         </div>
+      </Section>
+
+      {/* ── Meta / Conversions API ── */}
+      <Section
+        title="Meta (Pixel + Conversions API)"
+        subtitle="O envio server-side dos eventos. Sobrevive a bloqueador de anúncios e é o único caminho da compra, que acontece no webhook."
+        icon={<IconKomunika />}
+        defaultOpen={false}
+        actions={
+          <span className={config.metaCapiToken ? styles.statusOk : styles.statusEmpty}>
+            {config.metaCapiToken ? "Ligado" : "Falta o token"}
+          </span>
+        }
+      >
+        <Field
+          label="ID do Pixel"
+          hint="O mesmo número que está no snippet do pixel (Gerenciador de Eventos → Fontes de dados)."
+        >
+          <input
+            className={styles.input}
+            placeholder="1234567890123456"
+            value={config.metaPixelId || ""}
+            onChange={(e) => setField("metaPixelId", e.target.value)}
+          />
+        </Field>
+
+        <SecretField
+          label="Token da Conversions API"
+          value={config.metaCapiToken || ""}
+          onChange={(v) => setField("metaCapiToken", v)}
+          placeholder="EAAG..."
+          hint={
+            <>
+              Gere em Gerenciador de Eventos → o seu pixel → Configurações → Conversions API →
+              &quot;Gerar token de acesso&quot;. Sem ele, só o pixel do navegador funciona — e perde-se
+              tudo o que for bloqueado, além da compra.
+            </>
+          }
+        />
+
+        <Field
+          label="Código de teste (opcional)"
+          hint="Preencha SÓ enquanto valida em Eventos de teste. Deixado preenchido, os eventos ficam presos no modo de teste e não contam para as campanhas."
+        >
+          <input
+            className={styles.input}
+            placeholder="TEST12345"
+            value={config.metaTestEventCode || ""}
+            onChange={(e) => setField("metaTestEventCode", e.target.value)}
+          />
+        </Field>
       </Section>
 
       {/* ── Suporte: horário de atendimento + aviso da primeira mensagem ── */}

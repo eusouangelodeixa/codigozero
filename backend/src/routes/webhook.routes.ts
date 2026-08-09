@@ -36,6 +36,7 @@ import {
 } from '../services/komunika.service';
 import { ingestPollVote, ingestInboundText } from '../services/feedback.service';
 import { scheduleSaveContactReminder } from '../services/onboarding.service';
+import { sendPurchaseEvent } from '../services/meta.service';
 import type Stripe from 'stripe';
 
 const router = Router();
@@ -743,6 +744,20 @@ async function handleLojouWebhook(
           );
         }
 
+        // Meta CAPI — a compra é o sinal que treina a campanha, e é o único
+        // que nunca chega pelo navegador (acontece aqui, sem browser). Só na
+        // primeira entrega do webhook: a Lojou re-entrega, e apesar de o
+        // event_id ser determinístico, não vale a pena repetir a chamada.
+        if (!txExistedBefore) {
+          void sendPurchaseEvent({
+            userId: user.id,
+            orderId: String(orderId),
+            amount: totalAmount,
+            currency: 'MZN',
+            isRenewal,
+          });
+        }
+
         // Renovação de quem já pagou antes: a senha foi preservada acima, então
         // NÃO reenviamos credenciais — mandamos a confirmação de renovação
         // (mesma mensagem do fluxo Stripe). Só a 1ª compra (ou reativação de um
@@ -1446,6 +1461,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
     gateway: 'stripe',
     paymentMethod: 'card',
   });
+
+  // Meta CAPI: a compra é o sinal que treina a campanha. Vai daqui porque não
+  // há browser nenhum neste momento — e por isso nunca é perdida.
+  if (provisionedUserId) {
+    void sendPurchaseEvent({
+      userId: provisionedUserId,
+      orderId: String(session.id),
+      amount,
+      currency,
+      isRenewal: false,
+    });
+  }
 }
 
 /**
@@ -1520,6 +1547,14 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     currency,
     gateway: 'stripe',
     paymentMethod: 'card (renovação)',
+  });
+
+  void sendPurchaseEvent({
+    userId: user.id,
+    orderId: String(invoice.id),
+    amount,
+    currency,
+    isRenewal: true,
   });
 
   // Confirmação de renovação pro CLIENTE (WhatsApp). Fire-and-forget. Só roda

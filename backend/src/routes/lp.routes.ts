@@ -59,6 +59,14 @@ router.post('/lead', captureLimiter, async (req: Request, res: Response) => {
         ? (req.body.survey as Record<string, unknown>)
         : null;
 
+    // Atribuição do Meta (mesma lógica da landing principal): guardada agora
+    // porque a compra acontece depois, num webhook sem navegador.
+    const attribution: Record<string, string> = {};
+    const fbp = req.body?.fbp, fbc = req.body?.fbc, landingUrl = req.body?.landingUrl;
+    if (typeof fbp === 'string' && fbp.trim()) attribution.fbp = fbp.trim().slice(0, 200);
+    if (typeof fbc === 'string' && fbc.trim()) attribution.fbc = fbc.trim().slice(0, 500);
+    if (typeof landingUrl === 'string' && landingUrl.trim()) attribution.landingUrl = landingUrl.trim().slice(0, 500);
+
     if (whatsappRaw.replace(/\D/g, '').length < 8) {
       return res.status(400).json({ error: 'WhatsApp inválido.' });
     }
@@ -82,6 +90,7 @@ router.post('/lead', captureLimiter, async (req: Request, res: Response) => {
           ...(name && !existing.name ? { name } : {}),
           ...(existing.leadSource ? {} : { leadSource: LP_SOURCE }),
           ...(mergedSurvey ? { surveyAnswers: mergedSurvey } : {}),
+          ...attribution,
         },
       });
       return res.json({ success: true });
@@ -98,6 +107,7 @@ router.post('/lead', captureLimiter, async (req: Request, res: Response) => {
           email,
           phone: contactPhone,
           passwordHash: crypto.randomBytes(32).toString('hex'),
+          ...attribution,
           subscriptionStatus: 'lead',
           leadSource: LP_SOURCE,
           ...(survey ? { surveyAnswers: survey as any } : {}),
@@ -112,6 +122,7 @@ router.post('/lead', captureLimiter, async (req: Request, res: Response) => {
             email: `lp_${contactPhone}_${suffix}@lead.czero.sbs`,
             phone: `${contactPhone}_${suffix}`,
             passwordHash: crypto.randomBytes(32).toString('hex'),
+            ...attribution,
             subscriptionStatus: 'lead',
             leadSource: LP_SOURCE,
             ...(survey ? { surveyAnswers: survey as any } : {}),

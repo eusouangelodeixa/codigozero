@@ -67,6 +67,8 @@ export default function BroadcastPage() {
   const [couponMaxUses, setCouponMaxUses] = useState(1);
   const [progress, setProgress] = useState<SSEEvent | null>(null);
   const [log, setLog] = useState<SSEEvent[]>([]);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState("");
   const [toast, setToast] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -81,14 +83,17 @@ export default function BroadcastPage() {
   // shape as the live progress, so the last entry drives the progress bar.
   const applyJob = useCallback((job: any) => {
     if (!job) return;
+    setJobStatus(job.status || "");
     const evts: SSEEvent[] = job.log || [];
     setLog(evts);
     setProgress(evts.length ? evts[evts.length - 1] : { type: "start", total: job.total, sent: 0, failed: 0 });
 
-    if ((job.status === "done" || job.status === "error") && !completedRef.current) {
+    if ((job.status === "done" || job.status === "error" || job.status === "stopped") && !completedRef.current) {
       completedRef.current = true;
       if (job.status === "error") {
         showToast(`❌ Broadcast falhou: ${job.error || "erro desconhecido"}`);
+      } else if (job.status === "stopped") {
+        showToast(`⏹️ Envio interrompido. ✅ ${job.sent} enviados, ❌ ${job.failed} falhas antes de parar.`);
       } else {
         const couponMsg = job.coupons ? ` 🎟️ ${job.coupons} cupons.` : "";
         showToast(`✅ Broadcast concluído! ${job.sent} enviados, ${job.failed} falhas.${couponMsg}`);
@@ -106,15 +111,16 @@ export default function BroadcastPage() {
     stopPolling();
     completedRef.current = false;
     setSending(true);
+    setJobId(jobId);
     localStorage.setItem(JOB_KEY, jobId);
 
     const tick = async () => {
       try {
         const r = await fetch(`${API}/api/admin/broadcast/status/${jobId}`, { headers: hdr() });
-        if (r.status === 404) { stopPolling(); setSending(false); localStorage.removeItem(JOB_KEY); return; }
+        if (r.status === 404) { stopPolling(); setSending(false); setJobId(null); setJobStatus(""); localStorage.removeItem(JOB_KEY); return; }
         const job = await r.json();
         applyJob(job);
-        if (job.status === "done" || job.status === "error") {
+        if (job.status === "done" || job.status === "error" || job.status === "stopped") {
           stopPolling();
           setSending(false);
           localStorage.removeItem(JOB_KEY);
@@ -125,6 +131,20 @@ export default function BroadcastPage() {
     tick();
     pollRef.current = setInterval(tick, 1500);
   }, [applyJob, stopPolling]);
+
+  // Pause/resume/stop the server-side send loop.
+  const controlJob = async (action: "pause" | "resume" | "stop") => {
+    if (!jobId) return;
+    if (action === "stop" && !confirm("Parar este envio de vez? Quem ainda não recebeu não vai receber.")) return;
+    try {
+      const r = await fetch(`${API}/api/admin/broadcast/control/${jobId}`, {
+        method: "POST", headers: hdr(), body: JSON.stringify({ action }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(`❌ ${d.error || "Não foi possível executar a ação"}`); return; }
+      applyJob(d);
+    } catch { showToast("❌ Falha de rede — tente de novo"); }
+  };
 
   // Reattach to an in-progress broadcast when the page (re)mounts.
   useEffect(() => {
@@ -594,14 +614,40 @@ export default function BroadcastPage() {
       {/* ── Progress & Log ── */}
       {(sending || log.length > 0) && (
         <div className={styles.card} style={{ marginTop: "16px" }}>
-          <h3 className={styles.cardTitle}>📊 Progresso do Envio</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+            <h3 className={styles.cardTitle} style={{ marginBottom: 0 }}>📊 Progresso do Envio</h3>
+            {(jobStatus === "running" || jobStatus === "paused") && (
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => controlJob(jobStatus === "running" ? "pause" : "resume")}
+                  style={{
+                    padding: "6px 14px", fontSize: "13px", borderRadius: "8px", cursor: "pointer",
+                    background: "rgba(45,212,191,0.12)", border: "1px solid rgba(45,212,191,0.35)",
+                    color: "var(--accent)", fontWeight: 600,
+                  }}
+                >
+                  {jobStatus === "running" ? "⏸️ Pausar" : "▶️ Retomar"}
+                </button>
+                <button
+                  onClick={() => controlJob("stop")}
+                  style={{
+                    padding: "6px 14px", fontSize: "13px", borderRadius: "8px", cursor: "pointer",
+                    background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.35)",
+                    color: "var(--color-error)", fontWeight: 600,
+                  }}
+                >
+                  ⏹️ Parar
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Progress bar */}
           {progress && progress.total && (
             <div style={{ marginBottom: "16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)", marginBottom: "6px" }}>
                 <span>
-                  {progress.type === "complete" ? "✅ Concluído" : progress.type === "waiting" ? `⏱️ Próximo em ${progress.delay}s...` : `Enviando...`}
+                  {jobStatus === "paused" ? "⏸️ Pausado" : jobStatus === "stopped" ? "⏹️ Interrompido" : progress.type === "complete" ? "✅ Concluído" : progress.type === "waiting" ? `⏱️ Próximo em ${progress.delay}s...` : `Enviando...`}
                 </span>
                 <span>{(progress.sent || 0) + (progress.failed || 0)} / {progress.total}</span>
               </div>
@@ -640,6 +686,9 @@ export default function BroadcastPage() {
                 {evt.type === "coupon" && `[🎟️] Cupom ${(evt as any).code} criado para ${evt.name}`}
                 {evt.type === "coupon_error" && `[🎟️✗] Falha no cupom ${(evt as any).code} (${evt.name}) — ${evt.error}`}
                 {evt.type === "waiting" && `[...] Aguardando ${evt.delay}s antes do próximo envio`}
+                {evt.type === "paused" && `[⏸] Envio pausado pelo admin`}
+                {evt.type === "resumed" && `[▶] Envio retomado`}
+                {evt.type === "stopped" && `[⏹] Envio interrompido pelo admin — pendentes não serão enviados`}
                 {evt.type === "complete" && `[DONE] Broadcast concluído. ✅ ${evt.sent} enviados, ❌ ${evt.failed} falhas.`}
                 {evt.type === "fatal" && `[FATAL] ${evt.error}`}
               </div>

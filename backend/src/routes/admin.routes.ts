@@ -2087,10 +2087,40 @@ router.get('/broadcast/status/:jobId', (req: AuthRequest, res: Response) => {
 router.get('/broadcast/active', (_req: AuthRequest, res: Response) => {
   let latest: BroadcastJob | null = null;
   for (const j of broadcastJobs.values()) {
-    if (j.status !== 'running') continue;
+    if (j.status !== 'running' && j.status !== 'paused') continue;
     if (!latest || j.startedAt > latest.startedAt) latest = j;
   }
   return res.json({ job: latest });
+});
+
+/**
+ * POST /api/admin/broadcast/control/:jobId  { action: 'pause' | 'resume' | 'stop' }
+ * Flips the job status; the send loop reads it between messages and once per
+ * second during the anti-block wait, so the effect is near-immediate. Stop is
+ * final — the remaining recipients are never sent.
+ */
+router.post('/broadcast/control/:jobId', (req: AuthRequest, res: Response) => {
+  const job = broadcastJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job não encontrado' });
+
+  const action = String(req.body?.action || '');
+  if (action === 'pause') {
+    if (job.status !== 'running') return res.status(400).json({ error: 'O envio não está em execução' });
+    job.status = 'paused';
+    pushBroadcastEvent(job, { type: 'paused' });
+  } else if (action === 'resume') {
+    if (job.status !== 'paused') return res.status(400).json({ error: 'O envio não está pausado' });
+    job.status = 'running';
+    pushBroadcastEvent(job, { type: 'resumed' });
+  } else if (action === 'stop') {
+    if (job.status !== 'running' && job.status !== 'paused') return res.status(400).json({ error: 'O envio já terminou' });
+    job.status = 'stopped';
+    job.finishedAt = Date.now();
+    pushBroadcastEvent(job, { type: 'stopped' });
+  } else {
+    return res.status(400).json({ error: 'Ação inválida' });
+  }
+  return res.json(job);
 });
 
 // ── Broadcast background jobs ──
@@ -2100,7 +2130,7 @@ router.get('/broadcast/active', (_req: AuthRequest, res: Response) => {
 interface BroadcastEvent { type: string; [key: string]: any }
 interface BroadcastJob {
   id: string;
-  status: 'running' | 'done' | 'error';
+  status: 'running' | 'paused' | 'stopped' | 'done' | 'error';
   total: number;
   sent: number;
   failed: number;
@@ -2113,6 +2143,8 @@ interface BroadcastJob {
 
 const broadcastJobs = new Map<string, BroadcastJob>();
 const MAX_BROADCAST_LOG = 3000;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function pushBroadcastEvent(job: BroadcastJob, ev: BroadcastEvent) {
   job.log.push({ ...ev, total: job.total, sent: job.sent, failed: job.failed, coupons: job.coupons });
@@ -2153,6 +2185,11 @@ async function runBroadcast(job: BroadcastJob, opts: RunBroadcastOpts) {
     // ── WhatsApp broadcast loop ──
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
+
+      // Pause/stop gate — the control endpoint flips job.status from another
+      // request; pausing parks the loop here, stopping ends it for good.
+      while ((job.status as string) === 'paused') await sleep(1000);
+      if ((job.status as string) === 'stopped') break;
 
       // Clean phone
       let cleanPhone = user.phone.replace(/\D/g, '');
@@ -2203,17 +2240,22 @@ async function runBroadcast(job: BroadcastJob, opts: RunBroadcastOpts) {
         pushBroadcastEvent(job, { type: 'error', index: i, name: user.name, error: err.message });
       }
 
-      // Randomized delay between messages (anti-block)
+      // Randomized delay between messages (anti-block), in 1s slices so a
+      // pause/stop takes effect mid-wait instead of after it.
       if (i < users.length - 1) {
         const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
         pushBroadcastEvent(job, { type: 'waiting', delay, nextIndex: i + 1 });
-        await new Promise(resolve => setTimeout(resolve, delay * 1000));
+        for (let s = 0; s < delay && (job.status as string) === 'running'; s++) await sleep(1000);
       }
     }
   } else {
     // ── Push-only mode: no WhatsApp loop ──
     job.sent = users.length;
   }
+
+  // Stopped mid-flight: the control endpoint already stamped finishedAt and
+  // logged it — don't mark done and don't fire the push notification.
+  if ((job.status as string) === 'stopped') return;
 
   job.status = 'done';
   job.finishedAt = Date.now();

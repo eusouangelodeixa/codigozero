@@ -681,6 +681,9 @@ export async function ingestInboundText(input: {
         feedbackStatus: 'in_progress',
         unansweredStreak: 0,
         pausedAt: null,
+        // Re-carimba o início: sem isto, um revive entre o dia 7 e o dia 14
+        // é re-expirado em silêncio pelo Safety TTL (7d) no tick seguinte.
+        feedbackStartedAt: now,
         nextActionAt: new Date(now.getTime() + randQuickMs()),
       },
     });

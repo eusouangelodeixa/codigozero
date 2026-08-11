@@ -610,7 +610,14 @@ export async function ingestInboundText(input: {
   const content = (input.content || '').trim();
   if (!content || !input.phone) return;
 
-  const phones = Array.from(new Set([input.phone, normalizeMzPhone(input.phone)].filter(Boolean)));
+  // A Komunika manda o número como o JID sem sufixo ("258853287859" — sem
+  // "+"), mas os Users guardam "+258…": sem o candidato com "+" o lookup
+  // falha em silêncio e o SIM do consentimento é descartado (caso Shelton,
+  // 2026-08-11).
+  const digits = normalizeMzPhone(input.phone);
+  const phones = Array.from(
+    new Set([input.phone, digits, digits ? `+${digits}` : ''].filter(Boolean)),
+  );
   const user = await prisma.user.findFirst({
     where: { phone: { in: phones } },
     select: { id: true, phone: true, name: true },

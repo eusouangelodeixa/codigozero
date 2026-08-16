@@ -1,8 +1,8 @@
 -- AlterTable
-ALTER TABLE "ScheduledDispatch" ADD COLUMN     "lastContactIndex" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "ScheduledDispatch" ADD COLUMN IF NOT EXISTS "lastContactIndex" INTEGER NOT NULL DEFAULT 0;
 
 -- CreateTable
-CREATE TABLE "AdminBroadcast" (
+CREATE TABLE IF NOT EXISTS "AdminBroadcast" (
     "id" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'running',
     "message" TEXT NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE "AdminBroadcast" (
 );
 
 -- CreateTable
-CREATE TABLE "AdminBroadcastRecipient" (
+CREATE TABLE IF NOT EXISTS "AdminBroadcastRecipient" (
     "id" TEXT NOT NULL,
     "jobId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -41,46 +41,46 @@ CREATE TABLE "AdminBroadcastRecipient" (
 );
 
 -- CreateIndex
-CREATE INDEX "AdminBroadcast_status_idx" ON "AdminBroadcast"("status");
+CREATE INDEX IF NOT EXISTS "AdminBroadcast_status_idx" ON "AdminBroadcast"("status");
 
 -- CreateIndex
-CREATE INDEX "AdminBroadcastRecipient_jobId_status_idx" ON "AdminBroadcastRecipient"("jobId", "status");
+CREATE INDEX IF NOT EXISTS "AdminBroadcastRecipient_jobId_status_idx" ON "AdminBroadcastRecipient"("jobId", "status");
 
 -- CreateIndex
-CREATE INDEX "User_subscriptionStatus_subscriptionEnd_idx" ON "User"("subscriptionStatus", "subscriptionEnd");
+CREATE INDEX IF NOT EXISTS "User_subscriptionStatus_subscriptionEnd_idx" ON "User"("subscriptionStatus", "subscriptionEnd");
 
 -- CreateIndex
-CREATE INDEX "User_subscriptionEnd_idx" ON "User"("subscriptionEnd");
+CREATE INDEX IF NOT EXISTS "User_subscriptionEnd_idx" ON "User"("subscriptionEnd");
 
 -- CreateIndex
-CREATE INDEX "User_createdAt_idx" ON "User"("createdAt");
+CREATE INDEX IF NOT EXISTS "User_createdAt_idx" ON "User"("createdAt");
 
 -- CreateIndex
-CREATE INDEX "User_newsletterWelcomeSentAt_newsletterWelcomeDueAt_idx" ON "User"("newsletterWelcomeSentAt", "newsletterWelcomeDueAt");
+CREATE INDEX IF NOT EXISTS "User_newsletterWelcomeSentAt_newsletterWelcomeDueAt_idx" ON "User"("newsletterWelcomeSentAt", "newsletterWelcomeDueAt");
 
 -- CreateIndex
-CREATE INDEX "User_saveContactSentAt_saveContactDueAt_idx" ON "User"("saveContactSentAt", "saveContactDueAt");
+CREATE INDEX IF NOT EXISTS "User_saveContactSentAt_saveContactDueAt_idx" ON "User"("saveContactSentAt", "saveContactDueAt");
 
 -- CreateIndex
-CREATE INDEX "User_referredByCoproducer_idx" ON "User"("referredByCoproducer");
+CREATE INDEX IF NOT EXISTS "User_referredByCoproducer_idx" ON "User"("referredByCoproducer");
 
 -- CreateIndex
-CREATE INDEX "CredentialDelivery_channel_sentAt_idx" ON "CredentialDelivery"("channel", "sentAt");
+CREATE INDEX IF NOT EXISTS "CredentialDelivery_channel_sentAt_idx" ON "CredentialDelivery"("channel", "sentAt");
 
 -- CreateIndex
-CREATE INDEX "Transaction_status_createdAt_idx" ON "Transaction"("status", "createdAt");
+CREATE INDEX IF NOT EXISTS "Transaction_status_createdAt_idx" ON "Transaction"("status", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "Transaction_userPhone_idx" ON "Transaction"("userPhone");
+CREATE INDEX IF NOT EXISTS "Transaction_userPhone_idx" ON "Transaction"("userPhone");
 
 -- CreateIndex
-CREATE INDEX "ScrapedLead_jobId_createdAt_idx" ON "ScrapedLead"("jobId", "createdAt");
+CREATE INDEX IF NOT EXISTS "ScrapedLead_jobId_createdAt_idx" ON "ScrapedLead"("jobId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "ChatMessage_channel_readAt_idx" ON "ChatMessage"("channel", "readAt");
+CREATE INDEX IF NOT EXISTS "ChatMessage_channel_readAt_idx" ON "ChatMessage"("channel", "readAt");
 
 -- CreateIndex
-CREATE INDEX "FeedbackSurvey_suggestionStatus_suggestionWindowEndsAt_idx" ON "FeedbackSurvey"("suggestionStatus", "suggestionWindowEndsAt");
+CREATE INDEX IF NOT EXISTS "FeedbackSurvey_suggestionStatus_suggestionWindowEndsAt_idx" ON "FeedbackSurvey"("suggestionStatus", "suggestionWindowEndsAt");
 
 -- AddForeignKey
 ALTER TABLE "AdminBroadcastRecipient" ADD CONSTRAINT "AdminBroadcastRecipient_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "AdminBroadcast"("id") ON DELETE CASCADE ON UPDATE CASCADE;

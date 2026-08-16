@@ -37,7 +37,18 @@ export async function activeCourseAccessIds(userId: string): Promise<Set<string>
   return new Set(rows.map((r) => r.courseId));
 }
 
-export type CourseLike = { id: string; accessType?: string | null };
+export type CourseLike = { id: string; accessType?: string | null; includedInSubscription?: boolean | null };
+
+/** Curso é vendido à parte (tem vitrine + botão comprar)? */
+function isSellable(course: CourseLike): boolean {
+  return (course.accessType || 'subscription') === 'paid';
+}
+
+/** Curso é incluído na assinatura? Default true (histórico); só false quando
+ *  explicitamente desmarcado (ou backfill de curso pago-só). */
+function isIncludedInSubscription(course: CourseLike): boolean {
+  return course.includedInSubscription !== false;
+}
 
 /**
  * Tem acesso COMPLETO a este curso?
@@ -52,8 +63,12 @@ export function hasFullAccess(
   ownedCourseIds: Set<string>,
 ): boolean {
   if (PRIVILEGED_ROLES.has(String(viewer.role || ''))) return true;
+  // CourseAccess individual SEMPRE dá entrada (vitalício / compra de fora —
+  // que acessa só o que comprou). Independe dos eixos abaixo.
   if (ownedCourseIds.has(course.id)) return true;
-  if ((course.accessType || 'subscription') !== 'paid') {
+  // Assinante em dia entra nos cursos incluídos na assinatura — vale também
+  // para o curso HÍBRIDO (vendido à parte E incluído).
+  if (isIncludedInSubscription(course)) {
     return SUBSCRIPTION_GRANTS.has(String(viewer.subscriptionStatus || ''));
   }
   return false;
@@ -71,7 +86,7 @@ export function isVisible(
   course: CourseLike,
   ownedCourseIds: Set<string>,
 ): boolean {
-  if ((course.accessType || 'subscription') === 'paid') return true;
+  if (isSellable(course)) return true;
   return hasFullAccess(viewer, course, ownedCourseIds);
 }
 

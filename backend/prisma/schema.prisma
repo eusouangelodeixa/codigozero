@@ -250,13 +250,23 @@ model Course {
   sortOrder Int      @default(0)
   config    Json?    // { theme, branding, menu, home } — ver MemberConfig no frontend
 
-  // ── Como se ganha acesso a este curso ────────────────────────────────
-  // 'subscription' = incluído na assinatura (comportamento histórico: todo
-  //                  assinante activo vê o curso publicado).
-  // 'paid'         = vendido à parte; só entra quem tiver CourseAccess.
-  // Em qualquer dos casos um CourseAccess individual dá entrada — é o que
-  // permite acesso VITALÍCIO, que sobrevive ao fim da assinatura.
+  // ── DOIS EIXOS INDEPENDENTES de acesso ───────────────────────────────
+  // Antes era um ou-outro; agora um curso pode ser as duas coisas ao mesmo
+  // tempo (ex.: incluído no plano E vendido avulso ao público de fora).
+  //
+  // accessType = É VENDIDO À PARTE?
+  //   'paid'         = sim → tem vitrine com cadeado, botão comprar e webhook
+  //                    próprio; quem compra de fora ganha CourseAccess e acessa
+  //                    SÓ este curso (não é assinante).
+  //   'subscription' = não é vendido avulso.
   accessType   String  @default("subscription")
+  // includedInSubscription = ASSINANTE ATIVO ENTRA DE GRAÇA?
+  //   true  = todo assinante em dia abre o curso sem precisar de CourseAccess.
+  //   false = nem o assinante entra sem um CourseAccess (curso pago-só).
+  // Combinações: incluído-só (paid=não, incl=sim, o histórico), pago-só
+  // (paid=sim, incl=não), e HÍBRIDO (paid=sim, incl=sim). Um CourseAccess
+  // individual SEMPRE dá entrada (é o acesso vitalício), em qualquer combo.
+  includedInSubscription Boolean @default(true)
   // pid do produto na Lojou, para confirmar que a venda é mesmo deste curso.
   productPid   String?
   // Token da rota de webhook própria (/api/webhooks/course/{token}). Curso

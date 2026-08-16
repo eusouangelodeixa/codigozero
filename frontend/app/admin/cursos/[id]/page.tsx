@@ -40,7 +40,7 @@ type Mod = {
 };
 type Course = {
   id: string; name: string; slug: string; status: string; modules: Mod[];
-  accessType?: string; productPid?: string | null; webhookToken?: string | null;
+  accessType?: string; includedInSubscription?: boolean; productPid?: string | null; webhookToken?: string | null;
   includedTools?: string[] | null;
   coproducerId?: string | null; checkoutUrl?: string | null;
 };
@@ -288,22 +288,43 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
           <span className={styles.cardTitle}>Acesso e venda</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Como se ganha acesso</label>
-            <select
-              className={styles.formInput}
-              value={course.accessType || "subscription"}
-              onChange={(e) => saveAccess({ accessType: e.target.value })}
-            >
-              <option value="subscription">Incluído na assinatura</option>
-              <option value="paid">Vendido à parte (precisa comprar)</option>
-            </select>
-            <p className={styles.formHint}>
-              Quem recebeu acesso vitalício continua a entrar em qualquer um dos casos.
-            </p>
-          </div>
+        {/* Dois eixos INDEPENDENTES: pode marcar os dois (curso híbrido). */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              style={{ marginTop: 3 }}
+              checked={course.includedInSubscription !== false}
+              onChange={(e) => saveAccess({ includedInSubscription: e.target.checked })}
+            />
+            <span>
+              <strong>Incluído na assinatura</strong>
+              <span className={styles.formHint} style={{ display: "block" }}>
+                Todo assinante em dia abre este curso, sem comprar à parte.
+              </span>
+            </span>
+          </label>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              style={{ marginTop: 3 }}
+              checked={(course.accessType || "subscription") === "paid"}
+              onChange={(e) => saveAccess({ accessType: e.target.checked ? "paid" : "subscription" })}
+            />
+            <span>
+              <strong>Vender à parte (compra avulsa)</strong>
+              <span className={styles.formHint} style={{ display: "block" }}>
+                Cria vitrine com cadeado e botão comprar. Quem compra de fora acessa só este curso.
+                Marque os dois para um curso que é <em>incluído no plano E vendido avulso</em>.
+              </span>
+            </span>
+          </label>
+          <p className={styles.formHint} style={{ margin: 0 }}>
+            Acesso vitalício concedido (turma/manual) sempre entra, em qualquer combinação.
+          </p>
+        </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
           {(course.accessType || "subscription") === "paid" && (
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>PID do produto na Lojou</label>

@@ -166,11 +166,13 @@ router.get('/courses/:id', async (req: AuthRequest, res: Response) => {
 router.patch('/courses/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { name, slug, status, sortOrder, coverUrl, config, accessType, productPid, includedTools, coproducerId, checkoutUrl } = req.body || {};
+    const { name, slug, status, sortOrder, coverUrl, config, accessType, includedInSubscription, productPid, includedTools, coproducerId, checkoutUrl } = req.body || {};
     const data: Record<string, unknown> = {};
-    // 'paid' = vendido à parte (só entra quem tem CourseAccess);
-    // 'subscription' = incluído no plano, como sempre foi.
+    // Dois eixos independentes (ver schema): accessType = vendido à parte?
+    // includedInSubscription = assinante entra de graça? Um curso pode ser os
+    // dois ao mesmo tempo (híbrido).
     if (accessType === 'paid' || accessType === 'subscription') data.accessType = accessType;
+    if (typeof includedInSubscription === 'boolean') data.includedInSubscription = includedInSubscription;
     if (productPid !== undefined) data.productPid = String(productPid || '').trim() || null;
     // Coprodutor associado (um por curso; '' / null desassocia). Validado
     // contra a tabela para não gravar id órfão.

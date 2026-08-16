@@ -137,6 +137,7 @@ router.get('/courses', ...memberGuards, async (req: AuthRequest, res: Response) 
         name: true,
         coverUrl: true,
         accessType: true,
+        includedInSubscription: true,
         modules: { select: { lessons: { select: { id: true } } } },
       },
     });
@@ -277,7 +278,7 @@ router.get('/lessons/:id', ...memberGuards, async (req: AuthRequest, res: Respon
       where: { id: String(req.params.id) },
       include: {
         module: {
-          include: { course: { select: { id: true, slug: true, status: true, accessType: true, checkoutUrl: true } } },
+          include: { course: { select: { id: true, slug: true, status: true, accessType: true, includedInSubscription: true, checkoutUrl: true } } },
         },
       },
     });

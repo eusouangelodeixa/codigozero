@@ -22,7 +22,7 @@ export async function membersFetch<T = any>(path: string, init?: RequestInit): P
   if (res.status === 401) {
     localStorage.removeItem("cz_token");
     localStorage.removeItem("cz_user");
-    window.location.href = "/login";
+    window.location.href = membersLoginPath();
     throw new Error("unauthorized");
   }
   const data = await res.json().catch(() => ({}));
@@ -30,11 +30,24 @@ export async function membersFetch<T = any>(path: string, init?: RequestInit): P
   return data as T;
 }
 
-/** Guarda simples das páginas members: sem token → /login (da própria origem). */
+/**
+ * Para onde mandar quem não está logado. Se está DENTRO de um curso
+ * (members.czero.sbs/{slug}/…), vai pro login TEMÁTICO do curso (/{slug}/login,
+ * com a arte de fundo que o admin subiu) — não pro login genérico. Antes ia
+ * sempre pro genérico, então o comprador de um curso nunca via o fundo dele.
+ */
+function membersLoginPath(): string {
+  if (typeof window === "undefined") return "/login";
+  const seg = window.location.pathname.split("/").filter(Boolean)[0];
+  const reserved = new Set(["login", "sso"]);
+  return seg && !reserved.has(seg) ? `/${seg}/login` : "/login";
+}
+
+/** Guarda simples das páginas members: sem token → login (temático se num curso). */
 export function requireMembersAuth(): boolean {
   if (typeof window === "undefined") return false;
   if (!membersToken()) {
-    window.location.href = "/login";
+    window.location.href = membersLoginPath();
     return false;
   }
   return true;

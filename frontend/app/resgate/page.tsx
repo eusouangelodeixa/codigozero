@@ -1,5 +1,5 @@
 "use client";
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Logo } from "@/components/Logo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -37,163 +37,198 @@ export default function ResgatePage() {
   };
 
   return (
-    <main style={S.page}>
-      <div style={S.card}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
-          <Logo size={38} />
-        </div>
+    <main className="rg-page">
+      <style>{CSS}</style>
+      <div className="rg-glow" aria-hidden />
 
+      <section className="rg-card" role="region" aria-label="Recuperar acesso">
         {!done ? (
           <>
-            <h1 style={S.title}>Resgatar acesso</h1>
-            <p style={S.subtitle}>
-              Comprou o <strong style={{ color: "#fff" }}>Código Zero</strong> ou um dos nossos{" "}
-              <strong style={{ color: "#fff" }}>cursos</strong> e não recebeu seus dados? Reenviamos o seu
-              acesso para o e-mail e o WhatsApp cadastrados na compra.
+            <div className="rg-emblem" aria-hidden>
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8" cy="15" r="4" />
+                <path d="M10.85 12.15 19 4" />
+                <path d="M18 5l2 2" />
+                <path d="M15 8l2 2" />
+              </svg>
+            </div>
+
+            <span className="rg-eyebrow">Recuperar acesso</span>
+            <h1 className="rg-title">Perdeu o acesso à sua conta?</h1>
+            <p className="rg-sub">
+              Assinatura ou curso — informe o contato que usou na compra e reenviamos os seus dados de acesso.
             </p>
 
-            <form onSubmit={submit} style={{ marginTop: 18 }}>
-              <label style={S.label}>Telefone ou e-mail usado na compra</label>
+            <form onSubmit={submit} className="rg-form">
+              <label className="rg-label" htmlFor="rg-id">Telefone ou e-mail da compra</label>
               <input
-                style={S.input}
-                placeholder="ex: 84xxxxxxx  ou  seu@email.com"
+                id="rg-id"
+                className="rg-input"
+                placeholder="84xxxxxxx  ·  seu@email.com"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 autoFocus
+                autoComplete="username"
               />
-              {error && <div style={S.error}>{error}</div>}
-              <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
+              {error && <div className="rg-error" role="alert">{error}</div>}
+              <button type="submit" className="rg-btn" disabled={loading}>
                 {loading ? "Enviando…" : "Reenviar meu acesso"}
               </button>
             </form>
 
-            <p style={S.foot}>
-              Por segurança, o acesso vai apenas para os contatos cadastrados — não é exibido aqui. Se não
-              chegar em alguns minutos (verifique o spam), fale com o suporte.
+            <ol className="rg-steps">
+              <li><b>1</b><span>Você informa o contato da compra</span></li>
+              <li><b>2</b><span>Enviamos o acesso para o e-mail e o WhatsApp cadastrados</span></li>
+              <li><b>3</b><span>É só entrar — e trocar a senha no seu perfil</span></li>
+            </ol>
+
+            <p className="rg-foot">
+              🔒 Por segurança, o acesso não aparece nesta tela — vai apenas para os seus contatos cadastrados.
             </p>
           </>
         ) : (
           <>
-            <h1 style={S.title}>Prontinho! ✅</h1>
-            <p style={S.subtitle}>{done.message}</p>
-            <div style={S.productBox}>
-              📧 Verifique o seu <strong style={{ color: "#fff" }}>e-mail</strong> (inclusive o spam) e o seu{" "}
-              <strong style={{ color: "#fff" }}>WhatsApp</strong>. As credenciais chegam nos próximos minutos.
+            <div className="rg-emblem rg-emblem-ok" aria-hidden>
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
             </div>
-            <a href="/login" style={{ ...S.btn, textDecoration: "none", display: "block", textAlign: "center", marginTop: 8 }}>
-              Ir para o login →
-            </a>
+            <span className="rg-eyebrow">Enviado</span>
+            <h1 className="rg-title">Acesso a caminho ✨</h1>
+            <p className="rg-sub">{done.message}</p>
+
+            <div className="rg-channels">
+              <div className="rg-channel"><span>📧</span> Verifique o seu <b>e-mail</b> — inclusive a caixa de spam</div>
+              <div className="rg-channel"><span>💬</span> E o seu <b>WhatsApp</b> — chega nos próximos minutos</div>
+            </div>
+
+            <a href="/login" className="rg-btn rg-btn-link">Ir para o login →</a>
+            <p className="rg-foot">Não chegou em alguns minutos? Fale com o suporte que a gente resolve.</p>
           </>
         )}
-      </div>
+
+        <div className="rg-brand">
+          <Logo size={20} variant="mark" />
+          <span>Plataforma Código Zero</span>
+        </div>
+      </section>
     </main>
   );
 }
 
-const S: Record<string, CSSProperties> = {
-  page: {
-    minHeight: "100dvh",
-    background: "#001412",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 440,
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 18,
-    padding: "32px 26px",
-    backdropFilter: "blur(12px)",
-  },
-  title: { fontSize: 24, fontWeight: 800, color: "#fff", textAlign: "center", margin: "0 0 8px", letterSpacing: "-0.02em" },
-  subtitle: { fontSize: 14.5, color: "#A1A1AA", textAlign: "center", lineHeight: 1.55, margin: "0 0 18px" },
-  warnBox: {
-    background: "rgba(245,158,11,0.10)",
-    border: "1px solid rgba(245,158,11,0.35)",
-    color: "#fcd34d",
-    borderRadius: 12,
-    padding: "12px 14px",
-    fontSize: 13.5,
-    lineHeight: 1.55,
-  },
-  label: { display: "block", fontSize: 13, color: "#A1A1AA", marginBottom: 8, fontWeight: 500 },
-  input: {
-    width: "100%",
-    boxSizing: "border-box",
-    background: "rgba(0,0,0,0.25)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 10,
-    padding: "13px 14px",
-    color: "#fff",
-    fontSize: 15,
-    outline: "none",
-  },
-  btn: {
-    width: "100%",
-    marginTop: 16,
-    background: "#2DD4BF",
-    color: "#001412",
-    border: "none",
-    borderRadius: 10,
-    padding: "14px 16px",
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  error: {
-    marginTop: 12,
-    background: "rgba(239,68,68,0.10)",
-    border: "1px solid rgba(239,68,68,0.35)",
-    color: "#fca5a5",
-    borderRadius: 10,
-    padding: "11px 13px",
-    fontSize: 13.5,
-    lineHeight: 1.5,
-  },
-  foot: { marginTop: 16, fontSize: 12.5, color: "#52525B", textAlign: "center", lineHeight: 1.5 },
-  productBox: {
-    background: "rgba(45,212,191,0.06)",
-    border: "1px solid rgba(45,212,191,0.22)",
-    borderRadius: 12,
-    padding: "12px 14px",
-    margin: "4px 0 14px",
-  },
-  productRow: { fontSize: 14, fontWeight: 600, color: "#fff", marginTop: 6 },
-  credBox: { display: "flex", flexDirection: "column", gap: 10, margin: "4px 0 16px" },
-  credRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    background: "rgba(0,0,0,0.25)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    borderRadius: 12,
-    padding: "12px 14px",
-  },
-  credLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", color: "#52525B", marginBottom: 3 },
-  credValue: { fontSize: 16, color: "#fff", fontWeight: 600, wordBreak: "break-all" },
-  copyBtn: {
-    flexShrink: 0,
-    background: "rgba(45,212,191,0.12)",
-    border: "1px solid rgba(45,212,191,0.4)",
-    color: "#2DD4BF",
-    borderRadius: 8,
-    padding: "8px 12px",
-    fontSize: 12.5,
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  dangerBox: {
-    marginTop: 18,
-    background: "rgba(239,68,68,0.10)",
-    border: "1px solid rgba(239,68,68,0.4)",
-    color: "#fca5a5",
-    borderRadius: 12,
-    padding: "13px 15px",
-    fontSize: 13.5,
-    lineHeight: 1.6,
-  },
-};
+const CSS = `
+.rg-page {
+  position: relative;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1100px 520px at 50% -8%, #06231F 0%, rgba(6,35,31,0) 60%),
+    #00110F;
+  color: #EAF2F0;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+}
+.rg-glow {
+  position: absolute;
+  top: -160px; left: 50%; transform: translateX(-50%);
+  width: 520px; height: 520px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(45,212,191,0.16) 0%, rgba(45,212,191,0) 68%);
+  pointer-events: none;
+}
+.rg-card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 22px;
+  padding: 34px 30px 22px;
+  box-shadow: 0 24px 60px -24px rgba(0,0,0,0.7);
+  animation: rg-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes rg-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.rg-emblem {
+  width: 52px; height: 52px; border-radius: 15px;
+  display: flex; align-items: center; justify-content: center;
+  color: #2DD4BF;
+  background: rgba(45,212,191,0.10);
+  border: 1px solid rgba(45,212,191,0.28);
+  margin-bottom: 18px;
+}
+.rg-emblem-ok { color: #34D399; background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.30); }
+
+.rg-eyebrow {
+  display: block;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #2DD4BF; margin-bottom: 10px;
+}
+.rg-title {
+  font-size: 25px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.15;
+  margin: 0 0 8px; color: #fff; text-wrap: balance;
+}
+.rg-sub { font-size: 14.5px; line-height: 1.6; color: #93A69F; margin: 0 0 22px; }
+
+.rg-form { display: flex; flex-direction: column; }
+.rg-label { font-size: 12.5px; font-weight: 600; color: #B7C6C1; margin-bottom: 8px; }
+.rg-input {
+  width: 100%; box-sizing: border-box;
+  background: rgba(0,0,0,0.28);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 14px 15px; color: #fff; font-size: 15px; outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.rg-input::placeholder { color: #566862; }
+.rg-input:focus { border-color: rgba(45,212,191,0.6); box-shadow: 0 0 0 3px rgba(45,212,191,0.14); }
+
+.rg-btn {
+  width: 100%; margin-top: 16px;
+  background: #2DD4BF; color: #00201C;
+  border: none; border-radius: 12px;
+  padding: 15px 16px; font-size: 15px; font-weight: 700; cursor: pointer;
+  transition: transform 0.08s, background 0.15s, opacity 0.15s;
+}
+.rg-btn:hover:not(:disabled) { background: #34E0CC; }
+.rg-btn:active:not(:disabled) { transform: translateY(1px); }
+.rg-btn:disabled { opacity: 0.6; cursor: default; }
+.rg-btn-link { display: block; text-align: center; text-decoration: none; }
+
+.rg-error {
+  margin-top: 12px;
+  background: rgba(239,68,68,0.10); border: 1px solid rgba(239,68,68,0.35);
+  color: #fca5a5; border-radius: 11px; padding: 11px 13px; font-size: 13.5px; line-height: 1.5;
+}
+
+.rg-steps { list-style: none; margin: 22px 0 0; padding: 18px 0 0; border-top: 1px solid rgba(255,255,255,0.07); display: grid; gap: 12px; }
+.rg-steps li { display: flex; align-items: center; gap: 12px; font-size: 13.5px; color: #A9BAB4; line-height: 1.4; }
+.rg-steps b {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(45,212,191,0.10); border: 1px solid rgba(45,212,191,0.22);
+  color: #2DD4BF; font-size: 12.5px; font-weight: 700;
+}
+
+.rg-channels { display: grid; gap: 10px; margin: 4px 0 20px; }
+.rg-channel {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(45,212,191,0.06); border: 1px solid rgba(45,212,191,0.20);
+  border-radius: 12px; padding: 13px 15px; font-size: 14px; color: #C9D6D2; line-height: 1.4;
+}
+.rg-channel b { color: #fff; font-weight: 700; }
+.rg-channel span { font-size: 17px; }
+
+.rg-foot { margin: 16px 0 0; font-size: 12.5px; color: #5B706B; text-align: center; line-height: 1.55; }
+
+.rg-brand {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11.5px; letter-spacing: 0.02em; color: #4A5D58; font-weight: 500;
+}
+
+@media (max-width: 480px) { .rg-card { padding: 28px 22px 20px; } .rg-title { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { .rg-card { animation: none; } }
+`;

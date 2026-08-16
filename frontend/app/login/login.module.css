@@ -140,20 +140,29 @@
 .passToggle:hover { text-decoration: underline; }
 
 @media (max-width: 900px) {
-  /* Mobile: o painel vira um cabeçalho de marca compacto acima do card —
-     mesma identidade do desktop, sem roubar espaço do formulário. */
+  /* Mobile: o painel vira um cabeçalho de marca compacto e centrado acima do
+     card — mesma identidade do desktop, sem roubar espaço do formulário. */
   .container { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .heroSide {
     border-right: none;
     border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
-    padding: 30px 22px 24px;
+    padding: 22px 20px 20px;
+    justify-content: center;
   }
-  .heroInner { gap: 6px; }
-  .heroTitle { font-size: 1.45rem; margin-top: 10px; }
-  .heroDesc { font-size: 0.9rem; }
+  .heroInner { gap: 8px; align-items: center; text-align: center; max-width: 30ch; }
+  .heroTitle { font-size: 1.3rem; margin-top: 6px; }
+  .heroDesc { font-size: 0.88rem; max-width: 34ch; }
   .heroList, .heroFoot { display: none; }
-  .formSide { padding-top: var(--space-5); align-items: flex-start; }
+  .formSide { padding: var(--space-5) var(--space-4) var(--space-8); align-items: flex-start; }
   .brandLogoMobile { display: none; }
+}
+
+/* Telas baixas / celulares menores: o cabeçalho de marca some e só o card do
+   login fica — evita a rolagem e o "vazio" embaixo. */
+@media (max-width: 900px) and (max-height: 720px) {
+  .heroDesc { display: none; }
+  .heroSide { padding: 16px 20px 14px; }
+  .heroTitle { display: none; }
 }
 
 /* Subtle dotted grid pattern */
@@ -267,7 +276,9 @@
 }
 
 @media (max-width: 480px) {
-  .formSide { padding: var(--space-4); }
+  .formSide { padding: var(--space-4) var(--space-4) var(--space-8); }
+  /* --space-7 agora existe (28px); antes era indefinido → o padding colapsava
+     para 0 e os rótulos colavam na borda. */
   .card { padding: var(--space-7) var(--space-5); }
 }
 

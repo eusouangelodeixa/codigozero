@@ -65,7 +65,10 @@ export function LoginCard({
         </button>
       </form>
       <div className={k.loginFoot}>
-        Esqueceu a senha? <a href="https://app.czero.sbs/recuperar">Recuperar acesso</a>
+        {/* /resgate = auto-serviço (informa e-mail/telefone → reenviamos o
+            acesso aos canais cadastrados). O /recuperar antigo era só a
+            página de DESTINO do e-mail (sem ?token= dava beco sem saída). */}
+        Esqueceu a senha? <a href="https://app.czero.sbs/resgate">Recuperar acesso</a>
       </div>
     </div>
   );

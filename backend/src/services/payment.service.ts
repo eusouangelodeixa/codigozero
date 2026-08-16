@@ -70,11 +70,12 @@ export async function sendCredentialsViaWhatsApp(opts: {
   const { phone, email, rawPassword } = opts;
 
   const accessUrl = opts.accessUrl || `${env.FRONTEND_URL}/login`;
+  // Cabeçalho NEUTRO (serve compra e reenvio/resgate): nomeia o produto quando
+  // houver, e não afirma "conta criada" — no resgate a conta não é nova.
   const message = [
-    opts.productName ? `🎉 *Compra confirmada!*` : `🎉 *Bem-vindo ao Código Zero!*`,
+    opts.productName ? `🎉 *Seu acesso ao ${opts.productName}*` : `🎉 *Bem-vindo ao Código Zero!*`,
     ``,
-    ...(opts.productName ? [`📦 *Produto:* ${opts.productName}`, ``] : []),
-    `Sua conta foi criada com sucesso.`,
+    `Aqui estão os seus dados de acesso:`,
     ``,
     `📧 *Email:* ${email}`,
     `🔑 *Senha:* ${rawPassword}`,

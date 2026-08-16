@@ -493,7 +493,15 @@ router.post('/recover-access', recoverLimiter, recoverPerIdentifierLimiter, asyn
     });
     console.log(`[AUTH] 🔓 Acesso reenviado via /resgate para user=${user.id} (canais cadastrados)`);
 
-    const productName = !assinantePago && acessos.length === 1 ? acessos[0].course.name : undefined;
+    // Nomeia o que a pessoa tem, pra mensagem não vir genérica: assinante →
+    // "Código Zero"; 1 curso → o nome do curso; vários → "seus cursos".
+    const productName = assinantePago
+      ? 'Código Zero'
+      : acessos.length === 1
+        ? acessos[0].course.name
+        : acessos.length > 1
+          ? 'seus cursos'
+          : undefined;
     sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw, productName, userId: user.id }).catch((e) =>
       console.error('[AUTH] recover-access e-mail falhou (não-bloqueante):', e?.message || e),
     );

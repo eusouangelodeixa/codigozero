@@ -1,3 +1,4 @@
+import { isAllowedUpload } from '../lib/uploadGuards';
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -17,7 +18,8 @@ import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
 import { sendFirstAccessWelcome } from '../services/onboarding.service';
 import { signMembersSsoCode } from '../lib/membersSso';
-import { generateUserPassword, sendCredentialsEmail, sendPasswordResetEmail } from '../services/payment.service';
+import { generateUserPassword, sendCredentialsEmail, sendCredentialsViaWhatsApp, sendPasswordResetEmail } from '../services/payment.service';
+import { signAuthToken } from '../lib/authToken';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -65,8 +67,8 @@ const avatarUpload = multer({
   }),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Apenas imagens são permitidas'));
+    if (isAllowedUpload(file.mimetype)) cb(null, true);
+    else cb(new Error('Apenas imagens (JPG, PNG, WEBP, GIF) são permitidas'));
   },
 });
 
@@ -132,11 +134,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       });
     }
 
-    const token = jwt.sign(
-      { userId: user.id },
-      env.JWT_SECRET,
-      { expiresIn: '7d' as any }
-    );
+    const token = signAuthToken(user.id, user.tokenVersion);
 
     return res.json({
       token,
@@ -364,13 +362,36 @@ const recoverLimiter = rateLimit({
   message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' },
 });
 
+// Limite POR IDENTIFICADOR (além do por-IP): impede que alguém que saiba o
+// telefone/e-mail da vítima fique redefinindo a senha dela em looping (o
+// per-IP não protege alvo único). 3 por hora por alvo.
+const recoverPerIdentifierLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => String((req.body?.identifier ?? '')).trim().toLowerCase().replace(/\D/g, (c) => c) || 'none',
+  message: { error: 'Muitas tentativas para este contato. Aguarde e tente mais tarde.' },
+});
+
 const recoverAccessSchema = z.object({
   identifier: z
     .preprocess((v) => String(v ?? '').trim(), z.string())
     .refine((s) => s.length > 0, { message: 'Informe o telefone ou e-mail usado na compra.' }),
 });
 
-router.post('/recover-access', recoverLimiter, async (req: Request, res: Response) => {
+// Resposta SEMPRE uniforme — não revela se o contato é (ou não) de um cliente,
+// e NUNCA devolve a senha no corpo (isso era o vetor de tomada de conta: saber
+// o telefone/e-mail — semi-públicos — bastava para redefinir e ver a senha na
+// tela). O novo acesso é entregue apenas nos canais JÁ CADASTRADOS (e-mail
+// confiável + WhatsApp), que só o dono real controla.
+const RECOVER_GENERIC = {
+  ok: true,
+  message:
+    'Se estes dados forem de uma compra ativa, enviámos o seu acesso para o e-mail e o WhatsApp cadastrados. Verifique lá.',
+};
+
+router.post('/recover-access', recoverLimiter, recoverPerIdentifierLimiter, async (req: Request, res: Response) => {
   try {
     const body = parseOr400(req, res, recoverAccessSchema);
     if (!body) return;
@@ -387,69 +408,41 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
       user = await prisma.user.findFirst({ where: { OR: [{ phone: norm }, { phone: digits }] } });
     }
 
-    // Must be a real customer: role=member AND (a paid subscription OR access
-    // to at least one course). Leads (never-paid form signups) are also
-    // role=member with isActive=true, so WITHOUT this gate the endpoint would
-    // reset+reveal a working password to them. Quem comprou um CURSO avulso
-    // não tem assinatura (subscriptionStatus 'lead') mas tem CourseAccess —
-    // o resgate vale para ele também (mesmo predicado que o login já usa).
-    // Same generic message so we don't disclose that a lead exists.
+    // Só entrega para um cliente real: role=member + (assinatura paga OU curso).
+    // Qualquer outro caso responde o MESMO texto genérico (sem enumeração).
     const assinantePago = !!user && user.role === 'member' && isPaidSubscriber(user.subscriptionStatus);
     const temCurso = !!user && user.role === 'member' && (await hasAnyCourseAccess(user.id));
-    if (!user || user.role !== 'member' || (!assinantePago && !temCurso)) {
-      return res.status(404).json({
-        error: 'Não encontramos uma compra com esses dados. Confira o telefone ou e-mail que usou na compra.',
-      });
-    }
-    if (!user.isActive) {
-      return res.status(403).json({
-        error: 'Sua assinatura não está ativa no momento. Fale com o suporte para recuperar o acesso.',
-      });
-    }
-    if (user.accessRevealedAt) {
-      return res.status(409).json({
-        error:
-          'Seus dados de acesso já foram exibidos uma vez por aqui. Por segurança não mostramos novamente — fale com o suporte se precisar.',
-        alreadyRevealed: true,
-      });
+    if (!user || !user.isActive || user.role !== 'member' || (!assinantePago && !temCurso)) {
+      return res.json(RECOVER_GENERIC);
     }
 
-    // O que a compra desta pessoa inclui — a página mostra isto para deixar
-    // claro O QUE está sendo resgatado (assinatura, curso avulso, ou ambos).
     const acessos = await prisma.courseAccess.findMany({
-      where: {
-        userId: user.id,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
+      where: { userId: user.id, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       select: { course: { select: { name: true } } },
     });
-    const products: string[] = [
-      ...(assinantePago ? ['Código Zero (assinatura)'] : []),
-      ...acessos.map((a) => a.course.name),
-    ];
 
+    // Redefine e ENTREGA nos canais cadastrados — nunca no corpo da resposta.
+    // Bump do tokenVersion → sessões antigas caem (se a conta estava tomada).
     const { raw, hash } = await generateUserPassword();
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: hash, accessRevealedAt: new Date() },
+      data: { passwordHash: hash, accessRevealedAt: new Date(), tokenVersion: { increment: 1 } },
     });
+    console.log(`[AUTH] 🔓 Acesso reenviado via /resgate para user=${user.id} (canais cadastrados)`);
 
-    console.log(`[AUTH] 🔓 Access revealed on /resgate for user=${user.id}`);
-
-    // Also e-mail the recovered credentials (Resend) so the buyer keeps a copy.
-    // Compra de UM curso sem assinatura → o e-mail cita o curso.
     const productName = !assinantePago && acessos.length === 1 ? acessos[0].course.name : undefined;
     sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw, productName }).catch((e) =>
-      console.error('[AUTH] recover-access e-mail failed (non-blocking):', e?.message || e),
+      console.error('[AUTH] recover-access e-mail falhou (não-bloqueante):', e?.message || e),
     );
+    if (user.phone && !user.phone.startsWith('sem_telefone') && !user.phone.startsWith('turma_')) {
+      let cleanPhone = user.phone.replace(/\D/g, '');
+      if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
+      sendCredentialsViaWhatsApp({ phone: cleanPhone, email: user.email, rawPassword: raw, productName }).catch((e) =>
+        console.error('[AUTH] recover-access whatsapp falhou (não-bloqueante):', e?.message || e),
+      );
+    }
 
-    return res.json({
-      name: user.name,
-      email: user.email,
-      password: raw,
-      products,
-      loginUrl: `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`,
-    });
+    return res.json(RECOVER_GENERIC);
   } catch (error) {
     console.error('[AUTH] recover-access error:', error);
     return res.status(500).json({ error: 'Erro ao recuperar acesso. Tente novamente.' });
@@ -569,7 +562,8 @@ router.patch('/password', authMiddleware, async (req: AuthRequest, res: Response
 
     await prisma.user.update({
       where: { id: req.user!.id },
-      data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+      // bump da versão → todas as sessões antigas caem (revogação).
+      data: { passwordHash: await bcrypt.hash(newPassword, 10), tokenVersion: { increment: 1 } },
     });
 
     return res.json({ success: true, message: 'Senha atualizada com sucesso.' });
@@ -701,7 +695,7 @@ router.post('/forgot-password/reset', async (req: Request, res: Response) => {
 
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: await bcrypt.hash(String(newPassword), 10) },
+      data: { passwordHash: await bcrypt.hash(String(newPassword), 10), tokenVersion: { increment: 1 } },
     });
 
     return res.json({ success: true, message: 'Senha redefinida com sucesso. Faça login com a nova senha.' });
@@ -832,7 +826,7 @@ router.post('/forgot-password/email-reset', emailRecoverLimiter, async (req: Req
     await prisma.$transaction([
       prisma.user.update({
         where: { id: record.userId },
-        data: { passwordHash: await bcrypt.hash(newPassword, 10) },
+        data: { passwordHash: await bcrypt.hash(newPassword, 10), tokenVersion: { increment: 1 } },
       }),
       prisma.passwordResetToken.update({
         where: { id: record.id },

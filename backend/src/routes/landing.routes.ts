@@ -8,6 +8,7 @@ import { AFFILIATE_PRODUCT } from '../services/affiliate.service';
 import { getActivePrice } from '../lib/pricing';
 import { notifyCoproducer } from '../services/coproducer.service';
 import { lojouCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
+import { buildPixelHtml } from '../lib/pixelSnippets';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -370,6 +371,9 @@ router.get('/resolve-coproducer/:code', async (req: Request, res: Response) => {
         enabled: true,
         vslEmbedHtml: true,
         headScripts: true,
+        metaPixelId: true,
+        ga4Id: true,
+        tiktokPixelId: true,
       },
     });
     if (!acc || !acc.enabled) {
@@ -378,11 +382,20 @@ router.get('/resolve-coproducer/:code', async (req: Request, res: Response) => {
     const checkoutUrl = acc.publicCheckoutUrl
       ? normalizeLojouCheckoutUrl(acc.publicCheckoutUrl)
       : lojouCheckoutUrl(acc.productPid);
+    // headScripts (HTML cru) só existe quando um SUPERADMIN o definiu — o
+    // coprodutor não escreve mais HTML. Aos pixels do coprodutor juntamos os
+    // snippets renderizados pelo servidor a partir dos IDs validados.
+    const pixelHtml = buildPixelHtml({
+      metaPixelId: acc.metaPixelId,
+      ga4Id: acc.ga4Id,
+      tiktokPixelId: acc.tiktokPixelId,
+    });
+    const headScripts = [acc.headScripts || '', pixelHtml].filter(Boolean).join('\n') || null;
     res.json({
       code: acc.code,
       checkoutUrl,
       vslEmbedHtml: acc.vslEmbedHtml,
-      headScripts: acc.headScripts,
+      headScripts,
     });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao validar código' });

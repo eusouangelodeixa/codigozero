@@ -4,14 +4,13 @@ import { Logo } from "@/components/Logo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-type Access = { name: string; email: string; password: string; loginUrl: string; products?: string[] };
+type RecoverResult = { ok: boolean; message: string };
 
 export default function ResgatePage() {
   const [identifier, setIdentifier] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [access, setAccess] = useState<Access | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [done, setDone] = useState<RecoverResult | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -29,21 +28,13 @@ export default function ResgatePage() {
         setError(j.error || "Não foi possível recuperar o acesso.");
         return;
       }
-      setAccess(j as Access);
+      setDone(j as RecoverResult);
     } catch {
       setError("Erro de conexão. Tente novamente em instantes.");
     } finally {
       setLoading(false);
     }
   };
-
-  const copy = (label: string, value: string) => {
-    navigator.clipboard?.writeText(value).catch(() => {});
-    setCopied(label);
-    setTimeout(() => setCopied((c) => (c === label ? null : c)), 1600);
-  };
-
-  const firstName = (access?.name || "").split(" ")[0];
 
   return (
     <main style={S.page}>
@@ -52,20 +43,14 @@ export default function ResgatePage() {
           <Logo size={38} />
         </div>
 
-        {!access ? (
+        {!done ? (
           <>
             <h1 style={S.title}>Resgatar acesso</h1>
             <p style={S.subtitle}>
               Comprou o <strong style={{ color: "#fff" }}>Código Zero</strong> ou um dos nossos{" "}
-              <strong style={{ color: "#fff" }}>cursos</strong> e não recebeu seus dados? Recupere seu acesso
-              aqui.
+              <strong style={{ color: "#fff" }}>cursos</strong> e não recebeu seus dados? Reenviamos o seu
+              acesso para o e-mail e o WhatsApp cadastrados na compra.
             </p>
-
-            <div style={S.warnBox}>
-              ⚠️ <strong>Atenção:</strong> por segurança, seus dados de acesso serão exibidos{" "}
-              <strong>uma única vez</strong> nesta tela. Tenha onde anotar — ou tire um print — antes de
-              continuar.
-            </div>
 
             <form onSubmit={submit} style={{ marginTop: 18 }}>
               <label style={S.label}>Telefone ou e-mail usado na compra</label>
@@ -78,77 +63,30 @@ export default function ResgatePage() {
               />
               {error && <div style={S.error}>{error}</div>}
               <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
-                {loading ? "Verificando…" : "Mostrar meu acesso"}
+                {loading ? "Enviando…" : "Reenviar meu acesso"}
               </button>
             </form>
 
             <p style={S.foot}>
-              Se já recuperou antes ou tiver qualquer dificuldade, fale com o suporte.
+              Por segurança, o acesso vai apenas para os contatos cadastrados — não é exibido aqui. Se não
+              chegar em alguns minutos (verifique o spam), fale com o suporte.
             </p>
           </>
         ) : (
           <>
-            <h1 style={S.title}>Olá, {firstName}! 👋</h1>
-            <p style={S.subtitle}>Aqui está o seu acesso:</p>
-
-            {!!access.products?.length && (
-              <div style={S.productBox}>
-                <div style={S.credLabel}>Sua compra inclui</div>
-                {access.products.map((p) => (
-                  <div key={p} style={S.productRow}>🎓 {p}</div>
-                ))}
-              </div>
-            )}
-
-            <div style={S.credBox}>
-              <Cred label="E-mail" value={access.email} copied={copied === "email"} onCopy={() => copy("email", access.email)} />
-              <Cred label="Senha" value={access.password} mono copied={copied === "senha"} onCopy={() => copy("senha", access.password)} />
+            <h1 style={S.title}>Prontinho! ✅</h1>
+            <p style={S.subtitle}>{done.message}</p>
+            <div style={S.productBox}>
+              📧 Verifique o seu <strong style={{ color: "#fff" }}>e-mail</strong> (inclusive o spam) e o seu{" "}
+              <strong style={{ color: "#fff" }}>WhatsApp</strong>. As credenciais chegam nos próximos minutos.
             </div>
-
-            {/* Mesma aba de propósito: o /resgate abre muito em navegador
-                embutido (WhatsApp/IG), onde target=_blank simplesmente não faz
-                nada e o botão parece morto. */}
-            <a href={access.loginUrl} style={{ ...S.btn, textDecoration: "none", display: "block", textAlign: "center" }}>
-              Acessar minha conta →
+            <a href="/login" style={{ ...S.btn, textDecoration: "none", display: "block", textAlign: "center", marginTop: 8 }}>
+              Ir para o login →
             </a>
-
-            <div style={S.dangerBox}>
-              🚨 <strong>Guarde agora!</strong> Estes dados <strong>não</strong> serão exibidos novamente nesta
-              tela. Anote ou tire um print desta página. Recomendamos fazer login imediatamente e, depois,
-              trocar a senha no seu perfil.
-            </div>
           </>
         )}
       </div>
     </main>
-  );
-}
-
-function Cred({
-  label,
-  value,
-  mono,
-  copied,
-  onCopy,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  copied: boolean;
-  onCopy: () => void;
-}) {
-  return (
-    <div style={S.credRow}>
-      <div style={{ minWidth: 0 }}>
-        <div style={S.credLabel}>{label}</div>
-        <div style={{ ...S.credValue, fontFamily: mono ? "ui-monospace, SFMono-Regular, Menlo, monospace" : undefined }}>
-          {value}
-        </div>
-      </div>
-      <button type="button" style={S.copyBtn} onClick={onCopy}>
-        {copied ? "Copiado ✓" : "Copiar"}
-      </button>
-    </div>
   );
 }
 

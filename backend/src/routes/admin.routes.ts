@@ -1,3 +1,4 @@
+import { isAllowedUpload } from '../lib/uploadGuards';
 import { Router, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -1218,6 +1219,15 @@ router.patch('/landing-config', async (req: AuthRequest, res: Response) => {
       affiliateVslEmbedHtml,
       affiliateCreativesUrl,
     } = req.body;
+    // Campos que injetam HTML/JS executável nas páginas públicas: só o
+    // superadmin. Um admin comum é tratado como menos confiável no resto do
+    // sistema — não deve conseguir plantar script que roda no navegador de
+    // todos os visitantes.
+    const scriptFields = { headScripts, headScriptBlocks, bodyScripts, vslEmbedHtml, affiliateVslEmbedHtml };
+    const mexeEmScript = Object.values(scriptFields).some((v) => v !== undefined);
+    if (mexeEmScript && req.user?.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Apenas o superadmin pode alterar scripts/VSL da landing.' });
+    }
     const data = {
       vslEmbedUrl,
       vslEmbedHtml,
@@ -1848,7 +1858,7 @@ const groupMediaUpload = multer({
   }),
   limits: { fileSize: 16 * 1024 * 1024 }, // teto de mídia do WhatsApp
   fileFilter: (_req, file, cb) => {
-    if (/^(image|video|audio)\//.test(file.mimetype)) cb(null, true);
+    if (isAllowedUpload(file.mimetype, { video: true, audio: true })) cb(null, true);
     else cb(new Error('Envia imagem, vídeo ou áudio'));
   },
 });

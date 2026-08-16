@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tokenVersion" INTEGER NOT NULL DEFAULT 0;
+
+-- AlterTable
+ALTER TABLE "CoproducerAccount" ADD COLUMN IF NOT EXISTS "ga4Id" TEXT,
+ADD COLUMN IF NOT EXISTS "metaPixelId" TEXT,
+ADD COLUMN IF NOT EXISTS "tiktokPixelId" TEXT;
+

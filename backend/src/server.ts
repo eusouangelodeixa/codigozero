@@ -61,8 +61,16 @@ app.set('trust proxy', 1);
 // A Lojou envia o segredo do webhook por `?secret=` (ver webhook.routes) — o
 // serializer abaixo REDIGE esse segredo do url/query/header logado para não
 // gravá-lo em claro no log de acesso.
+// Redige credenciais que viajam na URL: ?secret= e ?token=/?code= (o SSE
+// aceita ?token= porque EventSource não põe header), e o TOKEN do webhook de
+// coprodutor, que vai no PATH (/api/webhooks/lojou/copro/<token>). Sem isto o
+// JWT de 7 dias e o token do webhook caíam em claro no log de acesso.
 const redactSecretInUrl = (url?: string): string | undefined =>
-  typeof url === 'string' ? url.replace(/([?&]secret=)[^&#]+/gi, '$1[REDACTED]') : url;
+  typeof url === 'string'
+    ? url
+        .replace(/([?&](?:secret|token|code)=)[^&#]+/gi, '$1[REDACTED]')
+        .replace(/(\/webhooks\/lojou\/copro\/)[^/?#]+/gi, '$1[REDACTED]')
+    : url;
 
 app.use(
   pinoHttp({
@@ -86,7 +94,9 @@ app.use(
           'x-forwarded-for': h['x-forwarded-for'],
         };
         const query = { ...(req.query || {}) };
-        if (query.secret) query.secret = '[REDACTED]';
+        for (const k of ['secret', 'token', 'code'] as const) {
+          if (query[k]) query[k] = '[REDACTED]';
+        }
         return {
           id: req.id,
           method: req.method,
@@ -117,8 +127,20 @@ app.use(helmet({
   xContentTypeOptions: true,
   referrerPolicy: { policy: 'no-referrer' },
   frameguard: { action: 'deny' },
-  // CSP stays OFF — nginx owns it; a second/conflicting policy here would break the app.
-  contentSecurityPolicy: false,
+  // CSP nas respostas da API (JSON/uploads): trava plugins e enquadramento sem
+  // afetar o app (a API não serve HTML com script). As páginas do usuário têm
+  // a sua própria CSP no next.config. (nginx NÃO define CSP — o comentário
+  // antigo "nginx owns it" era falso; por isso agora é definida aqui.)
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      'default-src': ["'none'"],
+      'frame-ancestors': ["'none'"],
+      'base-uri': ["'none'"],
+      'object-src': ["'none'"],
+      'img-src': ["'self'", 'data:'],
+    },
+  },
 }));
 app.use(cors({
   origin: (origin, callback) => {

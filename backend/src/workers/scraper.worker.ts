@@ -5,6 +5,35 @@ import { chromium, Browser } from 'playwright';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
+/**
+ * SSRF guard para o `website` das listagens (dado de terceiro que vira
+ * page.goto). Só http/https e host que NÃO seja localhost, IP privado
+ * (10/172.16-31/192.168), link-local (169.254.*, o endpoint de metadados de
+ * cloud) ou .internal/.local.
+ */
+function isSafeExternalUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.internal') || host.endsWith('.local')) return false;
+  // IPv4 privado / loopback / link-local.
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    if (a === 10 || a === 127 || a === 0) return false;
+    if (a === 169 && b === 254) return false; // link-local + metadados cloud
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+  }
+  if (host === '::1' || host.startsWith('fd') || host.startsWith('fe80')) return false;
+  return true;
+}
+
 type TriState = 'any' | 'has' | 'none';
 
 interface RadarFilters {
@@ -222,6 +251,14 @@ export const scraperWorker = new Worker<ScrapeJobData>(
             // as "Sem Website" (and is a great lead for the product), not as
             // "has website". This is what fixes the filter "being ignored".
             let status: string = 'Sem Website';
+            // SSRF guard: o `website` vem de uma listagem do Google Maps (dado
+            // de terceiro). Só http(s) e nunca um host interno/privado — um
+            // atacante que controle o campo "site" de uma listagem não pode
+            // fazer o browser bater em 169.254.169.254 / 10.x / localhost.
+            if (website && !isSafeExternalUrl(website)) {
+              website = '';
+              status = 'Sem Website';
+            }
             if (website) {
               status = 'Website Bom';
               const start = Date.now();

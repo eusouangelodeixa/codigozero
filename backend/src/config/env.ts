@@ -6,17 +6,22 @@ dotenv.config();
 // at startup below if it is.
 const INSECURE_JWT_SECRET = 'codigo-zero-secret-change-me';
 
-// Fail fast in production if the JWT secret is missing or still the placeholder.
-// Doing this at module load means the process refuses to boot misconfigured
-// rather than silently signing tokens an attacker could forge.
-if (process.env.NODE_ENV === 'production') {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || secret === INSECURE_JWT_SECRET) {
+// Fail fast in production on a weak JWT secret. Antes isto só rejeitava UMA
+// string literal — e o valor que estava VIVO em prod
+// (`cz-jwt-secret-change-in-production`) passava batido, deixando forjar um
+// token de superadmin. Agora exige entropia mínima E rejeita qualquer valor
+// que "cheire" a placeholder (change/secret/default/example/...).
+function assertStrongSecret(name: string, value: string | undefined): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  const v = (value || '').trim();
+  const weakPattern = /(change|secret-|placeholder|default|example|test|codigo-zero|cz-jwt|change-me|change-in-production)/i;
+  if (!v || v.length < 32 || v === INSECURE_JWT_SECRET || weakPattern.test(v)) {
     throw new Error(
-      '[env] JWT_SECRET must be set to a strong, unique value in production (the insecure default is not allowed). Set JWT_SECRET in the environment.',
+      `[env] ${name} precisa ser um valor forte e único em produção (mín. 32 chars, sem padrões de placeholder). Gere com \`openssl rand -hex 64\`.`,
     );
   }
 }
+assertStrongSecret('JWT_SECRET', process.env.JWT_SECRET);
 
 export const env = {
   PORT: parseInt(process.env.PORT || '4000', 10),

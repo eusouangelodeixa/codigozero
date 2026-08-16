@@ -12,6 +12,7 @@
  * services/courseAccess.service.ts, por curso.
  */
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
@@ -25,8 +26,19 @@ import {
 } from '../services/courseAccess.service';
 import { blockWithdrawOnly } from '../middlewares/withdrawOnly.guard';
 import { consumeMembersSsoCode } from '../lib/membersSso';
+import { signAuthToken } from '../lib/authToken';
 
 const router = Router();
+
+// Troca do código SSO de uso único: limita brute-force do code (é curto e
+// vive 60s). Por IP.
+const ssoExchangeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Abra novamente pelo app.' },
+});
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 // Mesma régua do login (auth.routes.ts) — não exportada de lá.
@@ -72,7 +84,7 @@ router.get('/courses/:slug/login-config', async (req: Request, res: Response) =>
 
 // POST /api/members/sso/exchange { code } — troca o código de uso único do
 // app pelo JWT normal de 7d (mesmo shape do /api/auth/login).
-router.post('/sso/exchange', async (req: Request, res: Response) => {
+router.post('/sso/exchange', ssoExchangeLimiter, async (req: Request, res: Response) => {
   try {
     const code = String(req.body?.code || '');
     const userId = code ? await consumeMembersSsoCode(code) : null;
@@ -90,7 +102,7 @@ router.post('/sso/exchange', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Esta conta não tem uma assinatura ativa.' });
     }
 
-    const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: '7d' as any });
+    const token = signAuthToken(user.id, user.tokenVersion);
     return res.json({
       token,
       user: {

@@ -1,3 +1,4 @@
+import { isAllowedUpload } from '../lib/uploadGuards';
 import { Router, Response } from 'express';
 import { PrismaClient, Prisma } from '@prisma/client';
 import multer from 'multer';
@@ -153,7 +154,7 @@ const chatUpload = multer({
   }),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB — covers photos + a few minutes of audio
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('audio/')) cb(null, true);
+    if (isAllowedUpload(file.mimetype, { audio: true })) cb(null, true);
     else cb(new Error('Apenas imagens ou áudio são permitidos'));
   },
 });
@@ -362,8 +363,17 @@ router.post('/messages/:id/react', async (req: AuthRequest, res: Response) => {
     }
     const emoji = raw.trim().slice(0, 12);
 
-    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const msg = await prisma.chatMessage.findUnique({ where: { id: req.params.id }, select: { id: true, channel: true } });
     if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+
+    // Só reage a mensagens de um canal que o usuário pode ver: a comunidade,
+    // ou o SEU próprio thread de suporte (admin vê todos). Sem isto dava para
+    // reagir/sondar mensagens do suporte de outra pessoa (IDOR entre canais).
+    const isSupport = msg.channel.startsWith('support_');
+    const ownSupport = msg.channel === `support_${req.user!.id}`;
+    if (isSupport && !ownSupport && !isAdminRole(req.user!.role)) {
+      return res.status(404).json({ error: 'Mensagem não encontrada' });
+    }
 
     const existing = await prisma.messageReaction.findUnique({
       where: { messageId_userId_emoji: { messageId: msg.id, userId: req.user!.id, emoji } },

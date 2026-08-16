@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { sendMetaEvent } from '../services/meta.service';
 
 /**
@@ -15,6 +16,16 @@ import { sendMetaEvent } from '../services/meta.service';
  */
 
 const router = Router();
+
+// Público e sem sessão → limita spam de eventos falsos (custo/quota no Meta
+// CAPI e poluição do pixel). Generoso o bastante pra uma landing real.
+const trackLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false },
+});
 
 /**
  * Eventos aceites. Sem allowlist, qualquer um podia injectar "Purchase" falso
@@ -72,7 +83,7 @@ function clientIp(req: Request): string | undefined {
   return ip || undefined;
 }
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', trackLimiter, async (req: Request, res: Response) => {
   const body = req.body || {};
   const eventName = str(body.eventName, 40);
   const eventId = str(body.eventId, 80);

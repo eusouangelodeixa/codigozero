@@ -1,3 +1,4 @@
+import { isAllowedUpload } from '../lib/uploadGuards';
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import multer from 'multer';
@@ -29,7 +30,7 @@ const contentUpload = multer({
   }),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') cb(null, true);
+    if (isAllowedUpload(file.mimetype, { pdf: true })) cb(null, true);
     else cb(new Error('Apenas imagens ou PDF são permitidos'));
   },
 });
@@ -127,7 +128,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 // Shared field whitelist for create/update. Blocks/relatedPageIds are stored
 // as-is (admin is trusted; the video block carries raw embed HTML exactly like
 // the VSL field). Everything is optional on update.
-function pickFields(body: any) {
+function pickFields(body: any, isSuper: boolean) {
   const out: any = {};
   if (typeof body.title === 'string') out.title = body.title.trim();
   if (typeof body.theme === 'string') out.theme = body.theme.trim() || null;
@@ -141,7 +142,8 @@ function pickFields(body: any) {
   if (typeof body.metaTitle === 'string') out.metaTitle = body.metaTitle.trim() || null;
   if (typeof body.metaDescription === 'string') out.metaDescription = body.metaDescription.trim() || null;
   if (typeof body.ogImageUrl === 'string') out.ogImageUrl = body.ogImageUrl.trim() || null;
-  if (typeof body.headScripts === 'string') out.headScripts = body.headScripts.trim() || null;
+  // headScripts injeta JS na página pública — só o superadmin escreve.
+  if (isSuper && typeof body.headScripts === 'string') out.headScripts = body.headScripts.trim() || null;
   return out;
 }
 
@@ -152,7 +154,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!title) return res.status(400).json({ error: 'Título é obrigatório' });
 
     const slug = await uniqueSlug(typeof req.body.slug === 'string' && req.body.slug.trim() ? req.body.slug : title);
-    const data = pickFields(req.body);
+    const data = pickFields(req.body, req.user?.role === 'superadmin');
     const page = await prisma.contentPage.create({ data: { ...data, title, slug } });
     // Nasceu publicado → agenda o aviso no grupo (+10 min). Fire-and-forget.
     if (page.status === 'published') void queueCentralAnnouncement(page.id);
@@ -169,7 +171,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
     const existing = await prisma.contentPage.findUnique({ where: { id: req.params.id }, select: { id: true, status: true } });
     if (!existing) return res.status(404).json({ error: 'Página não encontrada' });
 
-    const data = pickFields(req.body);
+    const data = pickFields(req.body, req.user?.role === 'superadmin');
     // Slug may be changed explicitly; re-uniquify if provided.
     if (typeof req.body.slug === 'string' && req.body.slug.trim()) {
       data.slug = await uniqueSlug(req.body.slug, existing.id);

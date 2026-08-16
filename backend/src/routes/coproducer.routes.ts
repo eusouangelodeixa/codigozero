@@ -6,6 +6,7 @@ import { notifyCoproducer } from '../services/coproducer.service';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendPushToSuperAdmins } from '../services/push.service';
 import { logAdminEvent } from '../services/adminEvents.service';
+import { sanitizeMetaPixelId, sanitizeGa4Id, sanitizeTiktokPixelId } from '../lib/pixelSnippets';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -38,7 +39,10 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
       user: acc.user,
       landingUrl: `https://czero.sbs/c/${acc.code}`,
       vslEmbedHtml: acc.vslEmbedHtml,
-      headScripts: acc.headScripts,
+      // Só os IDs voltam ao painel do coprodutor (o HTML cru é do superadmin).
+      metaPixelId: acc.metaPixelId,
+      ga4Id: acc.ga4Id,
+      tiktokPixelId: acc.tiktokPixelId,
     });
   } catch (error) {
     console.error('[COPRODUCER] /me error:', error);
@@ -49,31 +53,34 @@ router.get('/me', async (req: AuthRequest, res: Response) => {
 /**
  * PATCH /api/coproducer/me/scripts
  *
- * The coproducer can edit their own tracking pixels (Meta Pixel, GA,
- * TikTok etc.) — injected into <head> on their /c/{code} landing.
- *
- * VSL is intentionally NOT editable here — only the superadmin sets
- * the VSL embed so a coproducer can't replace it with random content.
- *
- * Hard cap at 8 KB to keep the HTML reasonable (a full pixel suite is
- * usually <2 KB; 8 KB is plenty of slack without enabling abuse).
+ * O coprodutor informa os IDs dos pixels (Meta / GA4 / TikTok) — NÃO HTML.
+ * Antes aceitava HTML cru que era reexecutado como <script> no navegador de
+ * todo comprador da landing /c/{code} (XSS armazenado: dava para reescrever o
+ * checkout, roubar o formulário, etc.). Agora o servidor renderiza os snippets
+ * a partir destes IDs validados (lib/pixelSnippets). HTML cru (headScripts)
+ * segue existindo, mas só o superadmin escreve.
  */
 router.patch('/me/scripts', async (req: AuthRequest, res: Response) => {
   try {
-    const { headScripts } = req.body || {};
-    const raw = typeof headScripts === 'string' ? headScripts : '';
-    if (raw.length > 8000) {
-      return res.status(400).json({ error: 'Scripts excedem o limite de 8 KB' });
-    }
+    const b = req.body || {};
+    const meta = b.metaPixelId === '' || b.metaPixelId == null ? null : sanitizeMetaPixelId(b.metaPixelId);
+    const ga4 = b.ga4Id === '' || b.ga4Id == null ? null : sanitizeGa4Id(b.ga4Id);
+    const tiktok = b.tiktokPixelId === '' || b.tiktokPixelId == null ? null : sanitizeTiktokPixelId(b.tiktokPixelId);
+
+    // Se veio algo não-vazio mas inválido, avisa em vez de gravar lixo.
+    if (b.metaPixelId && meta === null) return res.status(400).json({ error: 'ID do Meta Pixel inválido (só dígitos).' });
+    if (b.ga4Id && ga4 === null) return res.status(400).json({ error: 'ID do GA4 inválido (formato G-XXXXXXX).' });
+    if (b.tiktokPixelId && tiktok === null) return res.status(400).json({ error: 'ID do TikTok Pixel inválido.' });
+
     const updated = await prisma.coproducerAccount.update({
       where: { id: req.coproducer!.id },
-      data: { headScripts: raw.trim() || null },
-      select: { headScripts: true },
+      data: { metaPixelId: meta, ga4Id: ga4, tiktokPixelId: tiktok },
+      select: { metaPixelId: true, ga4Id: true, tiktokPixelId: true },
     });
-    res.json({ success: true, headScripts: updated.headScripts });
+    res.json({ success: true, ...updated });
   } catch (error) {
     console.error('[COPRODUCER] /me/scripts error:', error);
-    res.status(500).json({ error: 'Erro ao salvar scripts' });
+    res.status(500).json({ error: 'Erro ao salvar pixels' });
   }
 });
 

@@ -27,13 +27,13 @@ import { sendEmail, type EmailSendResult } from '../lib/email';
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
 /**
- * Build a random 8-char password (hex) + bcrypt hash.
- *
- * Used by both gateways when activating a brand-new user. Matches the
- * crypto.randomBytes(4) pattern the Lojou webhook uses today.
+ * Build a random password + bcrypt hash. 9 bytes → 12 chars base64url (~72
+ * bits), sem caracteres ambíguos (base64url não tem 0/O/l confusos além do
+ * aceitável). Antes eram 8 hex (~32 bits, "quebráveis offline" nas próprias
+ * palavras do código).
  */
 export async function generateUserPassword(): Promise<{ raw: string; hash: string }> {
-  const raw = crypto.randomBytes(4).toString('hex');
+  const raw = crypto.randomBytes(9).toString('base64url');
   const hash = await bcrypt.hash(raw, 10);
   return { raw, hash };
 }

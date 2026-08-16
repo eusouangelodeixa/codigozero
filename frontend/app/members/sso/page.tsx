@@ -13,7 +13,10 @@ export default function MembersSso() {
   useEffect(() => {
     const frag = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const code = frag.get("code") || "";
-    const to = frag.get("to") || "/";
+    // Só caminho interno: um caminho que começa com "/" mas NÃO com "//" (nem
+    // "/\") — senão `to=//evil.com` viraria open redirect protocolo-relativo.
+    const rawTo = frag.get("to") || "/";
+    const to = /^\/(?![/\\])/.test(rawTo) ? rawTo : "/";
     // Limpa o fragment da barra imediatamente (não deixar o código visível).
     window.history.replaceState(null, "", window.location.pathname);
     if (!code) {

@@ -11,14 +11,16 @@ interface MeData {
   code: string;
   landingUrl: string;
   vslEmbedHtml: string | null;
-  headScripts: string | null;
+  metaPixelId: string | null;
+  ga4Id: string | null;
+  tiktokPixelId: string | null;
 }
-
-const MAX_BYTES = 8000;
 
 export default function CoproducerConfig() {
   const [me, setMe] = useState<MeData | null>(null);
-  const [scripts, setScripts] = useState("");
+  const [meta, setMeta] = useState("");
+  const [ga4, setGa4] = useState("");
+  const [tiktok, setTiktok] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
@@ -31,7 +33,9 @@ export default function CoproducerConfig() {
     if (!r.ok) return;
     const data = await r.json();
     setMe(data);
-    setScripts(data.headScripts || "");
+    setMeta(data.metaPixelId || "");
+    setGa4(data.ga4Id || "");
+    setTiktok(data.tiktokPixelId || "");
   };
 
   useEffect(() => {
@@ -45,15 +49,12 @@ export default function CoproducerConfig() {
       const token = localStorage.getItem("cz_token");
       const r = await fetch(`${API_URL}/api/coproducer/me/scripts`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ headScripts: scripts }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ metaPixelId: meta.trim(), ga4Id: ga4.trim(), tiktokPixelId: tiktok.trim() }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Erro ao salvar");
-      setToast({ kind: "ok", msg: "Scripts salvos." });
+      setToast({ kind: "ok", msg: "Pixels salvos." });
       setTimeout(() => setToast(null), 3000);
     } catch (e: any) {
       setToast({ kind: "err", msg: e.message || "Erro ao salvar" });
@@ -69,27 +70,41 @@ export default function CoproducerConfig() {
     );
   }
 
-  const bytes = new Blob([scripts]).size;
-  const overLimit = bytes > MAX_BYTES;
+  const field = (label: string, hint: string, value: string, onChange: (v: string) => void, placeholder: string) => (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: "100%", boxSizing: "border-box", padding: "11px 13px",
+          background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.10)",
+          borderRadius: 9, color: "var(--text-primary)", fontSize: 14,
+          fontFamily: "ui-monospace, monospace",
+        }}
+      />
+      <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--text-tertiary)" }}>{hint}</p>
+    </div>
+  );
 
   return (
-    <div style={{ padding: 24, maxWidth: 880 }}>
+    <div style={{ padding: 24, maxWidth: 720 }}>
       <header className={styles.pageHead}>
         <span className={styles.pageEyebrow}>Configurações</span>
         <h1 className={styles.pageTitle} style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Settings size={20} /> Rastreio &amp; pixels
         </h1>
         <p className={styles.pageDesc}>
-          Cole aqui o snippet do seu Meta Pixel, Google Analytics, TikTok Pixel etc. Vai ser injetado
-          dentro do &lt;head&gt; só na sua landing <code>/c/{me.code}</code> — não interfere na principal.
+          Informe apenas os <strong>IDs</strong> dos seus pixels. Nós montamos o código com segurança e
+          injetamos só na sua landing <code>/c/{me.code}</code>.
         </p>
       </header>
 
       {/* VSL (read-only) */}
       <section
         style={{
-          padding: 16,
-          marginBottom: 18,
+          padding: 16, marginBottom: 18,
           background: "var(--bg-card, rgba(255,255,255,0.02))",
           border: "1px solid var(--border-subtle, rgba(255,255,255,0.06))",
           borderRadius: 12,
@@ -101,92 +116,39 @@ export default function CoproducerConfig() {
             VSL da sua landing (definida pelo superadmin)
           </span>
         </div>
-        <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "0 0 10px" }}>
-          O vídeo de vendas é configurado pelo superadmin. Se quiser uma VSL própria, fala com a equipe.
+        <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
+          {me.vslEmbedHtml ? "VSL própria configurada pela equipe." : "Usando a VSL padrão do sistema. Para uma própria, fale com a equipe."}
         </p>
-        <pre
-          style={{
-            margin: 0,
-            padding: 12,
-            background: "rgba(0,0,0,0.35)",
-            border: "1px solid rgba(255,255,255,0.05)",
-            borderRadius: 8,
-            color: "var(--text-secondary)",
-            fontSize: 11,
-            fontFamily: "ui-monospace, monospace",
-            maxHeight: 140,
-            overflow: "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-          }}
-        >
-          {me.vslEmbedHtml || "(usando a VSL padrão do sistema)"}
-        </pre>
       </section>
 
-      {/* Pixels (editable) */}
+      {/* Pixels por ID */}
       <section
         style={{
-          padding: 16,
-          marginBottom: 18,
+          padding: 18, marginBottom: 18,
           background: "var(--bg-card, rgba(255,255,255,0.02))",
           border: "1px solid var(--border-subtle, rgba(255,255,255,0.06))",
           borderRadius: 12,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--text-tertiary)" }}>
-            HTML / scripts injetados em &lt;head&gt;
-          </span>
-          <span style={{ fontSize: 11, color: overLimit ? "#ef4444" : "var(--text-tertiary)", fontFamily: "ui-monospace, monospace" }}>
-            {bytes.toLocaleString()} / {MAX_BYTES.toLocaleString()} bytes
-          </span>
-        </div>
-        <textarea
-          value={scripts}
-          onChange={(e) => setScripts(e.target.value)}
-          placeholder={`<!-- Meta Pixel Code -->\n<script>\n  !function(f,b,e,v,n,t,s)...\n  fbq('init', '1234567890');\n  fbq('track', 'PageView');\n</script>\n<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1234567890&ev=PageView&noscript=1"/></noscript>`}
-          style={{
-            width: "100%",
-            minHeight: 320,
-            padding: 12,
-            background: "rgba(0,0,0,0.35)",
-            border: `1px solid ${overLimit ? "#ef4444" : "rgba(255,255,255,0.08)"}`,
-            borderRadius: 8,
-            color: "var(--text-primary)",
-            fontSize: 12,
-            fontFamily: "ui-monospace, monospace",
-            resize: "vertical",
-            lineHeight: 1.45,
-          }}
-        />
-        <p
-          style={{
-            marginTop: 8,
-            fontSize: 11,
-            color: "var(--text-tertiary)",
-            display: "flex",
-            gap: 6,
-            alignItems: "flex-start",
-          }}
-        >
+        {field("Meta Pixel ID", "Só os dígitos, ex: 1039972098622648", meta, setMeta, "1039972098622648")}
+        {field("Google Analytics 4 (Measurement ID)", "Formato G-XXXXXXXXXX", ga4, setGa4, "G-ABCDE12345")}
+        {field("TikTok Pixel ID", "O código do seu pixel no TikTok Ads", tiktok, setTiktok, "CabcDE12fGHij3kLmno4")}
+
+        <p style={{ marginTop: 4, fontSize: 11.5, color: "var(--text-tertiary)", display: "flex", gap: 6, alignItems: "flex-start" }}>
           <AlertCircle size={12} style={{ marginTop: 2, flexShrink: 0 }} />
           <span>
-            Cole o snippet completo (com <code>&lt;script&gt;</code>, <code>&lt;noscript&gt;</code>, etc). Só será aplicado em <code>{me.landingUrl}</code>.
+            Por segurança já não aceitamos HTML colado — só os IDs. Aplicado apenas em <code>{me.landingUrl}</code>.
           </span>
         </p>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
           {toast && (
             <span
               style={{
-                fontSize: 12,
-                padding: "8px 12px",
-                borderRadius: 8,
+                fontSize: 12, padding: "8px 12px", borderRadius: 8,
                 color: toast.kind === "ok" ? "#22c55e" : "#ef4444",
                 background: toast.kind === "ok" ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
-                marginRight: "auto",
-                alignSelf: "center",
+                marginRight: "auto", alignSelf: "center",
               }}
             >
               {toast.msg}
@@ -194,20 +156,12 @@ export default function CoproducerConfig() {
           )}
           <button
             onClick={save}
-            disabled={saving || overLimit}
+            disabled={saving}
             style={{
-              padding: "10px 22px",
-              borderRadius: 10,
-              border: "none",
-              background: overLimit ? "rgba(239,68,68,0.4)" : "linear-gradient(135deg, #a855f7, #7c3aed)",
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: saving || overLimit ? "not-allowed" : "pointer",
-              opacity: saving ? 0.7 : 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
+              padding: "10px 22px", borderRadius: 10, border: "none",
+              background: "linear-gradient(135deg, #a855f7, #7c3aed)", color: "#fff",
+              fontWeight: 700, fontSize: 13, cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.7 : 1, display: "flex", alignItems: "center", gap: 8,
             }}
           >
             <Save size={14} /> {saving ? "Salvando…" : "Salvar"}

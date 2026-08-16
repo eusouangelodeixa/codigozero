@@ -13,6 +13,11 @@ model User {
   email              String           @unique
   phone              String           @unique
   passwordHash       String
+  // Versão da sessão: embutida no JWT e conferida no authMiddleware. Cada
+  // troca/reset de senha (ou logout forçado) incrementa isto → todo token
+  // emitido antes deixa de valer na hora. Sem isto, trocar a senha NÃO
+  // expulsava uma sessão roubada (o token vivia os 7 dias).
+  tokenVersion       Int              @default(0)
   role               String           @default("member") // member, admin
   isActive           Boolean          @default(true)
   subscriptionStatus String           @default("active") // active, grace_period, overdue, canceled
@@ -1104,10 +1109,15 @@ model CoproducerAccount {
   // VSL embed (iframe HTML) que substitui o VSL principal na landing
   // /c/{code}. Só o superadmin edita — o coprodutor apenas visualiza.
   vslEmbedHtml        String?
-  // Tags de rastreio (Meta Pixel, GA, TikTok etc.) que o coprodutor injeta
-  // no <head> da própria landing /c/{code}. O coprodutor edita; superadmin
-  // também pode editar/auditar.
+  // Tags de rastreio em HTML CRU. NÃO editável pelo coprodutor (era XSS
+  // armazenado que rodava no navegador do comprador) — só o superadmin, para
+  // casos de confiança. O coprodutor usa os IDs estruturados abaixo, que o
+  // servidor renderiza a partir de um template fixo e seguro.
   headScripts         String?
+  // Pixels do coprodutor por ID (não HTML): o servidor monta os snippets.
+  metaPixelId         String?
+  ga4Id               String?
+  tiktokPixelId       String?
 
   // ── Push notification preferences ───────────────────────────────────
   // O coprodutor habilita push uma vez (subscribe do browser via VAPID,

@@ -1,3 +1,4 @@
+import { isAllowedUpload } from '../lib/uploadGuards';
 /**
  * Admin da área de membros multi-curso. Mounted em /api/admin/members.
  *
@@ -37,7 +38,7 @@ const coursesUpload = multer({
   }),
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') cb(null, true);
+    if (isAllowedUpload(file.mimetype, { pdf: true })) cb(null, true);
     else cb(new Error('Apenas imagens ou PDF são permitidos'));
   },
 });

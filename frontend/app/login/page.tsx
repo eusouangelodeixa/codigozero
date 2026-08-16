@@ -6,6 +6,17 @@ import styles from "./login.module.css";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+// Para onde ir depois do login:
+//  • coprodutor → painel de coprodução
+//  • comprador SÓ de curso (sem acesso à plataforma) → /forja (ponte SSO que
+//    o leva à área de membros, ao curso dele) — senão cairia no dashboard 403
+//  • assinante / admin → dashboard do app
+function destinoPosLogin(user: { role?: string; hasPlatformAccess?: boolean } | undefined): string {
+  if (user?.role === "coproducer") return "/coproducer";
+  if (user?.hasPlatformAccess === false) return "/forja";
+  return "/dashboard";
+}
+
 // Painel de marca (lado esquerdo, só desktop) — o que a pessoa reencontra
 // ao entrar. Mesmos nomes do menu da plataforma.
 const HERO_POINTS = [
@@ -45,7 +56,7 @@ export default function LoginPage() {
         if (!r.ok || !d.token) throw new Error(d.error || "Não foi possível entrar pelo link.");
         localStorage.setItem("cz_token", d.token);
         localStorage.setItem("cz_user", JSON.stringify(d.user));
-        window.location.href = d.user?.role === "coproducer" ? "/coproducer" : "/dashboard";
+        window.location.href = destinoPosLogin(d.user);
       })
       .catch((e) => {
         setAutoLoggingIn(false);
@@ -131,8 +142,7 @@ export default function LoginPage() {
 
       localStorage.setItem("cz_token", data.token);
       localStorage.setItem("cz_user", JSON.stringify(data.user));
-      const role = data.user?.role;
-      window.location.href = role === "coproducer" ? "/coproducer" : "/dashboard";
+      window.location.href = destinoPosLogin(data.user);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao fazer login.";
       setError(msg);

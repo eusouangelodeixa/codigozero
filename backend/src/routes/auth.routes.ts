@@ -148,6 +148,10 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
         subscriptionStatus: user.subscriptionStatus,
         avatarUrl: user.avatarUrl,
         hasCompletedOnboarding: user.hasCompletedOnboarding,
+        // Tem acesso à PLATAFORMA (app: Radar, Disparador, …)? Assinante ou
+        // papel privilegiado sim; comprador só de curso NÃO — esse é mandado
+        // direto pra área de membros (senão cairia num dashboard bloqueado).
+        hasPlatformAccess: PRIVILEGED_ROLES.includes(user.role) || isPaidSubscriber(user.subscriptionStatus),
       },
     });
   } catch (error) {
@@ -192,6 +196,7 @@ router.post('/auto-login', loginLimiter, async (req: Request, res: Response) => 
         subscriptionStatus: user.subscriptionStatus,
         avatarUrl: user.avatarUrl,
         hasCompletedOnboarding: user.hasCompletedOnboarding,
+        hasPlatformAccess: PRIVILEGED_ROLES.includes(user.role) || isPaidSubscriber(user.subscriptionStatus),
       },
     });
   } catch (error) {

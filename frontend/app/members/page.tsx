@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Logo } from "@/components/Logo";
 import k from "@/components/members/kit.module.css";
 import { CourseCard } from "@/components/members/widgets";
-import { absMediaUrl, membersFetch, membersUser, requireMembersAuth } from "@/lib/members/api";
-import { memberGo } from "@/lib/members/nav";
+import { absMediaUrl, membersFetch, membersUser, requireMembersAuth, openAppInNewTab } from "@/lib/members/api";
+import { memberHref } from "@/lib/members/nav";
 
 type CourseRow = {
   locked?: boolean;
@@ -50,9 +50,16 @@ export default function MembersHome() {
     <div className={k.gridPage} style={{ ["--accent" as any]: "#2DD4BF", ["--accent-fg" as any]: "#001412", ["--accent-dim" as any]: "rgba(45,212,191,.15)", ["--m-bg" as any]: "#0a0a0a", ["--m-surface" as any]: "#161616", ["--m-text" as any]: "#f4f4f5", ["--m-text-dim" as any]: "#9ca3af" }}>
       <header className={k.gridHeader}>
         <Logo size={30} />
-        <span className={k.avatar} title={user?.name || ""}>
+        {/* Perfil: abre a página /perfil do app numa nova aba, já logado. */}
+        <button
+          type="button"
+          className={k.avatar}
+          title="Meu perfil"
+          onClick={() => openAppInNewTab("/perfil")}
+          style={{ cursor: "pointer", border: "none" }}
+        >
           {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : (user?.name || "A").slice(0, 1).toUpperCase()}
-        </span>
+        </button>
       </header>
 
       <h1 className={k.gridTitle}>Meus Cursos</h1>
@@ -84,7 +91,8 @@ export default function MembersHome() {
       ) : (
         <div className={k.grid}>
           {shown.map((c) => (
-            <CourseCard key={c.id} course={c} onOpen={(slug) => memberGo(`/${slug}`)} />
+            // Curso abre em NOVA ABA (mesma origem members).
+            <CourseCard key={c.id} course={c} onOpen={(slug) => window.open(memberHref(`/${slug}`), "_blank")} />
           ))}
         </div>
       )}

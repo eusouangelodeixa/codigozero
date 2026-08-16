@@ -7,7 +7,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, ChevronUp, Menu as MenuIcon, X } from "lucide-react";
 import k from "./kit.module.css";
 import { memberIcon } from "@/lib/members/icons";
-import { absMediaUrl } from "@/lib/members/api";
+import { absMediaUrl, openAppInNewTab } from "@/lib/members/api";
 import type { MemberConfig, MemberMenuItem } from "@/lib/members/defaults";
 
 export type ShellUser = { name?: string; avatarUrl?: string } | null;
@@ -85,13 +85,14 @@ export function MembersShell({
         </div>
         <div className={k.sidebarLogo}>{logo}</div>
         <nav className={k.nav}>{items}</nav>
-        <div className={k.userFoot}>
+        {/* Perfil: abre /perfil do app numa nova aba, já logado. */}
+        <button type="button" className={k.userFoot} onClick={() => openAppInNewTab("/perfil")} title="Meu perfil" style={{ cursor: "pointer", border: "none", width: "100%", textAlign: "left" }}>
           <span className={k.avatar}>
             {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : initials(user?.name)}
           </span>
           <span className={k.userName}>{user?.name || "Aluno"}</span>
           <ChevronUp size={15} className={k.footChevron} style={{ marginLeft: "auto", opacity: 0.7 }} />
-        </div>
+        </button>
       </aside>
 
       <main className={k.main}>{children}</main>
@@ -124,12 +125,12 @@ export function MembersShell({
           </button>
           <div className={k.sidebarLogo}>{logo}</div>
           <nav className={k.nav}>{items}</nav>
-          <div className={k.userFoot}>
+          <button type="button" className={k.userFoot} onClick={() => openAppInNewTab("/perfil")} title="Meu perfil" style={{ cursor: "pointer", border: "none", width: "100%", textAlign: "left" }}>
             <span className={k.avatar}>
               {user?.avatarUrl ? <img src={absMediaUrl(user.avatarUrl)} alt="" /> : initials(user?.name)}
             </span>
             <span>{user?.name || "Aluno"}</span>
-          </div>
+          </button>
         </div>
       )}
     </div>

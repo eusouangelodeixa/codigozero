@@ -43,6 +43,31 @@ function membersLoginPath(): string {
   return seg && !reserved.has(seg) ? `/${seg}/login` : "/login";
 }
 
+/**
+ * Abre uma página do APP (app.czero.sbs) numa NOVA ABA, já autenticada — mesmo
+ * estando na área de membros (outra origem, o token não cruza). Pede ao backend
+ * um link de auto-login apontando para `to` (ex.: /perfil). Abre a aba em branco
+ * de forma síncrona (dentro do clique) para o bloqueador de popup não barrar.
+ */
+export function openAppInNewTab(to: string): void {
+  if (typeof window === "undefined") return;
+  const w = window.open("about:blank", "_blank");
+  const token = membersToken();
+  fetch(`${MEMBERS_API}/api/auth/app-link?to=${encodeURIComponent(to)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+    .then((r) => r.json())
+    .then((d) => {
+      if (d?.url) {
+        if (w && !w.closed) w.location.href = d.url;
+        else window.open(d.url, "_blank");
+      } else if (w && !w.closed) {
+        w.close();
+      }
+    })
+    .catch(() => { if (w && !w.closed) w.close(); });
+}
+
 /** Guarda simples das páginas members: sem token → login (temático se num curso). */
 export function requireMembersAuth(): boolean {
   if (typeof window === "undefined") return false;

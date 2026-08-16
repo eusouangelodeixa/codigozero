@@ -43,6 +43,10 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const al = params.get("al");
     if (!al) return;
+    // Destino opcional (ex.: app-link da área de membros → /perfil). Só caminho
+    // interno é aceito (evita open redirect).
+    const rawTo = params.get("to") || "";
+    const to = /^\/(?![/\\])/.test(rawTo) ? rawTo : null;
     setAutoLoggingIn(true);
     // Limpa o token da URL já (não deixar em histórico/compartilhamento).
     window.history.replaceState(null, "", window.location.pathname);
@@ -56,7 +60,7 @@ export default function LoginPage() {
         if (!r.ok || !d.token) throw new Error(d.error || "Não foi possível entrar pelo link.");
         localStorage.setItem("cz_token", d.token);
         localStorage.setItem("cz_user", JSON.stringify(d.user));
-        window.location.href = destinoPosLogin(d.user);
+        window.location.href = to || destinoPosLogin(d.user);
       })
       .catch((e) => {
         setAutoLoggingIn(false);

@@ -20,7 +20,7 @@ import { normalizeMzPhone } from '../lib/whatsapp';
 import { signMembersSsoCode } from '../lib/membersSso';
 import { generateUserPassword, sendCredentialsEmail, sendCredentialsViaWhatsApp, sendPasswordResetEmail } from '../services/payment.service';
 import { signAuthToken } from '../lib/authToken';
-import { verifyAutoLoginToken } from '../lib/autoLoginToken';
+import { verifyAutoLoginToken, signAutoLoginToken } from '../lib/autoLoginToken';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -278,6 +278,24 @@ router.post('/members-sso', authMiddleware, async (req: AuthRequest, res: Respon
   } catch (error) {
     console.error('[AUTH] members-sso mint error:', error);
     return res.status(500).json({ error: 'Erro ao gerar acesso' });
+  }
+});
+
+// GET /api/auth/app-link?to=/perfil — devolve uma URL do APP já autenticada
+// (via auto-login) para abrir uma página do app a partir de OUTRA origem — ex.:
+// a área de membros (members.czero.sbs) abrindo o /perfil (app.czero.sbs) numa
+// nova aba, já logado. localStorage não cruza origens, por isso a ponte.
+router.get('/app-link', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const rawTo = typeof req.query.to === 'string' ? req.query.to : '/dashboard';
+    const to = /^\/(?![/\\])/.test(rawTo) ? rawTo : '/dashboard'; // só caminho interno
+    const u = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { tokenVersion: true } });
+    const token = signAutoLoginToken(req.user!.id, u?.tokenVersion ?? 0);
+    const base = env.FRONTEND_URL || 'https://app.czero.sbs';
+    return res.json({ url: `${base}/login?al=${encodeURIComponent(token)}&to=${encodeURIComponent(to)}` });
+  } catch (error) {
+    console.error('[AUTH] app-link error:', error);
+    return res.status(500).json({ error: 'Erro ao gerar link' });
   }
 });
 

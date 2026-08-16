@@ -87,39 +87,59 @@ function saveContactMessage(name: string): string {
   ].join('\n');
 }
 
+// Anti-ban do número compartilhado: no MÁXIMO um "guarde o contacto" por tick,
+// espaçado 15–30 min do anterior, e teto diário. Com importações de turma em
+// massa, mandar em rajada é o caminho curto para o bloqueio.
+const SAVE_CONTACT_DAILY_CAP = 25;
+const SAVE_CONTACT_MIN_GAP_MS = 15 * 60 * 1000;
+const SAVE_CONTACT_MAX_GAP_MS = 30 * 60 * 1000;
+
 /**
- * Cron entrypoint: sends the scheduled "save our contact" messages that are due.
- * Small batches with a gap between sends (the volume is naturally low — one per
- * new buyer). `saveContactSentAt` is stamped only on a confirmed send; a failure
- * leaves the row due so the next tick retries it.
+ * Cron entrypoint (roda a cada 5 min): envia NO MÁXIMO UM "guarde o contacto"
+ * por vez. Só dispara se já passaram ≥15–30 min (aleatório) do último envio e
+ * se o teto do dia não foi atingido. `saveContactSentAt` é carimbado só no
+ * envio confirmado; falha deixa a linha vencida para a próxima tentativa.
  */
 export async function processSaveContactReminders(): Promise<number> {
   const now = new Date();
-  const due = await prisma.user.findMany({
-    where: {
-      saveContactSentAt: null,
-      saveContactDueAt: { not: null, lte: now },
-      phone: { not: '' },
-    },
-    select: { id: true, name: true, phone: true },
-    take: 5,
-  });
-  if (due.length === 0) return 0;
 
-  let sent = 0;
-  for (let i = 0; i < due.length; i++) {
-    const u = due[i];
-    const r = await sendWhatsAppMessage({ phone: u.phone, content: saveContactMessage(u.name) });
-    if (r.ok) {
-      await prisma.user.update({ where: { id: u.id }, data: { saveContactSentAt: new Date() } });
-      sent++;
-      console.log(`[ONBOARDING] 📇 Save-contact reminder sent to ${u.phone}`);
-    } else {
-      console.warn(`[ONBOARDING] save-contact send failed for user=${u.id} (status=${r.status}) — will retry`);
-    }
-    if (i < due.length - 1) await sleep(20000 + Math.floor(Math.random() * 25000));
+  // Teto diário.
+  const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+  const sentToday = await prisma.user.count({ where: { saveContactSentAt: { gte: startOfDay } } });
+  if (sentToday >= SAVE_CONTACT_DAILY_CAP) return 0;
+
+  // Intervalo desde o último envio (15–30 min, aleatório por tick).
+  const last = await prisma.user.findFirst({
+    where: { saveContactSentAt: { not: null } },
+    orderBy: { saveContactSentAt: 'desc' },
+    select: { saveContactSentAt: true },
+  });
+  const gap = SAVE_CONTACT_MIN_GAP_MS + Math.random() * (SAVE_CONTACT_MAX_GAP_MS - SAVE_CONTACT_MIN_GAP_MS);
+  if (last?.saveContactSentAt && now.getTime() - last.saveContactSentAt.getTime() < gap) return 0;
+
+  // Próximo vencido (um só).
+  const u = await prisma.user.findFirst({
+    where: { saveContactSentAt: null, saveContactDueAt: { not: null, lte: now }, phone: { not: '' } },
+    orderBy: { saveContactDueAt: 'asc' },
+    select: { id: true, name: true, phone: true, saveContactDueAt: true },
+  });
+  if (!u) return 0;
+
+  // Claim atômico (empurra o dueAt) — evita envio duplo entre ticks/réplicas.
+  const claim = await prisma.user.updateMany({
+    where: { id: u.id, saveContactSentAt: null, saveContactDueAt: u.saveContactDueAt },
+    data: { saveContactDueAt: new Date(now.getTime() + 5 * 60 * 1000) },
+  });
+  if (claim.count === 0) return 0;
+
+  const r = await sendWhatsAppMessage({ phone: u.phone, content: saveContactMessage(u.name) });
+  if (r.ok) {
+    await prisma.user.update({ where: { id: u.id }, data: { saveContactSentAt: new Date() } });
+    console.log(`[ONBOARDING] 📇 Save-contact reminder sent to ${u.phone} (${sentToday + 1}/${SAVE_CONTACT_DAILY_CAP} hoje)`);
+    return 1;
   }
-  return sent;
+  console.warn(`[ONBOARDING] save-contact send failed for user=${u.id} (status=${r.status}) — will retry`);
+  return 0;
 }
 
 /** Copy for each nudge tier (0 = first reminder … 2 = last). */

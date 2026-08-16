@@ -435,6 +435,25 @@ const RECOVER_GENERIC = {
     'Se estes dados forem de uma compra ativa, enviámos o seu acesso para o e-mail e o WhatsApp cadastrados. Verifique lá.',
 };
 
+/** Mascara e-mail: mantém 1ª letra do usuário + domínio. d••••@gmail.com */
+function maskEmail(email?: string | null): string | null {
+  const e = (email || '').trim();
+  if (!e || !e.includes('@') || e.endsWith('@lead.czero.sbs')) return null;
+  const [local, domain] = e.split('@');
+  const head = local.slice(0, 1);
+  return `${head}${'•'.repeat(Math.max(3, local.length - 1))}@${domain}`;
+}
+
+/** Mascara telefone p/ dica do resgate: mantém os 2 últimos dígitos, e devolve
+ *  null para telefones-placeholder. (O maskPhone do fluxo de OTP, mais abaixo,
+ *  não trata esses casos, por isso este é separado.) */
+function maskRecoverPhone(phone?: string | null): string | null {
+  const d = (phone || '').replace(/\D/g, '');
+  if (!d || d.length < 6 || (phone || '').startsWith('sem_telefone') || (phone || '').startsWith('turma_')) return null;
+  const last = d.slice(-2);
+  return `${'•'.repeat(Math.max(4, d.length - 2))}${last}`;
+}
+
 router.post('/recover-access', recoverLimiter, recoverPerIdentifierLimiter, async (req: Request, res: Response) => {
   try {
     const body = parseOr400(req, res, recoverAccessSchema);
@@ -486,7 +505,14 @@ router.post('/recover-access', recoverLimiter, recoverPerIdentifierLimiter, asyn
       );
     }
 
-    return res.json(RECOVER_GENERIC);
+    // Dicas MASCARADAS dos destinos, pra pessoa saber ONDE conferir (padrão de
+    // banco/Google). Só para o cliente real — o caso "não encontrado" acima já
+    // devolveu o genérico sem dicas.
+    return res.json({
+      ...RECOVER_GENERIC,
+      emailHint: maskEmail(user.email),
+      phoneHint: maskRecoverPhone(user.phone),
+    });
   } catch (error) {
     console.error('[AUTH] recover-access error:', error);
     return res.status(500).json({ error: 'Erro ao recuperar acesso. Tente novamente.' });

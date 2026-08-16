@@ -197,9 +197,11 @@ export default function DashboardPage() {
     courses.find((c) => c.started && c.pct < 100) || courses.find((c) => c.pct < 100) || null;
 
   // Abre a área de membros já no curso certo (a ponte /forja faz o SSO e o
-  // fragment `to` leva ao slug).
+  // fragment `to` leva ao slug). Em ABA NOVA de propósito: o members é outro
+  // domínio e o app deve ficar onde estava. window.open aqui é síncrono no
+  // clique (gesto real), então não cai no bloqueador de popup.
   const openCourse = (c?: CourseRow | null) =>
-    router.push(c ? `/forja?to=${encodeURIComponent(`/${c.slug}`)}` : "/forja");
+    window.open(c ? `/forja?to=${encodeURIComponent(`/${c.slug}`)}` : "/forja", "_blank", "noopener");
 
   // ── Dynamic "Ação do dia" — the next best step for THIS member, based on
   // where they are (subscription, courses, leads, dispatches). ──
@@ -304,7 +306,11 @@ export default function DashboardPage() {
             <Button
               variant="primary"
               size="hero"
-              onClick={() => router.push(action.href)}
+              onClick={() =>
+                action.href.startsWith("/forja")
+                  ? window.open(action.href, "_blank", "noopener")
+                  : router.push(action.href)
+              }
               iconStart={action.icon}
               iconEnd={<ChevronRight size={16} />}
             >

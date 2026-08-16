@@ -223,9 +223,17 @@ export function AppShell({
     // o navegador abrir em nova aba/janela (o <a href> real cuida disso). Antes o
     // preventDefault incondicional engolia o "abrir em nova aba".
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
+    // A área de membros (ponte /forja → members.czero.sbs) abre em ABA NOVA
+    // de propósito: o app fica onde estava. O target=_blank está no próprio
+    // <a>; aqui basta não interceptar o clique.
+    if (href === "/forja") return;
     e.preventDefault();
     router.push(href);
   };
+
+  // Props extra do <a> para itens que saem do app (members em nova aba).
+  const navAnchorProps = (href: string) =>
+    href === "/forja" ? ({ target: "_blank", rel: "noopener" } as const) : ({} as const);
 
   return (
     <div className={styles.shell}>
@@ -247,6 +255,7 @@ export function AppShell({
                   <a
                     key={item.href}
                     href={item.href}
+                    {...navAnchorProps(item.href)}
                     onClick={go(item.href)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}
@@ -343,6 +352,7 @@ export function AppShell({
               <a
                 key={item.href}
                 href={item.href}
+                {...navAnchorProps(item.href)}
                 onClick={go(item.href)}
                 className={cx(styles.bottomItem, active && styles.bottomItemActive)}
                 aria-current={active ? "page" : undefined}
@@ -424,6 +434,7 @@ export function AppShell({
                   <a
                     key={item.href}
                     href={item.href}
+                    {...navAnchorProps(item.href)}
                     onClick={go(item.href)}
                     className={cx(styles.navItem, active && styles.navItemActive)}
                     aria-current={active ? "page" : undefined}

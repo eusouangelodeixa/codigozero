@@ -45,7 +45,9 @@ router.post('/course/:token', async (req: Request, res: Response) => {
 
     const event = str(body?.event) || str(body?.type) || str(body?.order_type);
     const data = body?.data || body;
-    const orderId = str(data?.order_number) || str(data?.id) || null;
+    // Mesmos fallbacks do webhook principal (data.order_number → id → order_id
+    // → transaction_id) — o payload da Lojou é o mesmo dos produtos do CZ.
+    const orderId = str(data?.order_number) || str(data?.id) || str(data?.order_id) || str(data?.transaction_id) || null;
 
     const isApproval = /approved|paid|completed/i.test(event);
     const isRefund = /refund|refunded|chargeback|reembols/i.test(event);

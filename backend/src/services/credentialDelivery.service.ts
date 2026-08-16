@@ -187,6 +187,7 @@ export async function processCredentialDeliveries(): Promise<{ sent: number; cha
       email: proximo.user.email,
       rawPassword: raw,
       productName: proximo.productName ?? undefined,
+      userId: proximo.user.id,
     }).catch((e: any) => ({ ok: false, status: e?.message || 'erro' }) as any);
     ok = !!r?.ok;
     if (ok) await bumpQuota();

@@ -857,7 +857,7 @@ router.post('/users/grant-trial', async (req: AuthRequest, res: Response) => {
     // Fire-and-forget: NEVER block the admin response on Komunika/Resend (Komunika
     // can be slow or offline). Failures are logged; the WhatsApp helper also pushes
     // superadmins on hard failure. The user is already created + granted above.
-    void sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw })
+    void sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw, userId: user.id })
       .catch((e) => console.error('[ADMIN] grant-trial email failed:', e?.message || e));
     void sendCredentialsViaWhatsApp({ phone: user.phone, email: user.email, rawPassword: raw })
       .catch((e) => console.error('[ADMIN] grant-trial whatsapp failed:', e?.message || e));
@@ -915,7 +915,7 @@ router.post('/users/:id/resend-access', async (req: AuthRequest, res: Response) 
     // is already reset above, so a failed send never leaves the account broken —
     // the admin can copy `password` from the response and send it manually.
     const emailDelivery = await sendCredentialsEmail({
-      name: user.name, email: user.email, rawPassword: raw,
+      name: user.name, email: user.email, rawPassword: raw, userId: user.id,
     }).catch((e) => ({ ok: false, status: `throw:${e?.message || 'erro'}` }));
 
     const whatsapp = user.phone

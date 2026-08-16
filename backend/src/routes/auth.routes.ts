@@ -16,10 +16,11 @@ import { lojouService } from '../services/lojou.service';
 import { getActivePrice } from '../lib/pricing';
 import { createAndSendOtp, verifyOtp } from '../services/otp.service';
 import { normalizeMzPhone } from '../lib/whatsapp';
-import { sendFirstAccessWelcome } from '../services/onboarding.service';
+
 import { signMembersSsoCode } from '../lib/membersSso';
 import { generateUserPassword, sendCredentialsEmail, sendCredentialsViaWhatsApp, sendPasswordResetEmail } from '../services/payment.service';
 import { signAuthToken } from '../lib/authToken';
+import { verifyAutoLoginToken } from '../lib/autoLoginToken';
 import {
   sendPushToUser,
   sendPushToUsers,
@@ -155,6 +156,50 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/auth/auto-login — troca o token do botão "Acessar meu produto"
+// (e-mail de credenciais) por um JWT normal, já logando a pessoa. Trocado por
+// POST de propósito (scanners de e-mail fazem GET e não disparam isto).
+router.post('/auto-login', loginLimiter, async (req: Request, res: Response) => {
+  try {
+    const token = String(req.body?.token || '');
+    const v = token ? verifyAutoLoginToken(token) : null;
+    if (!v) return res.status(401).json({ error: 'Link inválido ou expirado. Entre com e-mail e senha.' });
+
+    const user = await prisma.user.findUnique({ where: { id: v.userId } });
+    if (!user || !user.isActive) return res.status(401).json({ error: 'Conta indisponível.' });
+    // Link morre se a senha foi trocada depois do envio (mesma revogação da sessão).
+    if ((v.tv ?? 0) !== user.tokenVersion) {
+      return res.status(401).json({ error: 'Este link expirou (a senha foi alterada). Entre com e-mail e senha.' });
+    }
+    // Mesmo portão do login: assinante pago, ou dono de curso, ou papel privilegiado.
+    const podeEntrar =
+      PRIVILEGED_ROLES.includes(user.role) ||
+      isPaidSubscriber(user.subscriptionStatus) ||
+      (await hasAnyCourseAccess(user.id));
+    if (!podeEntrar) {
+      return res.status(403).json({ error: 'Esta conta ainda não tem acesso ativo.' });
+    }
+
+    const authToken = signAuthToken(user.id, user.tokenVersion);
+    return res.json({
+      token: authToken,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        subscriptionStatus: user.subscriptionStatus,
+        avatarUrl: user.avatarUrl,
+        hasCompletedOnboarding: user.hasCompletedOnboarding,
+      },
+    });
+  } catch (error) {
+    console.error('[AUTH] auto-login error:', error);
+    return res.status(500).json({ error: 'Erro ao entrar. Tente com e-mail e senha.' });
+  }
+});
+
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -187,17 +232,16 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    // First-access onboarding: the first time a paying member opens the app we
-    // stamp firstAccessAt (authoritative "they accessed" signal — stops the
-    // onboarding nudges) and fire a one-time welcome WhatsApp. Cheap guard: the
-    // branch only runs until firstAccessAt is set, then never again.
+    // Primeiro acesso: só CARIMBAMOS firstAccessAt (sinal de "acessou" que o
+    // painel do admin mostra). O WhatsApp de boas-vindas foi REMOVIDO — com
+    // importações de turma em massa, um envio automático no primeiro acesso é
+    // risco de ban do número compartilhado, e ainda prometia Radar/Disparador
+    // a quem comprou só um curso. O acesso já é entregue por e-mail; o painel
+    // registra que a pessoa entrou.
     if (user.role === 'member' && !user.firstAccessAt) {
       const accessedAt = new Date();
       await prisma.user.update({ where: { id: user.id }, data: { firstAccessAt: accessedAt } });
       user.firstAccessAt = accessedAt;
-      sendFirstAccessWelcome(user.id).catch((e) =>
-        console.error('[ONBOARDING] welcome dispatch failed (non-blocking):', e?.message || e),
-      );
     }
 
     // Whether the embedded Komunika module is provisioned and active for this
@@ -431,7 +475,7 @@ router.post('/recover-access', recoverLimiter, recoverPerIdentifierLimiter, asyn
     console.log(`[AUTH] 🔓 Acesso reenviado via /resgate para user=${user.id} (canais cadastrados)`);
 
     const productName = !assinantePago && acessos.length === 1 ? acessos[0].course.name : undefined;
-    sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw, productName }).catch((e) =>
+    sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw, productName, userId: user.id }).catch((e) =>
       console.error('[AUTH] recover-access e-mail falhou (não-bloqueante):', e?.message || e),
     );
     if (user.phone && !user.phone.startsWith('sem_telefone') && !user.phone.startsWith('turma_')) {

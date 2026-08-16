@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import { processCourseSale, lojouPayloadPid } from '../services/courseSale.service';
+import { processCourseSale, processCourseRefund, lojouPayloadPid } from '../services/courseSale.service';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 const router = Router();
@@ -45,26 +45,40 @@ router.post('/course/:token', async (req: Request, res: Response) => {
 
     const event = str(body?.event) || str(body?.type) || str(body?.order_type);
     const data = body?.data || body;
+    const orderId = str(data?.order_number) || str(data?.id) || null;
 
-    // Só a aprovação liberta. "Checkout iniciado" e cancelamento não são venda.
-    if (event && !/approved|paid|completed/i.test(event)) {
-      return res.json({ status: 'ignored', event });
-    }
+    const isApproval = /approved|paid|completed/i.test(event);
+    const isRefund = /refund|refunded|chargeback|reembols/i.test(event);
+    const isCancel = /cancel/i.test(event);
 
-    // Segunda tranca: o produto tem de ser o do curso.
+    // Segunda tranca em TODOS os eventos: o produto tem de ser o do curso.
     const pid = lojouPayloadPid(data);
     if (course.productPid && pid && pid !== course.productPid) {
       console.warn(`[CURSO-WEBHOOK] pid ${pid} não é o de "${course.name}" (${course.productPid}) — ignorado`);
       return res.status(202).json({ status: 'ignored', reason: 'pid mismatch' });
     }
+
+    // Reembolso / chargeback → remove o acesso ao curso.
+    if (isRefund) {
+      const r = await processCourseRefund({ course, data, orderId });
+      return res.json({ status: 'refunded', revoked: r.revoked });
+    }
+    // Cancelamento de checkout (não chegou a pagar) → nada a fazer; só registra.
+    if (isCancel) {
+      console.log(`[CURSO-WEBHOOK] cancelamento de "${course.name}" (pedido ${orderId || 'n/d'}) — sem ação`);
+      return res.json({ status: 'ignored', event });
+    }
+    // Só a aprovação libera acesso. Outros eventos: ignora.
+    if (event && !isApproval) {
+      return res.json({ status: 'ignored', event });
+    }
+
     if (course.productPid && !pid) {
       console.warn(`[CURSO-WEBHOOK] payload sem pid para "${course.name}" — ignorado`);
       return res.status(202).json({ status: 'ignored', reason: 'no pid' });
     }
 
-    const orderId = str(data?.order_number) || str(data?.id) || null;
     const result = await processCourseSale({ course, data, orderId });
-
     return res.json({ status: 'ok', courseId: course.id, userId: result.userId, created: result.created });
   } catch (error: any) {
     if (/sem e-mail nem telefone/.test(String(error?.message))) {

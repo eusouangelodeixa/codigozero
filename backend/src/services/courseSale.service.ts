@@ -150,6 +150,7 @@ export async function processCourseSale(input: CourseSaleInput): Promise<{
       email: user.email,
       rawPassword,
       productName: course.name,
+      userId: user.id,
     }).catch((e) => console.error('[CURSO-VENDA] e-mail falhou:', e?.message || e));
     if (phone) {
       void sendCredentialsViaWhatsApp({
@@ -186,4 +187,67 @@ export async function processCourseSale(input: CourseSaleInput): Promise<{
   });
 
   return { userId: user.id, created: !!rawPassword };
+}
+
+/**
+ * Reembolso / cancelamento de uma venda de CURSO: remove o acesso ao curso do
+ * comprador e marca a Transaction. Chamado pelo webhook por curso quando a
+ * Lojou envia refund/cancel/chargeback. Nunca mexe em assinatura — quem
+ * comprou um curso avulso não tem plano; só se revoga o direito ao curso.
+ */
+export async function processCourseRefund(input: {
+  course: { id: string; name: string };
+  data: any;
+  orderId: string | null;
+}): Promise<{ revoked: boolean }> {
+  const { course, data } = input;
+  const orderId = input.orderId ? String(input.orderId) : null;
+
+  const email = str(data?.customer?.email).toLowerCase();
+  const rawPhone =
+    str(data?.customer?.mobile_number) || str(data?.customer?.phone) || str(data?.customer?.cellphone);
+  const phone = rawPhone ? normalizeMzPhone(rawPhone) : '';
+
+  // Acha o comprador: pelo pedido (se houver Transaction) ou por e-mail/telefone.
+  let user: { id: string; name: string } | null = null;
+  if (orderId) {
+    const tx = await prisma.transaction.findUnique({ where: { orderId }, select: { userEmail: true, userPhone: true } });
+    if (tx) {
+      user = await prisma.user.findFirst({
+        where: { OR: [...(tx.userEmail ? [{ email: tx.userEmail }] : []), ...(tx.userPhone ? [{ phone: tx.userPhone }] : [])] },
+        select: { id: true, name: true },
+      });
+    }
+  }
+  if (!user && (email || phone)) {
+    user = await prisma.user.findFirst({
+      where: { OR: [...(email ? [{ email }] : []), ...(phone ? [{ phone }] : [])] },
+      select: { id: true, name: true },
+    });
+  }
+
+  if (orderId) {
+    await prisma.transaction.updateMany({ where: { orderId }, data: { status: 'refunded' } }).catch(() => {});
+  }
+
+  let revoked = false;
+  if (user) {
+    const del = await prisma.courseAccess.deleteMany({ where: { userId: user.id, courseId: course.id } });
+    revoked = del.count > 0;
+  }
+
+  console.log(`[CURSO-REEMBOLSO] "${course.name}" pedido ${orderId || 'n/d'} — acesso ${revoked ? 'revogado' : 'não encontrado'}`);
+  void sendPushToSuperAdmins({
+    title: '🔄 Reembolso de curso',
+    body: `${user?.name || email || 'Comprador'} — "${course.name}" (${revoked ? 'acesso removido' : 'sem acesso a remover'})`,
+    url: '/admin/cursos',
+  });
+  void logAdminEvent({
+    type: 'course_refund',
+    title: `Reembolso: ${course.name}`,
+    body: `${user?.name || email || 'Comprador'} — pedido ${orderId || 'n/d'}${revoked ? ' — acesso removido' : ''}`,
+    meta: { courseId: course.id, userId: user?.id ?? null, orderId },
+  });
+
+  return { revoked };
 }

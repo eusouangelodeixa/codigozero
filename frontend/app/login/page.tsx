@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Logo } from "@/components/Logo";
 import { Button, Input } from "@/components/ui";
 import styles from "./login.module.css";
@@ -25,6 +25,33 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loginNotice, setLoginNotice] = useState("");
+  // Auto-login do botão do e-mail (?al=<token>): entra sem digitar senha.
+  const [autoLoggingIn, setAutoLoggingIn] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const al = params.get("al");
+    if (!al) return;
+    setAutoLoggingIn(true);
+    // Limpa o token da URL já (não deixar em histórico/compartilhamento).
+    window.history.replaceState(null, "", window.location.pathname);
+    fetch(`${API_URL}/api/auth/auto-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: al }),
+    })
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok || !d.token) throw new Error(d.error || "Não foi possível entrar pelo link.");
+        localStorage.setItem("cz_token", d.token);
+        localStorage.setItem("cz_user", JSON.stringify(d.user));
+        window.location.href = d.user?.role === "coproducer" ? "/coproducer" : "/dashboard";
+      })
+      .catch((e) => {
+        setAutoLoggingIn(false);
+        setLoginNotice(e?.message || "Link expirado — entre com e-mail e senha.");
+      });
+  }, []);
 
   // Recovery state — 3 steps: 1) e-mail, 2) WhatsApp, 3) code + new password.
   const [recoverStep, setRecoverStep] = useState<1 | 2 | 3>(1);
@@ -192,6 +219,15 @@ export default function LoginPage() {
     }
     setRecoverLoading(false);
   };
+
+  if (autoLoggingIn) {
+    return (
+      <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, background: "#001412", color: "#EAF2F0", fontFamily: "-apple-system, 'Segoe UI', Roboto, sans-serif" }}>
+        <Logo size={40} variant="mark" />
+        <p style={{ fontSize: 15, color: "#93A69F" }}>Entrando na sua conta…</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>

@@ -74,10 +74,10 @@ const PRIMEIROS_PASSOS: { n: string; icon: LucideIcon; title: string; text: stri
 export default function FerramentasPage() {
   const toast = useToast();
   const [komunikaActive, setKomunikaActive] = useState(false);
-  // Sem Komunika há DOIS casos diferentes, e tratá-los igual confundia:
-  // quem assina e ainda está a ser provisionado ("preparando"), e quem entrou
-  // só por um curso, que nunca terá — esse precisa é de conhecer o produto.
-  const [assinante, setAssinante] = useState(false);
+  // Komunika é provisionado NA HORA da compra (syncKomunikaOnApprovedOrder),
+  // e só quando o acesso o inclui (turma/curso pode não incluir). Logo não há
+  // um "preparando" que dure minutos: se não está ativo, é porque não faz
+  // parte deste acesso. Um único caso, mensagem clara — nada de "tente de novo".
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
 
@@ -89,7 +89,6 @@ export default function FerramentasPage() {
       .then((d) => {
         if (d?.user) {
           setKomunikaActive(!!d.user.komunikaActive);
-          setAssinante(["active", "grace_period"].includes(String(d.user.subscriptionStatus || "")));
         }
       })
       .catch(() => {})
@@ -162,8 +161,6 @@ export default function FerramentasPage() {
                 <Badge variant="neutral" size="sm">Verificando…</Badge>
               ) : komunikaActive ? (
                 <Badge variant="accent" size="sm" dot>Ativo</Badge>
-              ) : assinante ? (
-                <Badge variant="warning" size="sm" dot pulse>Preparando</Badge>
               ) : (
                 <Badge variant="neutral" size="sm">Não incluído</Badge>
               )}
@@ -203,12 +200,12 @@ export default function FerramentasPage() {
           </div>
 
           <div className={styles.ctaRow}>
-            {komunikaActive || assinante ? (
+            {komunikaActive ? (
               <Button
                 variant="primary"
                 size="lg"
                 onClick={openKomunika}
-                disabled={loading || opening || !komunikaActive}
+                disabled={loading || opening}
                 iconStart={opening ? <Loader2 size={16} className={styles.spin} /> : undefined}
                 iconEnd={opening ? undefined : <ExternalLink size={16} />}
               >
@@ -227,9 +224,9 @@ export default function FerramentasPage() {
               </Button>
             )}
             <span className={styles.ctaHint}>
-              {komunikaActive || assinante
+              {komunikaActive
                 ? "Abre logado com a sua conta do Código Zero — sem login extra."
-                : "Incluído para quem assina o Código Zero."}
+                : "Incluído para quem assina o Código Zero — não faz parte deste acesso."}
             </span>
           </div>
 
@@ -237,9 +234,8 @@ export default function FerramentasPage() {
             <p className={styles.note}>
               <Info size={15} strokeWidth={1.8} aria-hidden />
               <span>
-                {assinante
-                  ? "Seu acesso está sendo preparado — tente novamente em alguns minutos."
-                  : "O Komunika não faz parte do seu acesso atual. Ele vem incluído na assinatura do Código Zero."}
+                O Komunika não faz parte deste acesso. Ele vem incluído na assinatura do Código Zero —
+                se você acha que deveria ter, fale com o suporte.
               </span>
             </p>
           )}

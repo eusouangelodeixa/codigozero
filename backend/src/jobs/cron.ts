@@ -13,7 +13,7 @@ import { initiateSdrOutbound, sdrIsDelivering } from '../services/sdr.service';
 import { processCentralAnnouncements } from '../lib/centralAnnounce';
 import { autoEnqueueExpired, processGroupRemovalQueue, processGroupMessageQueue } from '../lib/membersGroup';
 import { buildSurveyContext, buildFallbackMessage } from '../services/lifecycle.service';
-import { processOnboardingNudges, processSaveContactReminders } from '../services/onboarding.service';
+import { processSaveContactReminders } from '../services/onboarding.service';
 import { feedbackEnrollTick, feedbackSendTick } from '../services/feedback.service';
 import { lojouCheckoutUrl, isPermanentCheckoutUrl, normalizeLojouCheckoutUrl } from '../lib/lojouLinks';
 import { reconcilePendingOrders, reconcileMissingApproved } from '../services/lojouReconcile';
@@ -891,19 +891,12 @@ export function startCronJobs() {
   });
   console.log('[CRON] ⏰ Affiliate + partner availability tick (hourly)');
 
-  // ── Post-purchase onboarding nudges (every 6 hours) ──
-  // Reminds recent buyers who haven't opened the platform yet to log in (max 3,
-  // ~1/day per user via a 20h gate), and retries any pending welcome message.
-  // Stops for a user the instant their firstAccessAt is stamped (GET /me).
-  cron.schedule('45 */6 * * *', async () => {
-    try {
-      const sent = await processOnboardingNudges();
-      if (sent > 0) console.log(`[CRON] 👋 Onboarding messages sent: ${sent}`);
-    } catch (error) {
-      console.error('[CRON] Onboarding nudge tick failed:', error);
-    }
-  });
-  console.log('[CRON] ⏰ Onboarding nudge tick (every 6h)');
+  // ── Onboarding nudges: DESATIVADO (2026-08-16) ──
+  // Mandava WhatsApp para compradores que ainda não tinham acessado ("faça
+  // login"). Com importações de turma em massa, isso é blast automático para
+  // gente que não interagiu = risco alto de ban do número compartilhado, e de
+  // baixo valor (o acesso já vai por e-mail e o painel mostra quem entrou).
+  // A entrega de credenciais e o "guarde o contacto" (abaixo) continuam.
 
   // ── "Guarde o nosso contacto" (a cada 5 min) ──
   // Envia o pedido agendado 30–60 min depois da entrega das credenciais. Sem

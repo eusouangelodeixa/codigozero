@@ -832,7 +832,7 @@ async function handleLojouWebhook(
 
           void (async () => {
             try {
-              const emailOk = await sendCredentialsEmail({ name: user.name, email: user.email, rawPassword, productName })
+              const emailOk = await sendCredentialsEmail({ name: user.name, email: user.email, rawPassword, productName, userId: user.id })
                 .then((r) => !!r?.ok)
                 .catch(() => false);
 
@@ -1465,7 +1465,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
 
   // Deliver credentials by e-mail too (Resend) — works even without a phone.
   if (rawPassword) {
-    sendCredentialsEmail({ name, email, rawPassword }).catch((e) =>
+    sendCredentialsEmail({ name, email, rawPassword, userId: provisionedUserId ?? undefined }).catch((e) =>
       console.error('[STRIPE-WEBHOOK/CHECKOUT] credentials e-mail failed (non-blocking):', e?.message || e),
     );
   }

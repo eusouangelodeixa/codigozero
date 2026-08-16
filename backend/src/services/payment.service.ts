@@ -23,6 +23,7 @@ import { env } from '../config/env';
 import { sendPushToSuperAdmins } from './push.service';
 import { sendWhatsAppMessage, type WhatsAppSendResult } from '../lib/whatsapp';
 import { sendEmail, type EmailSendResult } from '../lib/email';
+import { signAutoLoginToken } from '../lib/autoLoginToken';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -100,68 +101,83 @@ export async function sendCredentialsViaWhatsApp(opts: {
   return { delivered: false, status: r.status };
 }
 
-/** Branded HTML for the access-credentials e-mail. */
-function credentialsEmailHtml(opts: { name: string; email: string; password: string; loginUrl: string; productName?: string }): string {
-  const first = (opts.name || '').split(' ')[0] || 'membro';
-  const introHtml = opts.productName
-    ? `Sua compra de <strong style="color:#ffffff;">${opts.productName}</strong> foi confirmada. Aqui estão os seus dados de acesso:`
-    : `Sua conta no <strong style="color:#ffffff;">Código Zero</strong> está pronta. Aqui estão os seus dados de acesso:`;
+/** HTML do e-mail de credenciais — clean, fundo claro (inspirado no da Kiwify).
+ *  `buttonUrl` já entra logado (auto-login); `loginUrl` é o link simples de
+ *  fallback mostrado como texto. */
+function credentialsEmailHtml(opts: {
+  name: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+  buttonUrl: string;
+  productName?: string;
+}): string {
+  const first = (opts.name || '').split(' ')[0] || '';
+  const produto = opts.productName || 'Código Zero';
+  const ola = first ? `Olá, ${first}, tudo bem?` : 'Olá, tudo bem?';
   return `<!doctype html>
 <html lang="pt"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="supported-color-schemes" content="dark">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 </head>
-<body style="margin:0;padding:0;background:#001412;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#001412;padding:28px 12px;">
+<body style="margin:0;padding:0;background:#eef2f1;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a2b27;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f1;padding:24px 12px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#06130f;border:1px solid #14352f;border-radius:18px;overflow:hidden;">
-        <tr><td style="padding:26px 30px 22px;text-align:center;border-bottom:1px solid #11231e;">
-          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="46" height="46" style="display:inline-block;width:46px;height:46px;border-radius:13px;vertical-align:middle;border:0;" />
-          <span style="display:inline-block;vertical-align:middle;margin-left:12px;font-size:19px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Código Zero</span>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e2e8e6;border-radius:16px;overflow:hidden;">
+        <!-- Faixa de marca -->
+        <tr><td style="background:#001412;padding:22px 30px;text-align:center;">
+          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="40" height="40" style="display:inline-block;width:40px;height:40px;border-radius:11px;vertical-align:middle;border:0;" />
+          <span style="display:inline-block;vertical-align:middle;margin-left:11px;font-size:18px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Código Zero</span>
         </td></tr>
-        <tr><td style="padding:30px 30px 6px;">
-          <h1 style="margin:0 0 8px;font-size:23px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Bem-vindo, ${first}! 🎉</h1>
-          <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#A1A1AA;">${introHtml}</p>
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#5b7a73;font-weight:700;margin:0 0 6px;">E-mail</div>
-          <div style="background:#0c1c17;border:1px solid #213029;border-radius:10px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;color:#ffffff;word-break:break-all;">${opts.email}</div>
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#5b7a73;font-weight:700;margin:14px 0 6px;">Senha</div>
-          <div style="background:#0c1c17;border:1px solid #1e4a43;border-radius:10px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17px;font-weight:700;color:#2DD4BF;word-break:break-all;">${opts.password}</div>
-          <p style="margin:10px 0 0;font-size:12px;color:#52605c;">Toque e segure (ou selecione) o valor para copiar.</p>
-          <a href="${opts.loginUrl}" style="display:block;margin:24px 0 6px;background:#2DD4BF;color:#001412;text-decoration:none;text-align:center;font-weight:700;font-size:16px;padding:15px;border-radius:11px;">Acessar o Código Zero &rarr;</a>
-          <p style="margin:16px 0 4px;font-size:13px;line-height:1.6;color:#7b8a85;">Guarde esses dados em local seguro. Recomendamos fazer login e, no seu perfil, trocar a senha por uma de sua preferência.</p>
-        </td></tr>
-        <tr><td style="padding:16px 30px 8px;">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#52605c;font-weight:700;text-align:center;margin-bottom:12px;">Acompanhe a gente</div>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-            <td width="50%" style="padding-right:5px;">
-              <a href="https://www.instagram.com/ocodigozero_" style="display:block;text-decoration:none;background:#0c1c17;border:1px solid #213029;border-radius:11px;padding:11px 6px;text-align:center;">
-                <img src="https://app.czero.sbs/icons/instagram.png" alt="Instagram" width="20" height="20" style="vertical-align:middle;border-radius:6px;border:0;" />
-                <span style="vertical-align:middle;margin-left:7px;font-size:13px;font-weight:600;color:#cdd6d3;">@ocodigozero_</span>
-              </a>
-            </td>
-            <td width="50%" style="padding-left:5px;">
-              <a href="https://www.instagram.com/eusouangelodeixa" style="display:block;text-decoration:none;background:#0c1c17;border:1px solid #213029;border-radius:11px;padding:11px 6px;text-align:center;">
-                <img src="https://app.czero.sbs/icons/instagram.png" alt="Instagram" width="20" height="20" style="vertical-align:middle;border-radius:6px;border:0;" />
-                <span style="vertical-align:middle;margin-left:7px;font-size:13px;font-weight:600;color:#cdd6d3;">@eusouangelodeixa</span>
-              </a>
+
+        <tr><td style="padding:32px 32px 8px;">
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#3a4a46;">${ola}</p>
+          <p style="margin:0 0 22px;font-size:16px;line-height:1.6;color:#1a2b27;">
+            <strong>Sua compra foi confirmada!</strong> O seu acesso ao
+            <strong>${produto}</strong> já está liberado. 🎉
+          </p>
+          <p style="margin:0 0 18px;font-size:15px;line-height:1.6;color:#3a4a46;">
+            Para começar agora mesmo, toque no botão abaixo — ele já entra logado.
+            Se preferir, use as credenciais mais abaixo em ${opts.loginUrl}.
+          </p>
+
+          <!-- Botão auto-login -->
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 22px;"><tr>
+            <td align="center" style="background:#0FB89E;border-radius:11px;">
+              <a href="${opts.buttonUrl}" style="display:inline-block;padding:15px 34px;color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;">Acessar meu produto &rarr;</a>
             </td>
           </tr></table>
-        </td></tr>
-        <tr><td style="padding:24px 30px 28px;text-align:center;border-top:1px solid #11231e;">
-          <img src="https://app.czero.sbs/logo-mark.png" alt="Código Zero" width="40" height="40" style="display:inline-block;width:40px;height:40px;border-radius:12px;border:0;" />
-          <p style="margin:14px 0 8px;font-size:13px;line-height:1.5;color:#8a9994;">O ecossistema pra criar micronegócios de IA.<br>Sem código, sem barreiras.</p>
-          <p style="margin:0 0 12px;font-size:13px;">
-            <a href="${opts.loginUrl}" style="color:#2DD4BF;text-decoration:none;">Área de Membros</a>
-            <span style="color:#3a4a45;">&nbsp;&middot;&nbsp;</span>
-            <a href="https://app.czero.sbs/privacidade" style="color:#2DD4BF;text-decoration:none;">Privacidade</a>
-            <span style="color:#3a4a45;">&nbsp;&middot;&nbsp;</span>
-            <a href="https://app.czero.sbs/termos" style="color:#2DD4BF;text-decoration:none;">Termos</a>
+
+          <!-- Credenciais -->
+          <div style="background:#f5f8f7;border:1px solid #e2e8e6;border-radius:12px;padding:16px 18px;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#7c8a86;font-weight:700;margin:0 0 4px;">🔒 Seus dados de acesso</div>
+            <div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#9aa7a3;font-weight:600;">E-mail</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;color:#1a2b27;word-break:break-all;">${opts.email}</div>
+            <div style="margin-top:12px;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#9aa7a3;font-weight:600;">Senha provisória</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:17px;font-weight:700;color:#0a7c6c;word-break:break-all;">${opts.password}</div>
+          </div>
+
+          <p style="margin:18px 0 0;font-size:13.5px;line-height:1.6;color:#5a6b66;">
+            Recomendamos <strong>trocar essa senha provisória</strong> no seu primeiro acesso, pelo seu perfil.
           </p>
-          <p style="margin:0;font-size:12px;color:#52605c;line-height:1.5;">Você recebeu este e-mail porque tem uma conta no Código Zero.</p>
+          <p style="margin:14px 0 0;font-size:13.5px;line-height:1.6;color:#5a6b66;">
+            💡 <strong>Dica:</strong> salve este e-mail nos favoritos para não perder o link e os dados de login.
+          </p>
+          <p style="margin:14px 0 4px;font-size:13.5px;line-height:1.6;color:#5a6b66;">
+            Precisa de ajuda? É só responder a este e-mail.
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:22px 32px 28px;border-top:1px solid #eef2f1;">
+          <p style="margin:0 0 4px;font-size:14px;color:#3a4a46;">Bom proveito! 🚀</p>
+          <p style="margin:0;font-size:14px;font-weight:700;color:#1a2b27;">CZERO <span style="font-weight:400;color:#7c8a86;">by Ângelo Deixa</span></p>
         </td></tr>
       </table>
+      <p style="max-width:520px;margin:14px auto 0;font-size:11.5px;color:#9aa7a3;text-align:center;line-height:1.5;">
+        Você recebeu este e-mail porque comprou um produto do Código Zero.
+      </p>
     </td></tr>
   </table>
 </body></html>`;
@@ -180,26 +196,48 @@ export async function sendCredentialsEmail(opts: {
   /** Nome do produto comprado — entra no assunto e no corpo para o comprador
    *  saber exatamente o que desbloqueou (curso avulso vs assinatura). */
   productName?: string;
+  /** userId → monta o link de auto-login do botão "Acessar meu produto"
+   *  (já entra logado). Sem ele, o botão vira o login normal. */
+  userId?: string;
 }): Promise<EmailSendResult> {
-  const loginUrl = opts.loginUrl || `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`;
+  const base = env.FRONTEND_URL || 'https://app.czero.sbs';
+  const loginUrl = opts.loginUrl || `${base}/login`;
+
+  // Botão de auto-login: precisa do tokenVersion atual do usuário.
+  let buttonUrl = loginUrl;
+  if (opts.userId) {
+    try {
+      const u = await prisma.user.findUnique({ where: { id: opts.userId }, select: { tokenVersion: true } });
+      if (u) buttonUrl = `${base}/login?al=${encodeURIComponent(signAutoLoginToken(opts.userId, u.tokenVersion))}`;
+    } catch (e: any) {
+      console.error('[PAYMENT/CREDS] auto-login link falhou (usando login normal):', e?.message || e);
+    }
+  }
+
   const html = credentialsEmailHtml({
     name: opts.name,
     email: opts.email,
     password: opts.rawPassword,
     loginUrl,
+    buttonUrl,
     productName: opts.productName,
   });
+  const produto = opts.productName || 'Código Zero';
   const text = [
-    opts.productName ? `Compra confirmada: ${opts.productName}` : `Bem-vindo ao Código Zero!`,
+    `Compra confirmada — seu acesso ao ${produto} está liberado.`,
     ``,
-    `Email: ${opts.email}`,
-    `Senha: ${opts.rawPassword}`,
+    `Acessar já logado: ${buttonUrl}`,
     ``,
-    `Acesse: ${loginUrl}`,
+    `Ou entre em ${loginUrl} com:`,
+    `E-mail: ${opts.email}`,
+    `Senha provisória: ${opts.rawPassword}`,
     ``,
-    `Guarde esses dados em local seguro.`,
+    `Recomendamos trocar a senha no primeiro acesso.`,
+    ``,
+    `Bom proveito!`,
+    `CZERO by Ângelo Deixa`,
   ].join('\n');
-  const subject = opts.productName ? `🎉 Seu acesso: ${opts.productName}` : '🎉 Seu acesso ao Código Zero';
+  const subject = `✅ Seu acesso ao ${produto} está liberado`;
   return sendEmail({ to: opts.email, subject, html, text });
 }
 

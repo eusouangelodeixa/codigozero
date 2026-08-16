@@ -9,13 +9,15 @@
  *
  * SEGURANÇA: assinado com chave DERIVADA de JWT_SECRET (nunca o secret cru —
  * um código destes jamais pode ser aceito pelo authMiddleware; mesmo racional
- * do lib/feedbackToken.ts). Uso único via Set de jti em memória com varredura
- * preguiçosa — um único container de backend, janela de 60s: perda no restart
- * é irrelevante (o app minta outro código com um clique).
+ * do lib/feedbackToken.ts). Uso único via Redis `SET NX EX` (vale para N
+ * réplicas — o Map em memória antigo era "uso único POR PROCESSO"), com
+ * fallback para o Map local se o Redis estiver fora: melhor degradar para a
+ * garantia antiga do que negar login a todo mundo.
  */
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import { redisConnection } from '../queues/scraper.queue';
 
 const SSO_KEY = crypto.createHmac('sha256', env.JWT_SECRET).update('cz-members-sso-v1').digest();
 const PURPOSE = 'members-sso';
@@ -37,7 +39,7 @@ export function signMembersSsoCode(userId: string): string {
 }
 
 /** Valida E QUEIMA o código. Retorna o userId ou null (inválido/expirado/repetido). */
-export function consumeMembersSsoCode(code: string): string | null {
+export async function consumeMembersSsoCode(code: string): Promise<string | null> {
   try {
     const decoded = jwt.verify(code, SSO_KEY, { algorithms: ['HS256'] }) as {
       userId?: string;
@@ -47,7 +49,15 @@ export function consumeMembersSsoCode(code: string): string | null {
     };
     if (decoded.purpose !== PURPOSE || !decoded.userId || !decoded.jti) return null;
     const now = Date.now();
-    if (burned.has(decoded.jti)) return null; // replay
+
+    // Queima distribuída: SET NX só ganha uma vez por jti, em qualquer réplica.
+    try {
+      const won = await redisConnection.set(`sso:jti:${decoded.jti}`, '1', 'EX', TTL_SECONDS * 2, 'NX');
+      if (won !== 'OK') return null; // replay
+    } catch {
+      // Redis fora → fallback para a garantia por-processo de sempre.
+      if (burned.has(decoded.jti)) return null;
+    }
     burned.set(decoded.jti, (decoded.exp ?? 0) * 1000 + 60_000);
     sweep(now);
     return decoded.userId;

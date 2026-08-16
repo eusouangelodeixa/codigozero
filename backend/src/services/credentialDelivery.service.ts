@@ -65,17 +65,54 @@ export async function markEmailQuotaExhausted(): Promise<void> {
 }
 
 /** Põe alguém na fila (idempotente por utilizador). `productName` entra na
- *  mensagem para o aluno saber O QUE foi desbloqueado (ex.: o curso da turma). */
+ *  mensagem para o aluno saber O QUE foi desbloqueado (ex.: o curso da turma).
+ *
+ *  `reset: true` re-arma uma linha já enviada/falhada — usado pela COMPRA no
+ *  webhook, onde a entrega tem de acontecer mesmo que a pessoa já tenha
+ *  recebido credenciais de uma turma no passado. `dueAt` adia o primeiro
+ *  processamento (período de graça enquanto a entrega imediata tenta). */
 export async function enqueueCredentialDelivery(
   userId: string,
   batch?: string,
   productName?: string,
+  opts?: { reset?: boolean; dueAt?: Date },
 ): Promise<void> {
   await prisma.credentialDelivery.upsert({
     where: { userId },
-    update: { ...(productName ? { productName } : {}) },
-    create: { userId, batch: batch ?? null, productName: productName ?? null },
+    update: opts?.reset
+      ? {
+          status: 'pending',
+          attempts: 0,
+          lastError: null,
+          channel: 'email',
+          dueAt: opts?.dueAt ?? new Date(),
+          ...(batch ? { batch } : {}),
+          ...(productName ? { productName } : {}),
+        }
+      : { ...(productName ? { productName } : {}) },
+    create: {
+      userId,
+      batch: batch ?? null,
+      productName: productName ?? null,
+      ...(opts?.dueAt ? { dueAt: opts.dueAt } : {}),
+    },
   });
+}
+
+/** Marca a entrega como feita por fora da fila (ex.: a tentativa imediata do
+ *  webhook funcionou) — o tick vê status 'sent' e não re-envia. */
+export async function markCredentialDelivered(
+  userId: string,
+  channel: 'email' | 'whatsapp',
+): Promise<void> {
+  try {
+    await prisma.credentialDelivery.updateMany({
+      where: { userId, status: 'pending' },
+      data: { status: 'sent', channel, sentAt: new Date() },
+    });
+  } catch (e: any) {
+    console.error('[ENTREGA] markCredentialDelivered falhou:', e?.message || e);
+  }
 }
 
 /** Quando pode sair a próxima mensagem de WhatsApp, respeitando o intervalo. */
@@ -104,6 +141,16 @@ export async function processCredentialDeliveries(): Promise<{ sent: number; cha
     include: { user: { select: { id: true, name: true, email: true, phone: true } } },
   });
   if (!proximo) return { sent: 0 };
+
+  // CLAIM atômico: empurra o dueAt 5 min pra frente guardado pelo valor
+  // atual. Dois ticks concorrentes (2ª réplica, cron duplicado) não enviam a
+  // mesma pessoa duas vezes; um crash no meio só re-agenda em 5 min — sem
+  // estado novo, sem linha presa.
+  const claim = await prisma.credentialDelivery.updateMany({
+    where: { id: proximo.id, status: 'pending', dueAt: proximo.dueAt },
+    data: { dueAt: new Date(agora.getTime() + 5 * 60 * 1000) },
+  });
+  if (claim.count === 0) return { sent: 0 };
 
   const quota = await readQuota();
   const temEmailReal = !!proximo.user.email && !proximo.user.email.endsWith('@lead.czero.sbs');
@@ -150,12 +197,16 @@ export async function processCredentialDeliveries(): Promise<{ sent: number; cha
       email: proximo.user.email,
       rawPassword: raw,
       productName: proximo.productName ?? undefined,
-    }).catch((e: any) => ({ ok: false, status: e?.message || 'erro' }) as any);
-    ok = !!r?.ok;
-    if (!ok) erro = `whatsapp: ${r?.status ?? 'falhou'}`;
+    }).catch((e: any) => ({ delivered: false, status: e?.message || 'erro' }) as any);
+    // BUG histórico: aqui se checava `r.ok`, mas o helper devolve `delivered`
+    // — TODA entrega WhatsApp da fila era marcada como falha mesmo quando o
+    // cliente recebia (e a senha era re-rotacionada na tentativa seguinte).
+    ok = !!(r as any)?.delivered;
+    if (!ok) erro = `whatsapp: ${(r as any)?.status ?? 'falhou'}`;
   }
 
   const tentativas = proximo.attempts + 1;
+  const desistiu = !ok && tentativas >= 3;
   await prisma.credentialDelivery.update({
     where: { id: proximo.id },
     data: ok
@@ -163,12 +214,24 @@ export async function processCredentialDeliveries(): Promise<{ sent: number; cha
       : {
           // 3 tentativas antes de desistir; o reenvio manual continua a existir
           // em /admin/users para os casos que sobram.
-          status: tentativas >= 3 ? 'failed' : 'pending',
+          status: desistiu ? 'failed' : 'pending',
           attempts: tentativas,
           lastError: erro,
           dueAt: new Date(Date.now() + 10 * 60 * 1000),
         },
   });
+
+  // Falha terminal deixa o usuário com uma senha que NINGUÉM conhece (ela é
+  // rotacionada a cada tentativa de envio) — o admin precisa saber NA HORA
+  // para reenviar por /admin/users, senão vira o caso do comprador trancado.
+  if (desistiu) {
+    const { sendPushToSuperAdmins } = await import('./push.service');
+    sendPushToSuperAdmins({
+      title: '🚨 Credenciais não entregues (fila)',
+      body: `${proximo.user.email} — 3 tentativas falharam (${erro}). Reenvie em /admin/users.`,
+      url: '/admin/users',
+    }).catch(() => {});
+  }
 
   if (ok) console.log(`[ENTREGA] ✅ ${proximo.channel} → ${proximo.user.email}`);
   return { sent: ok ? 1 : 0, channel: proximo.channel };

@@ -410,7 +410,10 @@ router.get('/support', async (req: AuthRequest, res: Response) => {
       include: MESSAGE_INCLUDE,
     });
 
-    if (messages.length > 0) {
+    // Só ESCREVE quando há algo não-lido de verdade — este endpoint é poll-ado
+    // a cada 4s pelo admin e o updateMany incondicional era uma escrita por
+    // tick, com ou sem novidade.
+    if (messages.some((m) => m.senderId !== req.user!.id && !m.readAt)) {
       await prisma.chatMessage.updateMany({
         where: { channel, senderId: { not: req.user!.id }, readAt: null },
         data: { readAt: new Date() },
@@ -639,32 +642,58 @@ router.get('/support/inbox', async (req: AuthRequest, res: Response) => {
   try {
     if (!isAdminRole(req.user!.role)) return res.status(403).json({ error: 'Admin only' });
 
+    // 4 queries no total. A versão anterior fazia 3 POR CONVERSA depois do
+    // groupBy (601 queries a cada poll de 8s com 200 threads) — o inbox é a
+    // página mais poll-ada do admin.
     const channels = await prisma.chatMessage.groupBy({
       by: ['channel'],
       where: { channel: { startsWith: 'support_' } },
       _count: true,
       _max: { createdAt: true },
       orderBy: { _max: { createdAt: 'desc' } },
+      take: 200,
     });
+    const channelNames = channels.map((c) => c.channel);
+    const userIds = channelNames.map((c) => c.replace('support_', ''));
 
-    const conversations = await Promise.all(
-      channels.map(async (ch) => {
-        const userId = ch.channel.replace('support_', '');
-        const [user, lastMessage, unreadCount] = await Promise.all([
-          prisma.user.findUnique({
-            where: { id: userId },
-            select: { id: true, name: true, email: true, subscriptionStatus: true, avatarUrl: true },
-          }),
-          prisma.chatMessage.findFirst({
-            where: { channel: ch.channel },
-            orderBy: { createdAt: 'desc' },
-            include: { sender: { select: { name: true, role: true } } },
-          }),
-          prisma.chatMessage.count({ where: { channel: ch.channel, senderId: { not: req.user!.id }, readAt: null } }),
-        ]);
-        return { channel: ch.channel, userId, user, lastMessage, unreadCount, totalMessages: ch._count };
-      })
-    );
+    const [users, unread, lastMessages] = await Promise.all([
+      prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, email: true, subscriptionStatus: true, avatarUrl: true },
+      }),
+      prisma.chatMessage.groupBy({
+        by: ['channel'],
+        where: { channel: { in: channelNames }, senderId: { not: req.user!.id }, readAt: null },
+        _count: true,
+      }),
+      // Última mensagem de cada canal num único round-trip (distinct pega a
+      // primeira linha por canal na ordem createdAt desc).
+      prisma.chatMessage.findMany({
+        where: { channel: { in: channelNames } },
+        orderBy: { createdAt: 'desc' },
+        distinct: ['channel'],
+        include: { sender: { select: { name: true, role: true } } },
+      }),
+    ]);
+
+    const userById = new Map(users.map((u) => [u.id, u]));
+    const unreadByChannel = new Map(unread.map((u) => [u.channel, u._count]));
+    const lastByChannel = new Map<string, (typeof lastMessages)[number]>();
+    for (const m of lastMessages) {
+      if (!lastByChannel.has(m.channel)) lastByChannel.set(m.channel, m);
+    }
+
+    const conversations = channels.map((ch) => {
+      const userId = ch.channel.replace('support_', '');
+      return {
+        channel: ch.channel,
+        userId,
+        user: userById.get(userId) ?? null,
+        lastMessage: lastByChannel.get(ch.channel) ?? null,
+        unreadCount: unreadByChannel.get(ch.channel) ?? 0,
+        totalMessages: ch._count,
+      };
+    });
 
     res.json({ conversations });
   } catch (error) {

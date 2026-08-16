@@ -121,7 +121,16 @@ export function startCronJobs() {
   // 16:00 CAT — evita disparar renovação de madrugada (o antigo '0 */6 * * *'
   // mandava às 02:00 CAT). O dedup de 20h (lastExpirationAlert) garante no
   // máximo 1 alerta/dia por usuário mesmo com duas rodadas.
+  // Guard de sobreposição: com pausas de 90–210s por usuário, uma leva grande
+  // passa de 8h e COLIDIA com a execução das 14:00 — dois loops enviando ao
+  // mesmo tempo no número compartilhado.
+  let expirationAlertsRunning = false;
   cron.schedule('0 6,14 * * *', async () => {
+    if (expirationAlertsRunning) {
+      console.warn('[CRON] 🔔 Expiration alerts ainda rodando — tick pulado');
+      return;
+    }
+    expirationAlertsRunning = true;
     console.log('[CRON] 🔔 Running expiration alert check...');
     try {
       const now = new Date();
@@ -135,6 +144,19 @@ export function startCronJobs() {
           phone: { not: '' },
         },
       });
+
+      // Prefetch dos coprodutores citados — a versão antiga fazia um
+      // findUnique POR usuário dentro do loop de envio.
+      const coproCodes = Array.from(
+        new Set(expiringUsers.map((u) => u.referredByCoproducer).filter(Boolean) as string[]),
+      );
+      const coproRows = coproCodes.length
+        ? await prisma.coproducerAccount.findMany({
+            where: { code: { in: coproCodes } },
+            select: { code: true, productPid: true, publicCheckoutUrl: true, enabled: true },
+          })
+        : [];
+      const coproByCode = new Map(coproRows.map((c) => [c.code, c]));
 
       const systemConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
       const apiKey = systemConfig?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
@@ -181,10 +203,7 @@ export function startCronJobs() {
         // previously-stored user.renewalUrl / checkoutUrl, which are tokens.)
         let finalLink = lojouCheckoutUrl(env.LOJOU_PRODUCT_PID);
         if (user.referredByCoproducer) {
-          const cop = await prisma.coproducerAccount.findUnique({
-            where: { code: user.referredByCoproducer },
-            select: { productPid: true, publicCheckoutUrl: true, enabled: true },
-          });
+          const cop = coproByCode.get(user.referredByCoproducer);
           if (cop && cop.enabled) {
             finalLink = cop.publicCheckoutUrl
               ? normalizeLojouCheckoutUrl(cop.publicCheckoutUrl)
@@ -252,6 +271,8 @@ export function startCronJobs() {
       console.log(`[CRON] 🔔 Expiration alerts complete: ${alertsSent} sent.`);
     } catch (error) {
       console.error('[CRON] ❌ Expiration alert check failed:', error);
+    } finally {
+      expirationAlertsRunning = false;
     }
   });
 
@@ -649,8 +670,13 @@ export function startCronJobs() {
           `Veja como em 30 segundos: ${env.FRONTEND_URL}/instalar`,
         ].join('\n');
         const r = await sendWhatsAppMessage({ phone: user.phone, content: message });
-        await prisma.user.update({ where: { id: user.id }, data: { pwaReminderSentAt: new Date() } });
-        if (r.ok) sent++;
+        // Só marca quando o envio CONFIRMA — antes o carimbo entrava mesmo em
+        // falha e o lembrete se perdia para sempre. Falhou → tenta de novo no
+        // dia seguinte (o take 20 diário limita o custo).
+        if (r.ok) {
+          await prisma.user.update({ where: { id: user.id }, data: { pwaReminderSentAt: new Date() } });
+          sent++;
+        }
         // Long, randomized interval (≈2–5 min) between sends. Skip after last.
         if (i < candidates.length - 1) {
           const waitMs = 120_000 + Math.floor(Math.random() * 180_000); // 120s–300s
@@ -705,20 +731,35 @@ export function startCronJobs() {
       // (seconds-apart sends on the shared Komunika number) was a ban risk.
       // Mentoria reminders are now PUSH-ONLY (notifyAll above).
 
+      // A flag de dedup agora é um CLAIM atômico ANTES do envio (updateMany
+      // guardado pelo valor antigo): dois ticks concorrentes não disparam em
+      // dobro, e — diferente da versão antiga, que gravava a flag e só depois
+      // enviava — um crash entre o claim e o envio é a única janela de perda,
+      // não o caminho normal de falha.
       // 30 min before: first minute where 0 < diff <= 30min, once per schedule.
       if (diffMs > 0 && diffMs <= 30 * 60 * 1000 && cfg.mentoria30SentFor !== schedule) {
-        await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { mentoria30SentFor: schedule } });
-        await notifyAll('🎥 Mentoria ao vivo em ~30 minutos', 'Prepare-se! A mentoria começa em breve. Toque para abrir o QG e entrar.');
-        console.log('[CRON] 🎥 Mentoria 30-min reminder sent');
+        const claim = await prisma.systemConfig.updateMany({
+          where: { id: 'singleton', NOT: { mentoria30SentFor: schedule } },
+          data: { mentoria30SentFor: schedule },
+        });
+        if (claim.count > 0) {
+          await notifyAll('🎥 Mentoria ao vivo em ~30 minutos', 'Prepare-se! A mentoria começa em breve. Toque para abrir o QG e entrar.');
+          console.log('[CRON] 🎥 Mentoria 30-min reminder sent');
+        }
       }
 
       // At start: first minute where the start just passed (0 ≥ diff > -15min),
       // once per schedule. The -15min floor avoids blasting an old schedule if
       // the cron was down through the start time.
       if (diffMs <= 0 && diffMs > -15 * 60 * 1000 && cfg.mentoriaStartSentFor !== schedule) {
-        await prisma.systemConfig.update({ where: { id: 'singleton' }, data: { mentoriaStartSentFor: schedule } });
-        await notifyAll('🔴 A mentoria ao vivo começou!', 'Estamos ao vivo agora. Toque para entrar pelo QG.');
-        console.log('[CRON] 🔴 Mentoria start reminder sent');
+        const claim = await prisma.systemConfig.updateMany({
+          where: { id: 'singleton', NOT: { mentoriaStartSentFor: schedule } },
+          data: { mentoriaStartSentFor: schedule },
+        });
+        if (claim.count > 0) {
+          await notifyAll('🔴 A mentoria ao vivo começou!', 'Estamos ao vivo agora. Toque para entrar pelo QG.');
+          console.log('[CRON] 🔴 Mentoria start reminder sent');
+        }
       }
     } catch (error) {
       console.error('[CRON] ❌ Mentoria reminder failed:', error);
@@ -995,9 +1036,14 @@ export function startCronJobs() {
 
 async function recoverOrphanedDispatches() {
   const now = new Date();
-  // Reset 'running' rows to 'pending' so processDispatch can re-claim them.
+  // Reset 'running' rows to 'pending' so processDispatch can re-claim them —
+  // mas SÓ as órfãs de verdade (sem progresso há 5+ min). O processDispatch
+  // grava sent/failed/cursor a cada contato, então updatedAt de um disparo
+  // vivo é sempre recente: sem este filtro, o boot de uma 2ª réplica (ou um
+  // rolling deploy) ROUBAVA o disparo em andamento da outra e o reiniciava.
+  const staleBefore = new Date(now.getTime() - 5 * 60 * 1000);
   const stalled = await prisma.scheduledDispatch.updateMany({
-    where: { status: 'running' },
+    where: { status: 'running', updatedAt: { lt: staleBefore } },
     data: { status: 'pending' },
   });
   if (stalled.count > 0) {

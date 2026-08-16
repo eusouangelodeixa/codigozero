@@ -15,6 +15,23 @@ export interface AuthRequest extends Request {
   };
 }
 
+// Cache curtíssimo (10s) do lookup de usuário: os polls do painel (chat,
+// e-mails, broadcast) pagavam um findUnique POR REQUISIÇÃO. 10s de staleness
+// em role/status é aceitável — desativação/upgrade pega no tick seguinte.
+// Limpeza preguiçosa a cada 60s para o Map não crescer sem teto.
+type CachedUser = { user: NonNullable<AuthRequest['user']>; isActive: boolean; expiresAt: number };
+const userCache = new Map<string, CachedUser>();
+let nextCacheSweep = 0;
+const USER_CACHE_TTL_MS = 10_000;
+
+function sweepUserCache(now: number): void {
+  if (now < nextCacheSweep) return;
+  nextCacheSweep = now + 60_000;
+  for (const [k, v] of userCache) {
+    if (v.expiresAt <= now) userCache.delete(k);
+  }
+}
+
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     let token = '';
@@ -32,6 +49,15 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
     const decoded = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string };
 
+    const now = Date.now();
+    sweepUserCache(now);
+    const cached = userCache.get(decoded.userId);
+    if (cached && cached.expiresAt > now) {
+      if (!cached.isActive) return res.status(401).json({ error: 'Usuário não encontrado ou inativo' });
+      req.user = cached.user;
+      return next();
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: {
@@ -45,6 +71,13 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     });
 
     if (!user || !user.isActive) {
+      if (user) {
+        userCache.set(decoded.userId, {
+          user: { id: user.id, email: user.email, name: user.name, role: user.role, subscriptionStatus: user.subscriptionStatus },
+          isActive: false,
+          expiresAt: now + USER_CACHE_TTL_MS,
+        });
+      }
       return res.status(401).json({ error: 'Usuário não encontrado ou inativo' });
     }
 
@@ -55,6 +88,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       role: user.role,
       subscriptionStatus: user.subscriptionStatus,
     };
+    userCache.set(decoded.userId, { user: req.user, isActive: true, expiresAt: now + USER_CACHE_TTL_MS });
 
     next();
   } catch (error) {

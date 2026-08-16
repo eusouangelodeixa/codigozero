@@ -129,7 +129,9 @@ export default function BroadcastPage() {
     };
 
     tick();
-    pollRef.current = setInterval(tick, 1500);
+    // 2.5s: o status agora é lido do banco (job persistido), não de um Map em
+    // memória — o poll de 1.5s era gratuito, este não é.
+    pollRef.current = setInterval(tick, 2500);
   }, [applyJob, stopPolling]);
 
   // Pause/resume/stop the server-side send loop.

@@ -178,6 +178,15 @@ model User {
   @@index([subscriptionStatus])
   @@index([stripeSubscriptionId])
   @@index([remarketingStage])
+  // Auditoria 2026-08: as queries quentes que estas colunas servem estão no
+  // relatório Raio-X (expiração diária, expectedRenewals do /finance, listas
+  // do admin por createdAt, crons de welcome/save-contact, painel do copro).
+  @@index([subscriptionStatus, subscriptionEnd])
+  @@index([subscriptionEnd])
+  @@index([createdAt])
+  @@index([newsletterWelcomeSentAt, newsletterWelcomeDueAt])
+  @@index([saveContactSentAt, saveContactDueAt])
+  @@index([referredByCoproducer])
 }
 
 model Lead {
@@ -320,6 +329,8 @@ model CredentialDelivery {
   createdAt DateTime @default(now())
 
   @@index([status, dueAt])
+  // Slot do WhatsApp: findFirst do último enviado por canal a cada tick.
+  @@index([channel, sentAt])
 }
 
 model CourseAccess {
@@ -455,6 +466,11 @@ model Transaction {
   @@index([courseId])
   // Colunas quentes: faturamento/cron filtram por status; renovação por userEmail;
   // reconciliação Stripe faz findFirst por stripePaymentIntentId; relatórios por data.
+  // (status, createdAt) porque TODA query do financeiro é status + janela de
+  // data; userPhone porque o feedback/leads casam por telefone e não havia
+  // índice nenhum.
+  @@index([status, createdAt])
+  @@index([userPhone])
   @@index([status])
   @@index([userEmail])
   @@index([stripePaymentIntentId])
@@ -685,6 +701,9 @@ model ScrapedLead {
   createdAt   DateTime @default(now())
 
   @@index([jobId])
+  // Radar lista os leads do usuário ordenados por data com take 500 — sem
+  // este índice o Postgres ordenava o histórico inteiro em memória.
+  @@index([jobId, createdAt])
 }
 
 model ChatMessage {
@@ -730,6 +749,8 @@ model ChatMessage {
   @@index([senderId])
   @@index([replyToId])
   @@index([channel, pinnedUntil])
+  // Contagem de não-lidas do suporte (polls de 4–8s do admin).
+  @@index([channel, readAt])
 }
 
 // One emoji reaction by one user on one message. Unique per (message,user,emoji)
@@ -837,12 +858,62 @@ model ScheduledDispatch {
   total       Int       @default(0)
   sent        Int       @default(0)
   failed      Int       @default(0)
+  // Cursor de progresso: índice do PRÓXIMO contato a enviar. Sem ele, um
+  // restart no meio do disparo recomeçava do contato 0 e duplicava envios
+  // no número compartilhado.
+  lastContactIndex Int  @default(0)
   error       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@index([status, scheduledAt])
   @@index([userId, createdAt])
+}
+
+/// Disparo em massa do admin (/admin/broadcast), PERSISTIDO. Antes vivia num
+/// Map em memória: um deploy no meio matava o loop sem registro de quem já
+/// tinha recebido, sem resume, e o botão de pausa só valia no processo dono.
+/// Agora o loop lê o status daqui (pausa/stop de qualquer processo), cada
+/// destinatário tem a sua linha (dedup + resume), e o boot retoma jobs vivos.
+model AdminBroadcast {
+  id           String    @id @default(uuid())
+  /// running | paused | stopped | done | error
+  status       String    @default("running")
+  message      String
+  instanceId   String?
+  delayMin     Int       @default(5)
+  delayMax     Int       @default(15)
+  sendPush     Boolean   @default(false)
+  generateCoupons Boolean @default(false)
+  couponDiscount  Int?
+  couponMaxUses   Int?
+  total        Int       @default(0)
+  sent         Int       @default(0)
+  failed       Int       @default(0)
+  coupons      Int       @default(0)
+  error        String?
+  createdBy    String?
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  recipients   AdminBroadcastRecipient[]
+
+  @@index([status])
+}
+
+model AdminBroadcastRecipient {
+  id        String   @id @default(uuid())
+  jobId     String
+  job       AdminBroadcast @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String?
+  phone     String?
+  /// pending | sending | sent | failed | skipped
+  status    String   @default("pending")
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([jobId, status])
 }
 
 model PushSubscription {
@@ -1339,6 +1410,8 @@ model FeedbackSurvey {
   @@index([feedbackStatus, feedbackDueAt])
   @@index([suggestionStatus, suggestionDueAt])
   @@index([feedbackStatus, nextActionAt])
+  // Sweep de expiração do consentimento de sugestão (tick de 2 min).
+  @@index([suggestionStatus, suggestionWindowEndsAt])
 }
 
 // One row per question per survey, created AT SEND TIME with score null —

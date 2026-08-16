@@ -94,9 +94,20 @@ services:
       - czero-network
 
   # ── Redis (BullMQ) ──
+  # Teto de memória + noeviction: fila de jobs quer escrita falhando ALTO em
+  # vez de job sumindo em silêncio. --save "" desliga o bgsave (o fork do heap
+  # foi o amplificador do incidente mira_redis de 4GB); perder a fila num
+  # restart é aceitável — os jobs do Radar são re-disparáveis pela UI.
   czero_redis:
     container_name: czero_redis_prod
     image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction", "--save", "", "--appendonly", "no"]
+    mem_limit: 320m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - czero_redisdata:/data
     restart: unless-stopped

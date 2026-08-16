@@ -74,7 +74,7 @@ export default function AdminEmails() {
   // Polling ~8s. O timer reinicia quando janela/página mudam (load muda de identidade).
   useEffect(() => {
     load();
-    const id = setInterval(load, 8000);
+    const id = setInterval(load, 20000);
     return () => clearInterval(id);
   }, [load]);
 

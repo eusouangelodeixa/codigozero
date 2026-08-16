@@ -456,24 +456,28 @@ router.get('/courses', async (req: AuthRequest, res: Response) => {
       orderBy: { sortOrder: 'asc' },
       select: { id: true, name: true, slug: true, status: true, coverUrl: true, accessType: true, checkoutUrl: true },
     });
-    const out = [] as any[];
-    for (const c of courses) {
-      const [students, revenue] = await Promise.all([
-        prisma.courseAccess.count({ where: { courseId: c.id } }),
-        prisma.transaction.aggregate({
-          where: { courseId: c.id, status: 'approved' },
-          _sum: { amount: true },
-          _count: { _all: true },
-        }),
-      ]);
-      out.push({
-        ...c,
-        students,
-        sales: revenue._count._all,
-        revenue: revenue._sum.amount || 0,
-        yourSharePct: req.coproducer!.sharePct,
-      });
-    }
+    // Métricas de TODOS os cursos em 2 groupBy — não 2 queries por curso.
+    const ids = courses.map((c) => c.id);
+    const [studentCounts, revenueAgg] = ids.length
+      ? await Promise.all([
+          prisma.courseAccess.groupBy({ by: ['courseId'], where: { courseId: { in: ids } }, _count: true }),
+          prisma.transaction.groupBy({
+            by: ['courseId'],
+            where: { courseId: { in: ids }, status: 'approved' },
+            _sum: { amount: true },
+            _count: { _all: true },
+          }),
+        ])
+      : [[], []];
+    const studentsBy = new Map(studentCounts.map((s: any) => [s.courseId, s._count]));
+    const revenueBy = new Map(revenueAgg.map((r: any) => [r.courseId, r]));
+    const out = courses.map((c) => ({
+      ...c,
+      students: studentsBy.get(c.id) ?? 0,
+      sales: revenueBy.get(c.id)?._count?._all ?? 0,
+      revenue: revenueBy.get(c.id)?._sum?.amount ?? 0,
+      yourSharePct: req.coproducer!.sharePct,
+    }));
     res.json({ courses: out });
   } catch (error) {
     console.error('[COPRODUCER] /courses error:', error);

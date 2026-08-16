@@ -242,6 +242,9 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
               amount: await getActivePrice(),
               customer: { name, email, mobile_number: contactPhone },
             }),
+            // Sem timeout, uma Lojou pendurada pendura o FORMULÁRIO DE LEAD —
+            // eram os dois únicos fetch do código sem AbortSignal.
+            signal: AbortSignal.timeout(8000),
           });
           const orderData = await orderRes.json();
           if (orderData?.checkout_url) {
@@ -252,7 +255,7 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
             });
           } else {
             checkoutUrl = fallback;
-            console.warn('[Landing/Coproducer] Order API not OK, using public fallback:', JSON.stringify(orderData));
+            console.warn(`[Landing/Coproducer] Order API not OK (order ${orderData?.order_number || 'n/d'}), using public fallback`);
           }
         } catch (e) {
           checkoutUrl = fallback;
@@ -279,10 +282,11 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
               mobile_number: contactPhone,
             },
           }),
+          signal: AbortSignal.timeout(8000),
         });
 
         const orderData = await orderRes.json();
-        console.log('[Landing] Lojou:', orderData.checkout_url ? '✅ checkout OK' : JSON.stringify(orderData));
+        console.log('[Landing] Lojou:', orderData.checkout_url ? '✅ checkout OK' : `sem checkout_url (order ${orderData?.order_number || 'n/d'})`);
 
         if (orderData.checkout_url) {
           checkoutUrl = orderData.checkout_url;

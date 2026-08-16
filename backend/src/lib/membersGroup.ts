@@ -83,10 +83,29 @@ export async function computeMembersGroupStatus(): Promise<MembersGroupStatus> {
 
   // Base de users por telefone (dígitos) — inclui variante sem o 258 pra
   // casar telefone gravado local (84…) com JID internacional (25884…).
-  const users = await prisma.user.findMany({
-    where: { phone: { not: '' } },
-    select: { name: true, email: true, phone: true, role: true, subscriptionStatus: true, subscriptionEnd: true },
-  });
+  // INVERTIDO: o grupo tem ~dezenas de participantes, então buscamos SÓ os
+  // users cujos telefones podem casar com eles (índice único de phone) — a
+  // versão antiga carregava a tabela User INTEIRA para casar 20 números.
+  const candidatePhones = Array.from(
+    new Set(
+      participants.flatMap((p) => {
+        const d = digits(p.jid);
+        if (!d) return [] as string[];
+        const variants = [d, `+${d}`];
+        // JID 25884xxxxxxx ↔ telefone gravado local 84xxxxxxx
+        if (d.length === 12 && d.startsWith('258')) {
+          variants.push(d.slice(3), `+${d.slice(3)}`);
+        }
+        return variants;
+      }),
+    ),
+  );
+  const users = candidatePhones.length
+    ? await prisma.user.findMany({
+        where: { phone: { in: candidatePhones } },
+        select: { name: true, email: true, phone: true, role: true, subscriptionStatus: true, subscriptionEnd: true },
+      })
+    : [];
   // Colisão de número (duas contas com o mesmo telefone): ganha a conta com
   // melhor status — admin/superadmin > assinatura ativa > resto. Sem isso, a
   // conta-lead do Angelo sobrescrevia a conta superadmin dele no cruzamento.
@@ -295,12 +314,28 @@ export async function processGroupMessageQueue(): Promise<void> {
   });
   if (!item) return;
 
+  // CLAIM atômico (mesmo padrão da fila de credenciais): empurra o
+  // scheduledAt guardado pelo valor atual — ticks concorrentes não mandam a
+  // mesma mensagem duas vezes no grupo; crash re-agenda em 5 min.
+  const claim = await prisma.groupMessageQueue.updateMany({
+    where: { id: item.id, status: 'pending', scheduledAt: item.scheduledAt },
+    data: { scheduledAt: new Date(Date.now() + 5 * 60 * 1000) },
+  });
+  if (claim.count === 0) return;
+
   const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
   const api = await getKomunikaApi();
   if (!cfg?.membersGroupId || !api) {
+    // Mesmo teto de 5 tentativas do caminho normal — este branch re-tentava
+    // PARA SEMPRE (1.440×/dia) quando o grupo/Komunika ficava desconfigurado.
+    const tentativas = item.attempts + 1;
     await prisma.groupMessageQueue.update({
       where: { id: item.id },
-      data: { attempts: { increment: 1 }, error: !cfg?.membersGroupId ? 'grupo não configurado' : 'Komunika não configurado' },
+      data: {
+        attempts: tentativas,
+        status: tentativas >= 5 ? 'failed' : 'pending',
+        error: !cfg?.membersGroupId ? 'grupo não configurado' : 'Komunika não configurado',
+      },
     });
     return;
   }

@@ -79,7 +79,7 @@ export default function AdminChatPage() {
 
   useEffect(() => {
     fetchInbox();
-    const iv = setInterval(fetchInbox, 8000);
+    const iv = setInterval(fetchInbox, 15000);
     return () => clearInterval(iv);
   }, [fetchInbox]);
 
@@ -99,7 +99,7 @@ export default function AdminChatPage() {
 
   useEffect(() => {
     fetchMessages();
-    pollRef.current = setInterval(fetchMessages, 4000);
+    pollRef.current = setInterval(fetchMessages, 8000);
     return () => clearInterval(pollRef.current);
   }, [fetchMessages]);
 

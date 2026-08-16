@@ -296,7 +296,7 @@ export const scraperWorker = new Worker<ScrapeJobData>(
             console.log(
               `[SCRAPER]   ✓ ${lead.name} | ${lead.status} | ★${lead.rating ?? '—'} (${lead.reviewsCount ?? '—'})`,
             );
-            redisConnection.publish(`job:${jobId}`, JSON.stringify(lead));
+            redisConnection.publish(`job:${jobId}`, JSON.stringify(lead)).catch(() => {});
           } catch (error) {
             console.error(`[SCRAPER]   ! erro em ${link}`, error);
           }
@@ -304,11 +304,11 @@ export const scraperWorker = new Worker<ScrapeJobData>(
       }
 
       await prisma.scrapeJob.update({ where: { id: jobId }, data: { status: 'completed' } });
-      redisConnection.publish(`job:${jobId}`, JSON.stringify({ event: 'COMPLETED' }));
+      redisConnection.publish(`job:${jobId}`, JSON.stringify({ event: 'COMPLETED' })).catch(() => {});
     } catch (error) {
       console.error(`[SCRAPER] Erro fatal no Job ${jobId}`, error);
       await prisma.scrapeJob.update({ where: { id: jobId }, data: { status: 'failed' } });
-      redisConnection.publish(`job:${jobId}`, JSON.stringify({ event: 'FAILED' }));
+      redisConnection.publish(`job:${jobId}`, JSON.stringify({ event: 'FAILED' })).catch(() => {});
     } finally {
       if (browser) await browser.close();
     }

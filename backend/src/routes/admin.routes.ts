@@ -12,6 +12,7 @@ import {
 } from '../services/affiliate.service';
 import { env } from '../config/env';
 import { lojouService, LojouService } from '../services/lojou.service';
+import { startAdminBroadcast, getBroadcastState, launchRunner, substituteVariables } from '../services/broadcast.service';
 import { getActivePrice, invalidatePriceCache } from '../lib/pricing';
 import { pageArgs, paginated } from '../lib/pagination';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
@@ -53,7 +54,7 @@ router.use(adminMiddleware);
 
 router.get('/stats', async (_req: AuthRequest, res: Response) => {
   try {
-    const [totalUsers, activeUsers, leads, paidUsers, transactions, config] = await Promise.all([
+    const [totalUsers, activeUsers, leads, paidUsers, revenueAgg, config, totalScripts, totalModules, totalLessons, activePrice] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member' } }),
       prisma.user.count({ where: { subscriptionStatus: 'lead' } }),
@@ -65,17 +66,19 @@ router.get('/stats', async (_req: AuthRequest, res: Response) => {
       // regra do /finance (activePaidUsers).
       // Pagantes reais: Lojou (lojouOrderId) OU Stripe (stripeSubscriptionId).
       prisma.user.count({ where: { subscriptionStatus: 'active', role: 'member', grantedManually: false, OR: [{ lojouOrderId: { not: null } }, { stripeSubscriptionId: { not: null } }] } }),
-      prisma.transaction.findMany({ where: { status: 'approved' }, select: { amount: true } }),
+      // A soma é do banco — antes isto carregava TODA transação aprovada pro
+      // Node só pra somar em JS.
+      prisma.transaction.aggregate({ where: { status: 'approved' }, _sum: { amount: true } }),
       prisma.systemConfig.findFirst({ where: { id: 'singleton' } }),
+      prisma.script.count(),
+      prisma.module.count(),
+      prisma.lesson.count(),
+      getActivePrice(),
     ]);
 
-    const totalRevenue = transactions.reduce((sum, t) => sum + t.amount, 0);
-    const mrr = paidUsers * (await getActivePrice());
+    const totalRevenue = revenueAgg._sum.amount || 0;
+    const mrr = paidUsers * activePrice;
     const vagasRestantes = "Ilimitado";
-
-    const totalScripts = await prisma.script.count();
-    const totalModules = await prisma.module.count();
-    const totalLessons = await prisma.lesson.count();
 
     res.json({
       totalUsers,
@@ -345,7 +348,12 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           ? { coproducerId: source }
           : {};
 
-    const [currentTransactions, previousTransactions] = await Promise.all([
+    // A janela ATUAL ainda vem linha a linha (o gráfico bucketiza por data e
+    // os cortes novo/renovação/CF precisam das flags), mas com SELECT mínimo —
+    // a versão antiga carregava a linha inteira, incluindo o metadata JSON com
+    // o payload bruto da Lojou de cada venda. A janela ANTERIOR só alimenta
+    // soma e contagem → aggregate puro.
+    const [currentTransactions, previousAgg] = await Promise.all([
       prisma.transaction.findMany({
         where: {
           status: 'approved',
@@ -354,14 +362,25 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           ...sourceClause,
         },
         orderBy: { createdAt: 'asc' },
+        select: {
+          amount: true,
+          isRenewal: true,
+          isCloseFriends: true,
+          createdAt: true,
+          grossAmount: true,
+          lojouFee: true,
+          coproducerFee: true,
+        },
       }),
-      prisma.transaction.findMany({
+      prisma.transaction.aggregate({
         where: {
           status: 'approved',
           createdAt: { gte: previousStartDate, lt: previousEndDate },
           ...searchClause,
           ...sourceClause,
         },
+        _sum: { amount: true },
+        _count: { _all: true },
       }),
     ]);
 
@@ -397,11 +416,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
       prev === 0 ? (curr > 0 ? 100 : 0) : ((curr - prev) / prev) * 100;
 
     const currentRevenue = sum(currentTransactions);
-    const previousRevenue = sum(previousTransactions);
+    const previousRevenue = previousAgg._sum.amount || 0;
     const revenueGrowth = growth(currentRevenue, previousRevenue);
 
     const currentCount = currentTransactions.length;
-    const previousCount = previousTransactions.length;
+    const previousCount = previousAgg._count._all;
     const countGrowth = growth(currentCount, previousCount);
 
     const currentTicket = currentCount > 0 ? currentRevenue / currentCount : 0;
@@ -440,13 +459,11 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
     const mrrTheoretical = activePaidUsers * activePrice;
 
     const last90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    const recentPaid = await prisma.transaction.findMany({
+    const recentAgg = await prisma.transaction.aggregate({
       where: { status: 'approved', createdAt: { gte: last90 } },
-      select: { amount: true },
+      _avg: { amount: true },
     });
-    const recentNet = recentPaid.length > 0
-      ? recentPaid.reduce((s, t) => s + t.amount, 0) / recentPaid.length
-      : 0;
+    const recentNet = recentAgg._avg.amount || 0;
     const mrr = Math.round(activePaidUsers * recentNet);
 
     // ── Renewal funnel for the window ──────────────────────────────────
@@ -2009,10 +2026,9 @@ router.post('/broadcast/preview', async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/admin/broadcast/send
- * Starts a broadcast as a server-side background job and returns its id
- * immediately. The send loop runs detached from this request, so the admin
- * navigating to another tab no longer interrupts it. Progress is read via
- * GET /broadcast/status/:jobId.
+ * Inicia um disparo PERSISTIDO (broadcast.service): job + destinatários vão
+ * pro banco antes de responder — um deploy no meio não perde mais nada, e o
+ * progresso é lido de lá. O loop roda desanexado desta request.
  */
 router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
   try {
@@ -2025,7 +2041,6 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
 
     const config = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
     const apiKey = config?.komunikaAdminApiKey || process.env.KOMUNIKA_ADMIN_API_KEY;
-    const apiUrl = process.env.KOMUNIKA_API_URL || 'https://api.komunika.site';
 
     // Only require API key if actually sending via WhatsApp
     if (sendWhatsApp && !apiKey) return res.status(400).json({ error: 'Chave da API do Komunika não configurada' });
@@ -2033,39 +2048,25 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
     const where = buildAudienceWhere({ segment, userIds, statuses, createdFrom, createdTo });
     const users = await prisma.user.findMany({
       where,
-      select: { id: true, name: true, email: true, phone: true, surveyAnswers: true },
+      select: { id: true, name: true, email: true, phone: true },
     });
 
     if (users.length === 0) return res.status(400).json({ error: 'Nenhum lead encontrado neste segmento' });
 
-    pruneBroadcastJobs();
-    const jobId = randomUUID();
-    const job: BroadcastJob = {
-      id: jobId,
-      status: 'running',
-      total: users.length,
-      sent: 0,
-      failed: 0,
-      coupons: 0,
-      log: [],
-      startedAt: Date.now(),
-    };
-    broadcastJobs.set(jobId, job);
-
-    // Fire-and-forget: the loop survives this request closing / the admin
-    // navigating away. We never await it here.
-    runBroadcast(job, {
-      users, message, instanceId, apiKey, apiUrl, sendWhatsApp,
-      delayMin, delayMax, sendPush, generateCoupons, couponDiscount, couponMaxUses,
-    }).catch((err: any) => {
-      job.status = 'error';
-      job.error = err?.message || String(err);
-      job.finishedAt = Date.now();
-      pushBroadcastEvent(job, { type: 'fatal', error: job.error });
-      console.error('[BROADCAST] Job error:', err);
+    const { jobId, total } = await startAdminBroadcast({
+      users,
+      message,
+      instanceId: instanceId || null,
+      delayMin: parseInt(delayMin) || 5,
+      delayMax: parseInt(delayMax) || 15,
+      sendPush: !!sendPush,
+      generateCoupons: !!generateCoupons,
+      couponDiscount: parseInt(couponDiscount) || null,
+      couponMaxUses: parseInt(couponMaxUses) || null,
+      createdBy: req.user?.email || null,
     });
 
-    return res.json({ jobId, total: users.length });
+    return res.json({ jobId, total });
   } catch (error: any) {
     console.error('[BROADCAST] Send error:', error);
     return res.status(500).json({ error: `Erro ao iniciar broadcast: ${error.message}` });
@@ -2076,279 +2077,65 @@ router.post('/broadcast/send', async (req: AuthRequest, res: Response) => {
  * GET /api/admin/broadcast/status/:jobId
  * Returns the current state of a broadcast job (polled by the frontend).
  */
-router.get('/broadcast/status/:jobId', (req: AuthRequest, res: Response) => {
-  const job = broadcastJobs.get(req.params.jobId);
+router.get('/broadcast/status/:jobId', async (req: AuthRequest, res: Response) => {
+  const job = await getBroadcastState(String(req.params.jobId));
   if (!job) return res.status(404).json({ error: 'Job não encontrado' });
   return res.json(job);
 });
 
 /**
  * GET /api/admin/broadcast/active
- * Returns the most recent running/recent job so reopening the page reattaches
- * to an in-progress broadcast.
+ * Returns the most recent running/paused job so reopening the page reattaches
+ * to an in-progress broadcast — agora do banco, sobrevive a restart.
  */
-router.get('/broadcast/active', (_req: AuthRequest, res: Response) => {
-  let latest: BroadcastJob | null = null;
-  for (const j of broadcastJobs.values()) {
-    if (j.status !== 'running' && j.status !== 'paused') continue;
-    if (!latest || j.startedAt > latest.startedAt) latest = j;
-  }
-  return res.json({ job: latest });
+router.get('/broadcast/active', async (_req: AuthRequest, res: Response) => {
+  const latest = await prisma.adminBroadcast.findFirst({
+    where: { status: { in: ['running', 'paused'] } },
+    orderBy: { startedAt: 'desc' },
+    select: { id: true },
+  });
+  return res.json({ job: latest ? await getBroadcastState(latest.id) : null });
 });
 
 /**
  * POST /api/admin/broadcast/control/:jobId  { action: 'pause' | 'resume' | 'stop' }
- * Flips the job status; the send loop reads it between messages and once per
- * second during the anti-block wait, so the effect is near-immediate. Stop is
- * final — the remaining recipients are never sent.
+ * Transições GUARDADAS no banco (updateMany condicional): valem de qualquer
+ * processo, e o loop as lê entre mensagens e a cada 3s da espera. Stop é
+ * final. Resume garante que há um runner vivo — inclusive depois de um
+ * restart que tenha derrubado o loop de um job pausado.
  */
-router.post('/broadcast/control/:jobId', (req: AuthRequest, res: Response) => {
-  const job = broadcastJobs.get(req.params.jobId);
-  if (!job) return res.status(404).json({ error: 'Job não encontrado' });
-
+router.post('/broadcast/control/:jobId', async (req: AuthRequest, res: Response) => {
+  const jobId = String(req.params.jobId);
   const action = String(req.body?.action || '');
+
+  let changed = 0;
   if (action === 'pause') {
-    if (job.status !== 'running') return res.status(400).json({ error: 'O envio não está em execução' });
-    job.status = 'paused';
-    pushBroadcastEvent(job, { type: 'paused' });
+    changed = (await prisma.adminBroadcast.updateMany({
+      where: { id: jobId, status: 'running' },
+      data: { status: 'paused' },
+    })).count;
+    if (!changed) return res.status(400).json({ error: 'O envio não está em execução' });
   } else if (action === 'resume') {
-    if (job.status !== 'paused') return res.status(400).json({ error: 'O envio não está pausado' });
-    job.status = 'running';
-    pushBroadcastEvent(job, { type: 'resumed' });
+    changed = (await prisma.adminBroadcast.updateMany({
+      where: { id: jobId, status: 'paused' },
+      data: { status: 'running' },
+    })).count;
+    if (!changed) return res.status(400).json({ error: 'O envio não está pausado' });
+    launchRunner(jobId);
   } else if (action === 'stop') {
-    if (job.status !== 'running' && job.status !== 'paused') return res.status(400).json({ error: 'O envio já terminou' });
-    job.status = 'stopped';
-    job.finishedAt = Date.now();
-    pushBroadcastEvent(job, { type: 'stopped' });
+    changed = (await prisma.adminBroadcast.updateMany({
+      where: { id: jobId, status: { in: ['running', 'paused'] } },
+      data: { status: 'stopped', finishedAt: new Date() },
+    })).count;
+    if (!changed) return res.status(400).json({ error: 'O envio já terminou' });
   } else {
     return res.status(400).json({ error: 'Ação inválida' });
   }
+
+  const job = await getBroadcastState(jobId);
+  if (!job) return res.status(404).json({ error: 'Job não encontrado' });
   return res.json(job);
 });
-
-// ── Broadcast background jobs ──
-// In-memory store so the send loop is independent of the HTTP/SSE connection.
-// (Single backend instance — acceptable for admin broadcasts.)
-
-interface BroadcastEvent { type: string; [key: string]: any }
-interface BroadcastJob {
-  id: string;
-  status: 'running' | 'paused' | 'stopped' | 'done' | 'error';
-  total: number;
-  sent: number;
-  failed: number;
-  coupons: number;
-  log: BroadcastEvent[];
-  startedAt: number;
-  finishedAt?: number;
-  error?: string;
-}
-
-const broadcastJobs = new Map<string, BroadcastJob>();
-const MAX_BROADCAST_LOG = 3000;
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-function pushBroadcastEvent(job: BroadcastJob, ev: BroadcastEvent) {
-  job.log.push({ ...ev, total: job.total, sent: job.sent, failed: job.failed, coupons: job.coupons });
-  if (job.log.length > MAX_BROADCAST_LOG) job.log.splice(0, job.log.length - MAX_BROADCAST_LOG);
-}
-
-// Drop finished jobs older than 2h to keep memory bounded.
-function pruneBroadcastJobs() {
-  const now = Date.now();
-  for (const [id, j] of broadcastJobs) {
-    if (j.finishedAt && now - j.finishedAt > 2 * 60 * 60 * 1000) broadcastJobs.delete(id);
-  }
-}
-
-interface RunBroadcastOpts {
-  users: any[];
-  message: string;
-  instanceId?: string;
-  apiKey?: string | null;
-  apiUrl: string;
-  sendWhatsApp: boolean;
-  delayMin: any;
-  delayMax: any;
-  sendPush: boolean;
-  generateCoupons: boolean;
-  couponDiscount: any;
-  couponMaxUses: any;
-}
-
-async function runBroadcast(job: BroadcastJob, opts: RunBroadcastOpts) {
-  const { users, message, instanceId, apiKey, apiUrl, sendWhatsApp, sendPush, generateCoupons, couponDiscount, couponMaxUses } = opts;
-  const minDelay = Math.max(1, parseInt(opts.delayMin) || 5);
-  const maxDelay = Math.max(minDelay, parseInt(opts.delayMax) || 15);
-
-  pushBroadcastEvent(job, { type: 'start' });
-
-  if (sendWhatsApp) {
-    // ── WhatsApp broadcast loop ──
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
-
-      // Pause/stop gate — the control endpoint flips job.status from another
-      // request; pausing parks the loop here, stopping ends it for good.
-      while ((job.status as string) === 'paused') await sleep(1000);
-      if ((job.status as string) === 'stopped') break;
-
-      // Clean phone
-      let cleanPhone = user.phone.replace(/\D/g, '');
-      if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-        cleanPhone = `258${cleanPhone}`;
-      }
-
-      // Skip if no valid phone
-      if (cleanPhone.length < 9) {
-        job.failed++;
-        pushBroadcastEvent(job, { type: 'skip', index: i, name: user.name, reason: 'Telefone inválido' });
-        continue;
-      }
-
-      let personalizedMsg = substituteVariables(message, user);
-
-      // Generate per-user coupon if enabled
-      if (generateCoupons && message.includes('{{cupom}}')) {
-        const couponCode = await ensureBroadcastCoupon(job, user, couponDiscount, couponMaxUses);
-        personalizedMsg = personalizedMsg.replace(/\{\{cupom\}\}/gi, couponCode);
-      }
-
-      try {
-        const sendRes = await fetch(`${apiUrl}/api/v1/messages/send`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey!,
-          },
-          body: JSON.stringify({
-            instanceId,
-            to: cleanPhone,
-            type: 'text',
-            content: personalizedMsg,
-          }),
-        });
-
-        if (sendRes.ok) {
-          job.sent++;
-          pushBroadcastEvent(job, { type: 'sent', index: i, name: user.name, phone: cleanPhone });
-        } else {
-          const errBody = await sendRes.text().catch(() => 'Unknown error');
-          job.failed++;
-          pushBroadcastEvent(job, { type: 'error', index: i, name: user.name, error: errBody });
-        }
-      } catch (err: any) {
-        job.failed++;
-        pushBroadcastEvent(job, { type: 'error', index: i, name: user.name, error: err.message });
-      }
-
-      // Randomized delay between messages (anti-block), in 1s slices so a
-      // pause/stop takes effect mid-wait instead of after it.
-      if (i < users.length - 1) {
-        const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-        pushBroadcastEvent(job, { type: 'waiting', delay, nextIndex: i + 1 });
-        for (let s = 0; s < delay && (job.status as string) === 'running'; s++) await sleep(1000);
-      }
-    }
-  } else {
-    // ── Push-only mode: no WhatsApp loop ──
-    job.sent = users.length;
-  }
-
-  // Stopped mid-flight: the control endpoint already stamped finishedAt and
-  // logged it — don't mark done and don't fire the push notification.
-  if ((job.status as string) === 'stopped') return;
-
-  job.status = 'done';
-  job.finishedAt = Date.now();
-  pushBroadcastEvent(job, { type: 'complete' });
-
-  // Send Web Push notification if requested
-  if (sendPush) {
-    // Strip {{variable}} placeholders since push is broadcast (not per-user)
-    const pushBody = message
-      .replace(/\{\{nome\}\}/gi, 'Aluno')
-      .replace(/\{\{email\}\}/gi, '')
-      .replace(/\{\{telefone\}\}/gi, '')
-      .replace(/\{\{objetivo\}\}/gi, '')
-      .replace(/\{\{dor\}\}/gi, '')
-      .replace(/\{\{compromisso\}\}/gi, '')
-      .replace(/\{\{consciencia\}\}/gi, '')
-      .replace(/\{\{cupom\}\}/gi, '')
-      .replace(/\{\{[^}]+\}\}/g, '')  // catch any remaining
-      .replace(/\s{2,}/g, ' ')        // collapse double spaces
-      .trim();
-    sendPushBroadcast({
-      title: 'Código Zero',
-      body: pushBody.length > 120 ? pushBody.substring(0, 120) + '...' : pushBody,
-      url: '/dashboard',
-    }, 'promotions').catch(() => {});
-  }
-}
-
-/**
- * Creates (or reuses) a per-recipient coupon, syncing it to Lojou AND the local
- * coupon table so it behaves exactly like coupons created in the admin panel
- * (visible, trackable, deduplicated). Failures are surfaced in the job log so
- * the admin actually sees why a coupon didn't work instead of failing silently.
- */
-async function ensureBroadcastCoupon(job: BroadcastJob, user: any, couponDiscount: any, couponMaxUses: any): Promise<string> {
-  const discount = parseInt(couponDiscount) || 10;
-  const maxUses = parseInt(couponMaxUses) || 1;
-  const code = `CZ${discount}_${user.id.slice(0, 6).toUpperCase()}`;
-
-  // Already created (previous run or earlier iteration) → reuse it.
-  const existing = await prisma.coupon.findUnique({ where: { code } }).catch(() => null);
-  if (existing) return code;
-
-  let lojouId: string | null = null;
-  if (env.LOJOU_API_KEY) {
-    try {
-      // product_ids is optional: empty → coupon applies to every product.
-      const product_ids = env.LOJOU_PRODUCT_ID
-        ? [Number.isNaN(Number(env.LOJOU_PRODUCT_ID)) ? env.LOJOU_PRODUCT_ID : Number(env.LOJOU_PRODUCT_ID)]
-        : undefined;
-      const resp = await lojouService.createDiscount({
-        code,
-        type: 'percentage',
-        value: discount,
-        uses_limit: maxUses,
-        status: 'active',
-        ...(product_ids ? { product_ids } : {}),
-      });
-      lojouId = LojouService.extractDiscountId(resp);
-      console.log(`[BROADCAST] 🎟️ Coupon ${code} created for ${user.email}${lojouId ? ` [Lojou: ${lojouId}]` : ''}`);
-    } catch (err: any) {
-      const msg = String(err?.message || err);
-      if (msg.includes('(409)')) {
-        // Exists in Lojou but not locally → fall through and persist locally.
-        console.log(`[BROADCAST] ↩ Coupon ${code} already exists in Lojou, reusing for ${user.email}`);
-      } else {
-        console.warn(`[BROADCAST] Coupon error for ${user.email}:`, msg);
-        pushBroadcastEvent(job, { type: 'coupon_error', name: user.name, code, error: msg });
-        return code; // still substitute the code; admin can investigate via the log
-      }
-    }
-  } else {
-    pushBroadcastEvent(job, { type: 'coupon_error', name: user.name, code, error: 'LOJOU_API_KEY não configurada' });
-    return code;
-  }
-
-  try {
-    await prisma.coupon.create({
-      data: {
-        code, type: 'percentage', value: discount, maxUses,
-        active: true, lojouId, linkedUserId: user.id, linkedUserEmail: user.email,
-      },
-    });
-    job.coupons++;
-    pushBroadcastEvent(job, { type: 'coupon', name: user.name, code });
-  } catch {
-    // Unique-constraint race (created concurrently) — safe to ignore.
-  }
-  return code;
-}
 
 // ── Broadcast helpers ──
 
@@ -2433,17 +2220,6 @@ function buildAudienceWhere(opts: {
   return where;
 }
 
-function substituteVariables(message: string, user: any): string {
-  const survey = (typeof user.surveyAnswers === 'object' && user.surveyAnswers) || {};
-  return message
-    .replace(/\{\{nome\}\}/gi, user.name || '')
-    .replace(/\{\{email\}\}/gi, user.email || '')
-    .replace(/\{\{telefone\}\}/gi, user.phone || '')
-    .replace(/\{\{objetivo\}\}/gi, survey.goal || '')
-    .replace(/\{\{dor\}\}/gi, survey.pain || '')
-    .replace(/\{\{compromisso\}\}/gi, survey.commitment || '')
-    .replace(/\{\{consciencia\}\}/gi, survey.awareness || '');
-}
 
 
 // ═══════════════════════════════════════
@@ -2532,18 +2308,25 @@ router.get('/lojou/conciliation', async (_req: AuthRequest, res: Response) => {
 
     const ordersRes = await fetch(`${LOJOU_API}/orders?status=approved&per_page=100`, {
       headers: { 'Authorization': `Bearer ${LOJOU_KEY}` },
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!ordersRes.ok) return res.json({ results: [], error: `Lojou: ${ordersRes.status}` });
     const data = await ordersRes.json();
     const lojouOrders = data.data || data.orders || [];
 
-    const results: any[] = [];
+    // Uma query pros 100 pedidos — não uma por pedido.
+    const orderIds = lojouOrders.map((o: any) => String(o.id || o.order_number));
+    const localTxs = await prisma.transaction.findMany({
+      where: { orderId: { in: orderIds } },
+      select: { orderId: true, status: true },
+    });
+    const localByOrder = new Map(localTxs.map((t) => [t.orderId, t]));
 
+    const results: any[] = [];
     for (const order of lojouOrders) {
       const orderId = String(order.id || order.order_number);
-      const localTx = await prisma.transaction.findUnique({ where: { orderId } });
-
+      const localTx = localByOrder.get(orderId);
       if (!localTx) {
         results.push({ orderId, email: order.customer?.email, status: 'MISSING_LOCAL', lojouStatus: 'approved' });
       } else if (localTx.status !== 'approved') {
@@ -2589,30 +2372,35 @@ const DEFAULT_MILESTONES = {
   subscribers: [1, 15, 65, 125, 625, 797, 1250],
 };
 
+// Roda UMA vez no boot (era chamado em todo GET /platform-status: 13 upserts
+// de escrita num endpoint de leitura). Idempotente.
+let milestonesSeeded = false;
 async function seedMilestones() {
-  for (const [cat, values] of Object.entries(DEFAULT_MILESTONES)) {
-    for (const val of values) {
-      await prisma.platformMilestone.upsert({
-        where: { category_targetValue: { category: cat, targetValue: val } },
-        create: { category: cat, targetValue: val },
-        update: {},
-      });
-    }
-  }
+  if (milestonesSeeded) return;
+  const data = Object.entries(DEFAULT_MILESTONES).flatMap(([cat, values]) =>
+    values.map((val) => ({ category: cat, targetValue: val })),
+  );
+  await prisma.platformMilestone.createMany({ data, skipDuplicates: true });
+  milestonesSeeded = true;
 }
 
 async function getPlatformMetrics() {
-  const approvedTx = await prisma.transaction.findMany({ where: { status: 'approved' } });
-  const totalRevenue = approvedTx.reduce((s, t) => s + t.amount, 0);
+  // Agregações no banco. A versão anterior carregava TODA transação aprovada
+  // pro Node (também no cron horário) e reduzia em JS.
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  const monthRevenue = approvedTx.filter(t => t.createdAt >= monthStart).reduce((s, t) => s + t.amount, 0);
+  const [totalAgg, monthAgg, payers, activeUsers] = await Promise.all([
+    prisma.transaction.aggregate({ where: { status: 'approved' }, _sum: { amount: true } }),
+    prisma.transaction.aggregate({ where: { status: 'approved', createdAt: { gte: monthStart } }, _sum: { amount: true } }),
+    prisma.transaction.groupBy({ by: ['userEmail'], where: { status: 'approved', userEmail: { not: null } } }),
+    prisma.user.count({ where: { subscriptionStatus: 'active' } }),
+  ]);
 
-  const uniquePayers = new Set(approvedTx.map(t => t.userEmail).filter(Boolean));
-  const totalSubscribers = uniquePayers.size;
-
-  const activeUsers = await prisma.user.count({ where: { subscriptionStatus: 'active' } });
-
-  return { totalRevenue, monthRevenue, totalSubscribers, activeUsers };
+  return {
+    totalRevenue: totalAgg._sum.amount || 0,
+    monthRevenue: monthAgg._sum.amount || 0,
+    totalSubscribers: payers.length,
+    activeUsers,
+  };
 }
 
 async function detectAnomalies() {
@@ -2658,9 +2446,13 @@ async function checkAndNotifyMilestones() {
   if (newlyReached.length > 0 && config?.milestoneAlertPhone) {
     // Get daily stats
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const todayTx = await prisma.transaction.findMany({ where: { status: 'approved', createdAt: { gte: todayStart } } });
-    const todaySales = todayTx.length;
-    const todayRevenue = todayTx.reduce((s, t) => s + t.amount, 0);
+    const todayAgg = await prisma.transaction.aggregate({
+      where: { status: 'approved', createdAt: { gte: todayStart } },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const todaySales = todayAgg._count._all;
+    const todayRevenue = todayAgg._sum.amount || 0;
     const totalUsers = await prisma.user.count();
     const activeUsers = metrics.activeUsers;
 

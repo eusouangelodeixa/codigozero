@@ -150,12 +150,19 @@ export async function processCentralAnnouncements(): Promise<void> {
     data: { status: 'skipped', error: 'expirado (24h sem condições de envio)' },
   });
 
-  // 2) Próximo vencido.
+  // 2) Próximo vencido — com CLAIM atômico (empurra o dueAt guardado pelo
+  // valor atual): anúncio não sai em dobro com ticks concorrentes, e um crash
+  // no meio só re-agenda em 5 min.
   const item = await prisma.centralAnnouncement.findFirst({
     where: { status: 'pending', dueAt: { lte: now } },
     orderBy: { dueAt: 'asc' },
   });
   if (!item) return;
+  const claim = await prisma.centralAnnouncement.updateMany({
+    where: { id: item.id, status: 'pending', dueAt: item.dueAt },
+    data: { dueAt: new Date(now.getTime() + 5 * 60 * 1000) },
+  });
+  if (claim.count === 0) return;
 
   // 3) O conteúdo ainda existe e continua publicado?
   const page = await prisma.contentPage.findUnique({

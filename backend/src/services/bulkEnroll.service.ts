@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client';
 import { grantCourseAccess } from './courseAccess.service';
 import { normalizeMzPhone, sendWhatsAppMessage } from '../lib/whatsapp';
 import { generateUserPassword } from './payment.service';
-import { enqueueCredentialDelivery } from './credentialDelivery.service';
 import { scheduleSaveContactReminder } from './onboarding.service';
 import { syncKomunikaOnApprovedOrder } from './komunika.service';
 import { randomUUID } from 'crypto';
@@ -198,8 +197,17 @@ export async function bulkEnroll(args: {
   // Entrega assíncrona e persistida: e-mail primeiro, WhatsApp só quando a
   // quota do dia acaba (ver credentialDelivery.service). A senha de cada um é
   // gerada no momento do envio, não aqui — por isso não guardamos nada.
-  for (const p of paraEnviar) {
-    await enqueueCredentialDelivery(p.userId, args.batch || 'turma', courseName);
+  // UMA INSERT pro lote inteiro (skipDuplicates cobre quem já estava na fila)
+  // — o loop antigo fazia 500 upserts sequenciais no fim de uma turma grande.
+  if (paraEnviar.length) {
+    await prisma.credentialDelivery.createMany({
+      data: paraEnviar.map((p) => ({
+        userId: p.userId,
+        batch: args.batch || 'turma',
+        productName: courseName ?? null,
+      })),
+      skipDuplicates: true,
+    });
   }
   console.log(`[TURMA] ${paraEnviar.length} aluno(s) na fila de entrega`);
 

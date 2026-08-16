@@ -123,19 +123,51 @@ export async function feedbackEnrollTick(): Promise<number> {
   // anchor order — the stagger cursor is monotonic, so mixing a new buyer
   // (base = D+14 in the future) before a backfill user (base = now) in the
   // same batch must not push the backfill user two weeks out.
+  //
+  // Em LOTE: uma única query cobre os 100 candidatos. A versão anterior fazia
+  // um findFirst POR candidato com `mode: 'insensitive'` (ILIKE — cego ao
+  // índice de userEmail) = até 100 full scans sequenciais de Transaction a
+  // cada 30 minutos. O `in` com as variantes (exata + minúscula, telefone cru
+  // + normalizado) usa os índices e a redução first-per-chave acontece em JS.
+  const emailVariants = Array.from(
+    new Set(candidates.flatMap((u) => (u.email ? [u.email, u.email.toLowerCase()] : []))),
+  );
+  const phoneVariants = Array.from(
+    new Set(candidates.flatMap((u) => [u.phone, normalizeMzPhone(u.phone)].filter(Boolean))),
+  );
+  const anchorTxns = await prisma.transaction.findMany({
+    where: {
+      status: 'approved',
+      OR: [
+        ...(emailVariants.length ? [{ userEmail: { in: emailVariants } }] : []),
+        ...(phoneVariants.length ? [{ userPhone: { in: phoneVariants } }] : []),
+      ],
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, createdAt: true, userEmail: true, userPhone: true },
+  });
+  type AnchorTxn = (typeof anchorTxns)[number];
+  const anchorByEmail = new Map<string, AnchorTxn>();
+  const anchorByPhone = new Map<string, AnchorTxn>();
+  for (const t of anchorTxns) {
+    const e = t.userEmail?.toLowerCase();
+    if (e && !anchorByEmail.has(e)) anchorByEmail.set(e, t);
+    if (t.userPhone && !anchorByPhone.has(t.userPhone)) anchorByPhone.set(t.userPhone, t);
+  }
+
   const resolved: {
     user: (typeof candidates)[number];
-    anchorTxn: Awaited<ReturnType<typeof firstApprovedTransaction>>;
+    anchorTxn: AnchorTxn | null;
     anchorAt: Date;
   }[] = [];
   for (const user of candidates) {
-    try {
-      const anchorTxn = await firstApprovedTransaction(user);
-      const anchorAt = anchorTxn?.createdAt ?? user.subscriptionStart ?? user.createdAt;
-      resolved.push({ user, anchorTxn, anchorAt });
-    } catch (e: any) {
-      console.error(`[FEEDBACK] anchor lookup failed for user ${user.id}:`, e?.message || e);
-    }
+    const anchorTxn =
+      (user.email ? anchorByEmail.get(user.email.toLowerCase()) : undefined) ??
+      anchorByPhone.get(user.phone) ??
+      anchorByPhone.get(normalizeMzPhone(user.phone)) ??
+      null;
+    const anchorAt = anchorTxn?.createdAt ?? user.subscriptionStart ?? user.createdAt;
+    resolved.push({ user, anchorTxn, anchorAt });
   }
   resolved.sort((a, b) => a.anchorAt.getTime() - b.anchorAt.getTime());
 
@@ -147,44 +179,48 @@ export async function feedbackEnrollTick(): Promise<number> {
   });
   let cursorMs = Math.max(agg._max.feedbackDueAt?.getTime() ?? 0, now.getTime());
 
-  let enrolled = 0;
+  // Duas INSERTs em lote (skipped + enrolled) em vez de até 100 creates
+  // sequenciais. skipDuplicates cobre a corrida que o P2002 cobria (userId é
+  // unique).
+  const skippedRows: any[] = [];
+  const enrolledRows: any[] = [];
   for (const { user, anchorTxn, anchorAt } of resolved) {
-    try {
-      const outOfWindow = !anchorTxn || anchorAt.getTime() < now.getTime() - ENROLL_WINDOW_MS;
-
-      if (outOfWindow) {
-        await prisma.feedbackSurvey.create({
-          data: {
-            userId: user.id,
-            anchorTxnId: anchorTxn?.id ?? null,
-            anchorAt,
-            feedbackStatus: 'skipped',
-            suggestionStatus: 'skipped',
-            feedbackDueAt: new Date(anchorAt.getTime() + FEEDBACK_DELAY_MS),
-            suggestionDueAt: new Date(anchorAt.getTime() + FEEDBACK_DELAY_MS + SUGGESTION_DELAY_MS),
-          },
-        });
-        continue;
-      }
-
-      const baseMs = Math.max(anchorAt.getTime() + FEEDBACK_DELAY_MS, now.getTime());
-      const dueMs = Math.max(baseMs, cursorMs + randGapMs());
-      cursorMs = dueMs;
-
-      await prisma.feedbackSurvey.create({
-        data: {
-          userId: user.id,
-          anchorTxnId: anchorTxn!.id,
-          anchorAt,
-          feedbackDueAt: new Date(dueMs),
-          suggestionDueAt: new Date(dueMs + SUGGESTION_DELAY_MS),
-        },
+    const outOfWindow = !anchorTxn || anchorAt.getTime() < now.getTime() - ENROLL_WINDOW_MS;
+    if (outOfWindow) {
+      skippedRows.push({
+        userId: user.id,
+        anchorTxnId: anchorTxn?.id ?? null,
+        anchorAt,
+        feedbackStatus: 'skipped',
+        suggestionStatus: 'skipped',
+        feedbackDueAt: new Date(anchorAt.getTime() + FEEDBACK_DELAY_MS),
+        suggestionDueAt: new Date(anchorAt.getTime() + FEEDBACK_DELAY_MS + SUGGESTION_DELAY_MS),
       });
-      enrolled++;
-    } catch (e: any) {
-      if (e?.code === 'P2002') continue; // raced with another enroll — already exists
-      console.error(`[FEEDBACK] enroll failed for user ${user.id}:`, e?.message || e);
+      continue;
     }
+    const baseMs = Math.max(anchorAt.getTime() + FEEDBACK_DELAY_MS, now.getTime());
+    const dueMs = Math.max(baseMs, cursorMs + randGapMs());
+    cursorMs = dueMs;
+    enrolledRows.push({
+      userId: user.id,
+      anchorTxnId: anchorTxn!.id,
+      anchorAt,
+      feedbackDueAt: new Date(dueMs),
+      suggestionDueAt: new Date(dueMs + SUGGESTION_DELAY_MS),
+    });
+  }
+
+  let enrolled = 0;
+  try {
+    if (skippedRows.length) {
+      await prisma.feedbackSurvey.createMany({ data: skippedRows, skipDuplicates: true });
+    }
+    if (enrolledRows.length) {
+      const r = await prisma.feedbackSurvey.createMany({ data: enrolledRows, skipDuplicates: true });
+      enrolled = r.count;
+    }
+  } catch (e: any) {
+    console.error('[FEEDBACK] enroll batch failed:', e?.message || e);
   }
   if (enrolled > 0) console.log(`[FEEDBACK] 📋 Enrolled ${enrolled} buyer(s) into the survey queue`);
   return enrolled;
@@ -214,19 +250,31 @@ async function expireStaleSessions(now: Date): Promise<void> {
   // also skip the D+21 ask — insisting on a silent number is a ban signal.
   const stale = await prisma.feedbackSurvey.findMany({
     where: { feedbackStatus: 'paused', pausedAt: { lt: new Date(now.getTime() - PAUSE_EXPIRE_MS) } },
-    include: { responses: { where: { answeredAt: { not: null } }, select: { id: true } } },
+    select: {
+      id: true,
+      suggestionStatus: true,
+      responses: { where: { answeredAt: { not: null } }, select: { id: true }, take: 1 },
+    },
   });
-  for (const s of stale) {
-    const skipSuggestion = s.responses.length === 0 && s.suggestionStatus === 'scheduled';
-    await prisma.feedbackSurvey.update({
-      where: { id: s.id },
-      data: {
-        feedbackStatus: 'expired',
-        nextActionAt: null,
-        ...(skipSuggestion ? { suggestionStatus: 'skipped' } : {}),
-      },
-    });
-    console.log(`[FEEDBACK] ⌛ Survey ${s.id} expired (paused 48h)${skipSuggestion ? ' — suggestion skipped' : ''}`);
+  if (stale.length) {
+    // Dois updateMany em vez de um update por linha.
+    const skipIds = stale
+      .filter((s) => s.responses.length === 0 && s.suggestionStatus === 'scheduled')
+      .map((s) => s.id);
+    const keepIds = stale.filter((s) => !skipIds.includes(s.id)).map((s) => s.id);
+    if (skipIds.length) {
+      await prisma.feedbackSurvey.updateMany({
+        where: { id: { in: skipIds }, feedbackStatus: 'paused' },
+        data: { feedbackStatus: 'expired', nextActionAt: null, suggestionStatus: 'skipped' },
+      });
+    }
+    if (keepIds.length) {
+      await prisma.feedbackSurvey.updateMany({
+        where: { id: { in: keepIds }, feedbackStatus: 'paused' },
+        data: { feedbackStatus: 'expired', nextActionAt: null },
+      });
+    }
+    console.log(`[FEEDBACK] ⌛ ${stale.length} survey(s) expiradas (paused 48h), ${skipIds.length} com sugestão pulada`);
   }
 
   // Suggestion reply window closed → expired (stored suggestions remain).

@@ -19,6 +19,7 @@ import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder, notifyCoproducer } from '../services/coproducer.service';
 import { processCourseSale, lojouPayloadPid } from '../services/courseSale.service';
+import { enqueueCredentialDelivery, markCredentialDelivered } from '../services/credentialDelivery.service';
 import { computeFees } from '../lib/fees';
 import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer, getStripe } from '../services/stripe.service';
 import { sendCancellationMessage } from '../services/lifecycle.service';
@@ -345,7 +346,11 @@ async function handleLojouWebhook(
       event = payload.event;
       data = payload.data;
     }
-    console.log(`[WEBHOOK] Received event: ${event}`, JSON.stringify(data, null, 2));
+    // Só o essencial: o payload completo tem PII do cliente (nome, telefone,
+    // e-mail) e já fica guardado em Transaction.metadata — despejá-lo no log
+    // a cada evento era CPU síncrona no caminho da requisição e dado pessoal
+    // em texto puro.
+    console.log(`[WEBHOOK] Received event: ${event} (order ${data?.order_number || data?.id || 'n/d'}, pid ${data?.product?.product_pid || data?.product?.pid || 'n/d'})`);
 
     if (!event || !data) {
       return res.status(400).json({ error: 'Invalid payload' });
@@ -802,105 +807,64 @@ async function handleLojouWebhook(
               console.error('[WEBHOOK] renewal confirmation failed (non-blocking):', e?.message || e),
             );
           }
-        } else if (customerPhone) {
-          try {
-            let cleanPhone = customerPhone.replace(/\D/g, '');
-            if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) {
-              cleanPhone = `258${cleanPhone}`;
-            }
+        } else {
+          // ── 1ª compra: entrega de credenciais SEM segurar a resposta ─────
+          // A versão antiga rodava tudo inline (e-mail + 3 tentativas de
+          // WhatsApp de até 10s cada): o webhook chegava a ~45s, a Lojou dava
+          // timeout e re-entregava, e um crash no meio deixava um COMPRADOR
+          // sem credenciais sem registro nenhum. Agora:
+          //   1. Fica um registro durável na fila CredentialDelivery com 10min
+          //      de graça — se nada abaixo funcionar (ou o processo morrer), a
+          //      fila entrega com retry e quota.
+          //   2. A tentativa imediata (e-mail + WhatsApp) roda fire-and-forget
+          //      e, funcionando, marca a fila como entregue.
+          enqueueCredentialDelivery(user.id, 'compra', productName, {
+            reset: true,
+            dueAt: new Date(Date.now() + 10 * 60 * 1000),
+          }).catch((e) => console.error('[WEBHOOK] enqueue de credenciais falhou:', e?.message || e));
 
-            // Also deliver the credentials by e-mail (Resend) — independent of
-            // WhatsApp, so the buyer has a durable copy even if Komunika fails.
-            sendCredentialsEmail({ name: user.name, email: user.email, rawPassword, productName }).catch((e) =>
-              console.error('[WEBHOOK] credentials e-mail failed (non-blocking):', e?.message || e),
-            );
+          // Ask them to save our number 30–60 min from now (phones hide
+          // messages from unsaved contacts, so this protects every future
+          // announcement and the support thread).
+          scheduleSaveContactReminder(user.id).catch((e) =>
+            console.error('[WEBHOOK] save-contact scheduling failed (non-blocking):', e?.message || e),
+          );
 
-            // Ask them to save our number 30–60 min from now (phones hide
-            // messages from unsaved contacts, so this protects every future
-            // announcement and the support thread).
-            scheduleSaveContactReminder(user.id).catch((e) =>
-              console.error('[WEBHOOK] save-contact scheduling failed (non-blocking):', e?.message || e),
-            );
+          void (async () => {
+            try {
+              const emailOk = await sendCredentialsEmail({ name: user.name, email: user.email, rawPassword, productName })
+                .then((r) => !!r?.ok)
+                .catch(() => false);
 
-            const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
-            const komunikaKey = sysConfig?.komunikaAdminApiKey || env.KOMUNIKA_ADMIN_API_KEY;
-            const komunikaUrl = env.KOMUNIKA_API_URL || 'https://api.komunika.site';
-
-            if (komunikaKey) {
-              const credentialMsg = [
-                `🎉 *Bem-vindo ao Código Zero!*`,
-                ``,
-                `📦 *Produto:* ${productName}`,
-                `Sua conta foi criada com sucesso.`,
-                ``,
-                `📧 *Email:* ${user.email}`,
-                `🔑 *Senha:* ${rawPassword}`,
-                ``,
-                `🔗 *Acesse:* ${env.FRONTEND_URL}/login`,
-                ``,
-                `Guarde essas informações em local seguro. 💬`,
-              ].join('\n');
-
-              const instanceId = sysConfig?.komunikaInstanceId;
-              if (instanceId) {
-                // Send with retry + real status check. The previous
-                // implementation logged "sent" unconditionally, masking
-                // 401/429/500 from Komunika and giving false confidence
-                // that customers had received their credentials.
-                let delivered = false;
-                let lastStatus: number | string = 'no-attempt';
-                let lastBody = '';
-                for (let attempt = 1; attempt <= 3; attempt++) {
-                  try {
-                    const res = await fetch(`${komunikaUrl}/api/v1/messages/send`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', 'X-API-Key': komunikaKey },
-                      body: JSON.stringify({ instanceId, to: cleanPhone, type: 'text', content: credentialMsg }),
-                      signal: AbortSignal.timeout(10000),
-                    });
-                    lastStatus = res.status;
-                    lastBody = await res.text().catch(() => '');
-                    if (res.ok) {
-                      delivered = true;
-                      console.log(`[WEBHOOK] ✅ Credentials delivered via WhatsApp to ${cleanPhone} (status=${res.status}, attempt=${attempt})`);
-                      break;
-                    }
-                    console.warn(`[WEBHOOK] ⚠️ Komunika attempt ${attempt} failed: status=${res.status} body=${lastBody.slice(0, 200)}`);
-                  } catch (e: any) {
-                    lastStatus = `throw:${e?.message || 'unknown'}`;
-                    console.warn(`[WEBHOOK] ⚠️ Komunika attempt ${attempt} threw:`, e?.message || e);
-                  }
-                  // Brief backoff between attempts
-                  if (attempt < 3) await new Promise((r) => setTimeout(r, 1500 * attempt));
-                }
-                if (!delivered) {
-                  console.error(`[WEBHOOK] 🚨 CREDENTIALS NOT DELIVERED to ${cleanPhone} after 3 attempts. lastStatus=${lastStatus} body=${lastBody.slice(0, 200)}`);
-                  // Notify superadmins so manual recovery (resend from admin) can happen
-                  sendPushToSuperAdmins({
-                    title: '🚨 Entrega de acesso falhou',
-                    body: `${user.email} pagou mas não recebeu credenciais. Status Komunika: ${lastStatus}`,
-                    url: '/admin/users',
-                  }).catch(() => {});
-                  // Coproducer também precisa saber — ele pode reenviar do dashboard dele
-                  if (coproducer) {
-                    notifyCoproducer({
-                      coproducerId: coproducer.id,
-                      type: 'credential_fail',
-                      title: '🚨 Acesso não entregue',
-                      body: `${user.email} pagou mas o WhatsApp falhou (${lastStatus}). Avise o cliente ou peça ao admin pra reenviar.`,
-                      url: '/coproducer/users',
-                    }).catch(() => {});
-                  }
-                }
-              } else {
-                console.warn(`[WEBHOOK] ⚠️ Komunika instanceId missing — credentials NOT sent via WhatsApp`);
+              let waOk = false;
+              if (customerPhone) {
+                let cleanPhone = String(customerPhone).replace(/\D/g, '');
+                if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
+                // O helper já tem retry interno e alerta os superadmins em
+                // falha definitiva.
+                const r = await sendCredentialsViaWhatsApp({ phone: cleanPhone, email: user.email, rawPassword, productName })
+                  .catch(() => ({ delivered: false } as any));
+                waOk = !!r?.delivered;
               }
-            } else {
-              console.warn(`[WEBHOOK] ⚠️ Komunika not configured — credentials NOT sent via WhatsApp`);
+
+              if (emailOk || waOk) {
+                await markCredentialDelivered(user.id, waOk ? 'whatsapp' : 'email');
+              } else {
+                console.error(`[WEBHOOK] 🚨 Entrega imediata falhou nos 2 canais para ${user.email} — a fila re-tenta em 10min`);
+                if (coproducer) {
+                  notifyCoproducer({
+                    coproducerId: coproducer.id,
+                    type: 'credential_fail',
+                    title: '🚨 Acesso não entregue',
+                    body: `${user.email} pagou mas a entrega imediata falhou. A fila vai re-tentar; acompanhe.`,
+                    url: '/coproducer/users',
+                  }).catch(() => {});
+                }
+              }
+            } catch (e: any) {
+              console.error('[WEBHOOK] entrega imediata de credenciais falhou:', e?.message || e);
             }
-          } catch (whatsappErr) {
-            console.error(`[WEBHOOK] ⚠️ WhatsApp delivery failed (non-blocking):`, whatsappErr);
-          }
+          })();
         }
 
         // 🔔 Push notification to superadmin: NEW SALE

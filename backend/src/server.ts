@@ -34,7 +34,13 @@ import membersAdminRoutes from './routes/members.admin.routes';
 import { authMiddleware } from './middlewares/auth.middleware';
 import { blockWithdrawOnly } from './middlewares/withdrawOnly.guard';
 import { startCronJobs } from './jobs/cron';
-import './workers/scraper.worker'; // Inicia o worker do BullMQ para scraping
+// O worker do Radar (BullMQ + Chromium) roda DENTRO do processo da API por
+// padrão — comportamento histórico. DISABLE_SCRAPER_WORKER=1 desliga-o aqui
+// para rodá-lo num container próprio (dist/workers/standalone.js): scrape
+// pesado deixa de disputar RAM/CPU com as requisições.
+if (process.env.DISABLE_SCRAPER_WORKER !== '1') {
+  void import('./workers/scraper.worker');
+} // Inicia o worker do BullMQ para scraping
 
 // Initialize Sentry as early as possible (before routes). No-op unless
 // SENTRY_DSN is set, so behavior is unchanged when it's absent.
@@ -67,8 +73,18 @@ app.use(
     },
     serializers: {
       req(req: any) {
-        const headers = { ...(req.headers || {}) };
-        if (headers['x-lojou-webhook-secret']) headers['x-lojou-webhook-secret'] = '[REDACTED]';
+        // ALLOWLIST de headers, não denylist: a versão antiga logava TODOS os
+        // headers de toda requisição — incluindo Authorization (o JWT do
+        // usuário) e Cookie em texto puro, e ~3× o volume de log. Só entra o
+        // que ajuda a debugar.
+        const h = req.headers || {};
+        const headers: Record<string, unknown> = {
+          'user-agent': h['user-agent'],
+          'content-type': h['content-type'],
+          'content-length': h['content-length'],
+          referer: h.referer,
+          'x-forwarded-for': h['x-forwarded-for'],
+        };
         const query = { ...(req.query || {}) };
         if (query.secret) query.secret = '[REDACTED]';
         return {
@@ -221,6 +237,9 @@ app.listen(env.PORT, () => {
     logger.warn('[CRON] DISABLE_CRONS=1 — jobs agendados NÃO iniciados nesta instância.');
   } else {
     startCronJobs();
+    // Disparos de broadcast interrompidos por restart/deploy retomam de onde
+    // pararam (o job e cada destinatário vivem no banco).
+    void import('./services/broadcast.service').then((m) => m.resumeInterruptedBroadcasts());
   }
 });
 

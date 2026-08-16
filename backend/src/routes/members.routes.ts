@@ -75,7 +75,7 @@ router.get('/courses/:slug/login-config', async (req: Request, res: Response) =>
 router.post('/sso/exchange', async (req: Request, res: Response) => {
   try {
     const code = String(req.body?.code || '');
-    const userId = code ? consumeMembersSsoCode(code) : null;
+    const userId = code ? await consumeMembersSsoCode(code) : null;
     if (!userId) return res.status(401).json({ error: 'Código inválido ou expirado. Abra novamente pelo app.' });
 
     const user = await prisma.user.findUnique({ where: { id: userId } });

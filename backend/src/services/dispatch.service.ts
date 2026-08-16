@@ -107,10 +107,13 @@ export async function processDispatch(scheduleId: string): Promise<void> {
   const minSec = Math.max(0, payload.delayMinSec ?? 5);
   const maxSec = Math.max(minSec, payload.delayMaxSec ?? 15);
 
-  let sent = 0;
-  let failed = 0;
+  // Retoma do cursor persistido: um restart no meio NÃO recomeça do contato
+  // 0 (era o caminho para mensagens duplicadas no número compartilhado).
+  let sent = row.sent;
+  let failed = row.failed;
+  const startIndex = Math.max(0, row.lastContactIndex || 0);
 
-  for (let i = 0; i < contacts.length; i++) {
+  for (let i = startIndex; i < contacts.length; i++) {
     // Allow cancellation between sends
     const fresh = await prisma.scheduledDispatch.findUnique({
       where: { id: scheduleId },
@@ -261,10 +264,11 @@ export async function processDispatch(scheduleId: string): Promise<void> {
       });
     }
 
-    // Periodically persist progress so UI can poll
+    // Persist progress (e o CURSOR) por contato — é o que permite retomar
+    // exatamente de onde parou depois de um crash/deploy.
     await prisma.scheduledDispatch.update({
       where: { id: scheduleId },
-      data: { sent, failed },
+      data: { sent, failed, lastContactIndex: i + 1 },
     });
 
     // Sleep between sends (skip after last contact)

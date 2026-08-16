@@ -68,6 +68,24 @@ export default function CourseHome({ params }: { params: Promise<{ slug: string 
               <strong>Curso bloqueado.</strong>{" "}
               As aulas de amostra estão liberadas — o resto abre depois da compra.
             </div>
+            {data.course.checkoutUrl && (
+              // Mesma aba de propósito (navegador embutido ignora _blank).
+              <a
+                href={data.course.checkoutUrl}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 10,
+                  background: "var(--accent, #2DD4BF)",
+                  color: "#001412",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  textDecoration: "none",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Comprar o curso →
+              </a>
+            )}
           </div>
         )}
         {config.home.sections.map((sec) => {

@@ -157,9 +157,10 @@ const NAV: NavGroup[] = [
   {
     label: "Operação",
     items: [
-      { href: "/admin",          label: "Dashboard",  icon: I.Dashboard },
-      { href: "/admin/finance",  label: "Financeiro", icon: I.Finance },
-      { href: "/admin/chat",     label: "Suporte",    icon: I.Chat },
+      { href: "/admin",           label: "Dashboard",  icon: I.Dashboard },
+      { href: "/admin/finance",   label: "Financeiro", icon: I.Finance },
+      { href: "/admin/chat",      label: "Suporte",    icon: I.Chat },
+      { href: "/admin/atividade", label: "Atividade",  icon: I.Feedback },
     ],
   },
   {

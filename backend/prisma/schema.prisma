@@ -256,10 +256,24 @@ model Course {
   // Komunika; para ter, a pessoa assina o Código Zero à parte.
   includedTools Json?
 
+  // ── Coprodução e funil de venda ──────────────────────────────────────
+  // Coprodutor associado a este curso (um por curso). Dá a ele visão de
+  // alunos + faturamento do curso e o poder de matricular alunos. O acerto
+  // financeiro é por fora (Lojou/manual) — nada disto entra no rateio de
+  // sócios.
+  coproducerId String?
+  coproducer   CoproducerAccount? @relation(fields: [coproducerId], references: [id])
+  // Link público de compra (https://pay.lojou.app/p/...) mostrado no
+  // cadeado do curso pago. Sem ele, a tela bloqueada não tem CTA.
+  checkoutUrl  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  modules   Module[]
-  accesses  CourseAccess[]
+  modules      Module[]
+  accesses     CourseAccess[]
+  transactions Transaction[]
+
+  @@index([coproducerId])
 }
 
 /// Direito de acesso de uma pessoa a um curso.
@@ -299,6 +313,10 @@ model CredentialDelivery {
   lastError String?
   /// Rótulo da origem (ex.: "turma-cod") — para o admin saber de onde veio.
   batch     String?
+  /// Nome do produto comprado (ex.: "Curso COD do Zero") — entra na mensagem
+  /// de credenciais para o aluno saber exatamente o que desbloqueou. Nulo =
+  /// mensagem genérica da plataforma.
+  productName String?
   createdAt DateTime @default(now())
 
   @@index([status, dueAt])
@@ -418,6 +436,14 @@ model Transaction {
   // referredByCoproducer. NULL = principal (main product).
   coproducerId    String?
   coproducer      CoproducerAccount? @relation(fields: [coproducerId], references: [id])
+  // ── Identificação do produto vendido ─────────────────────────────────
+  // pid + nome do produto como vieram do gateway. Antes disto o produto só
+  // sobrevivia dentro de metadata (JSON cru, inconsultável). courseId marca
+  // venda de CURSO avulso — essas nunca entram no rateio de sócios.
+  productPid      String?
+  productName     String?
+  courseId        String?
+  course          Course?  @relation(fields: [courseId], references: [id])
   // Payment gateway that produced this transaction. Default 'lojou' for
   // historical rows. Values: 'lojou' | 'stripe' | 'manual'.
   gateway                 String   @default("lojou")
@@ -426,6 +452,7 @@ model Transaction {
   createdAt     DateTime @default(now())
 
   @@index([coproducerId])
+  @@index([courseId])
   // Colunas quentes: faturamento/cron filtram por status; renovação por userEmail;
   // reconciliação Stripe faz findFirst por stripePaymentIntentId; relatórios por data.
   @@index([status])
@@ -1022,11 +1049,32 @@ model CoproducerAccount {
   notifyCredentialFail  Boolean  @default(true)
 
   transactions        Transaction[]
+  // Cursos da área de membros associados a esta coprodução (um coprodutor
+  // por curso; um coprodutor pode ter vários cursos).
+  courses             Course[]
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@index([enabled])
+}
+
+/// Feed de atividade do painel admin — UMA linha por evento operacional
+/// relevante (venda de curso, aluno matriculado por coprodutor, …), visível a
+/// todos os admins na aba Atividade. Diferente do NotificationLog, que é
+/// histórico de push POR usuário. O push aos superadmins continua saindo por
+/// sendPushToSuperAdmins; isto é o registro consultável.
+model AdminEvent {
+  id        String   @id @default(uuid())
+  /// course_sale | copro_enroll | …
+  type      String
+  title     String
+  body      String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
 }
 
 /// Notification history — one row per push attempt sent to a user.

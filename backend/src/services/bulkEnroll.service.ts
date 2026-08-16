@@ -85,17 +85,22 @@ export async function bulkEnroll(args: {
   grantedById?: string | null;
   /** Rótulo da leva, para o admin identificar a origem na fila. */
   batch?: string | null;
+  /** Origem gravada no CourseAccess. 'import' (default histórico) ou
+   *  'coproducer' quando quem matricula é o coprodutor do curso. */
+  courseSource?: string | null;
 }): Promise<BulkResult> {
   const result: BulkResult = { total: args.entries.length, created: 0, reused: 0, skipped: [] };
 
   // `includedTools` nulo = tudo incluído (comportamento histórico dos cursos
   // que já existiam). Lista presente = só o que estiver lá dentro.
   let incluiKomunika = true;
+  let courseName: string | undefined;
   if (args.courseId) {
     const curso = await prisma.course.findUnique({
       where: { id: args.courseId },
-      select: { includedTools: true },
+      select: { includedTools: true, name: true },
     });
+    courseName = curso?.name;
     const tools = curso?.includedTools as unknown;
     if (Array.isArray(tools)) incluiKomunika = tools.map(String).includes('komunika');
   }
@@ -164,7 +169,7 @@ export async function bulkEnroll(args: {
         await grantCourseAccess({
           userId: user.id,
           courseId: args.courseId,
-          source: 'import',
+          source: args.courseSource || 'import',
           expiresAt: args.courseExpiresAt ?? null,
           grantedById: args.grantedById ?? null,
         });
@@ -194,7 +199,7 @@ export async function bulkEnroll(args: {
   // quota do dia acaba (ver credentialDelivery.service). A senha de cada um é
   // gerada no momento do envio, não aqui — por isso não guardamos nada.
   for (const p of paraEnviar) {
-    await enqueueCredentialDelivery(p.userId, args.batch || 'turma');
+    await enqueueCredentialDelivery(p.userId, args.batch || 'turma', courseName);
   }
   console.log(`[TURMA] ${paraEnviar.length} aluno(s) na fila de entrega`);
 

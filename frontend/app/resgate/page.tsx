@@ -4,7 +4,7 @@ import { Logo } from "@/components/Logo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-type Access = { name: string; email: string; password: string; loginUrl: string };
+type Access = { name: string; email: string; password: string; loginUrl: string; products?: string[] };
 
 export default function ResgatePage() {
   const [identifier, setIdentifier] = useState("");
@@ -56,8 +56,9 @@ export default function ResgatePage() {
           <>
             <h1 style={S.title}>Resgatar acesso</h1>
             <p style={S.subtitle}>
-              Comprou o <strong style={{ color: "#fff" }}>Código Zero</strong> mas não recebeu seus dados no
-              WhatsApp? Recupere seu acesso aqui.
+              Comprou o <strong style={{ color: "#fff" }}>Código Zero</strong> ou um dos nossos{" "}
+              <strong style={{ color: "#fff" }}>cursos</strong> e não recebeu seus dados? Recupere seu acesso
+              aqui.
             </p>
 
             <div style={S.warnBox}>
@@ -88,15 +89,27 @@ export default function ResgatePage() {
         ) : (
           <>
             <h1 style={S.title}>Olá, {firstName}! 👋</h1>
-            <p style={S.subtitle}>Aqui está o seu acesso ao Código Zero:</p>
+            <p style={S.subtitle}>Aqui está o seu acesso:</p>
+
+            {!!access.products?.length && (
+              <div style={S.productBox}>
+                <div style={S.credLabel}>Sua compra inclui</div>
+                {access.products.map((p) => (
+                  <div key={p} style={S.productRow}>🎓 {p}</div>
+                ))}
+              </div>
+            )}
 
             <div style={S.credBox}>
               <Cred label="E-mail" value={access.email} copied={copied === "email"} onCopy={() => copy("email", access.email)} />
               <Cred label="Senha" value={access.password} mono copied={copied === "senha"} onCopy={() => copy("senha", access.password)} />
             </div>
 
-            <a href={access.loginUrl} target="_blank" rel="noreferrer" style={{ ...S.btn, textDecoration: "none", display: "block", textAlign: "center" }}>
-              Acessar o Código Zero →
+            {/* Mesma aba de propósito: o /resgate abre muito em navegador
+                embutido (WhatsApp/IG), onde target=_blank simplesmente não faz
+                nada e o botão parece morto. */}
+            <a href={access.loginUrl} style={{ ...S.btn, textDecoration: "none", display: "block", textAlign: "center" }}>
+              Acessar minha conta →
             </a>
 
             <div style={S.dangerBox}>
@@ -203,6 +216,14 @@ const S: Record<string, CSSProperties> = {
     lineHeight: 1.5,
   },
   foot: { marginTop: 16, fontSize: 12.5, color: "#52525B", textAlign: "center", lineHeight: 1.5 },
+  productBox: {
+    background: "rgba(45,212,191,0.06)",
+    border: "1px solid rgba(45,212,191,0.22)",
+    borderRadius: 12,
+    padding: "12px 14px",
+    margin: "4px 0 14px",
+  },
+  productRow: { fontSize: 14, fontWeight: 600, color: "#fff", marginTop: 6 },
   credBox: { display: "flex", flexDirection: "column", gap: 10, margin: "4px 0 16px" },
   credRow: {
     display: "flex",

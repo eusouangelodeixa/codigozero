@@ -165,12 +165,26 @@ router.get('/courses/:id', async (req: AuthRequest, res: Response) => {
 router.patch('/courses/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { name, slug, status, sortOrder, coverUrl, config, accessType, productPid, includedTools } = req.body || {};
+    const { name, slug, status, sortOrder, coverUrl, config, accessType, productPid, includedTools, coproducerId, checkoutUrl } = req.body || {};
     const data: Record<string, unknown> = {};
     // 'paid' = vendido à parte (só entra quem tem CourseAccess);
     // 'subscription' = incluído no plano, como sempre foi.
     if (accessType === 'paid' || accessType === 'subscription') data.accessType = accessType;
     if (productPid !== undefined) data.productPid = String(productPid || '').trim() || null;
+    // Coprodutor associado (um por curso; '' / null desassocia). Validado
+    // contra a tabela para não gravar id órfão.
+    if (coproducerId !== undefined) {
+      const cid = String(coproducerId || '').trim();
+      if (cid) {
+        const exists = await prisma.coproducerAccount.findUnique({ where: { id: cid }, select: { id: true } });
+        if (!exists) return res.status(400).json({ error: 'Coprodutor não encontrado' });
+        data.coproducerId = cid;
+      } else {
+        data.coproducerId = null;
+      }
+    }
+    // Link público de compra — vira o CTA "Comprar" no cadeado do curso pago.
+    if (checkoutUrl !== undefined) data.checkoutUrl = String(checkoutUrl || '').trim() || null;
     // null = tudo (não mexe nos cursos antigos); array = só o que estiver lá.
     if (includedTools !== undefined) {
       data.includedTools = Array.isArray(includedTools) ? includedTools.map(String) : null;

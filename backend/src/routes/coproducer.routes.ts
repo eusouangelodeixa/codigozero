@@ -4,6 +4,8 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { coproducerMiddleware } from '../middlewares/coproducer.middleware';
 import { notifyCoproducer } from '../services/coproducer.service';
 import { resolveWindow, InvalidPeriodError } from '../lib/period';
+import { sendPushToSuperAdmins } from '../services/push.service';
+import { logAdminEvent } from '../services/adminEvents.service';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -421,6 +423,165 @@ router.get('/upcoming-renewals', async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao carregar próximas renovações' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CURSOS DO COPRODUTOR (área de membros)
+//
+// Um coprodutor pode estar associado a cursos (Course.coproducerId). Aqui ele
+// vê alunos + faturamento de CADA curso dele e pode matricular alunos — cada
+// matrícula avisa os superadmins (push) e entra no feed de Atividade do admin.
+// O acerto financeiro da coprodução é feito por fora; nada disto passa pelo
+// rateio de sócios.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Garante que o curso pertence a este coprodutor. */
+async function ownCourse(coproducerId: string, courseId: string) {
+  const course = await prisma.course.findFirst({
+    where: { id: courseId, coproducerId },
+    select: { id: true, name: true, slug: true, status: true, coverUrl: true, accessType: true },
+  });
+  return course;
+}
+
+/**
+ * GET /api/coproducer/courses
+ * Cursos associados a esta coprodução, cada um com nº de alunos e faturamento.
+ */
+router.get('/courses', async (req: AuthRequest, res: Response) => {
+  try {
+    const courses = await prisma.course.findMany({
+      where: { coproducerId: req.coproducer!.id },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, name: true, slug: true, status: true, coverUrl: true, accessType: true, checkoutUrl: true },
+    });
+    const out = [] as any[];
+    for (const c of courses) {
+      const [students, revenue] = await Promise.all([
+        prisma.courseAccess.count({ where: { courseId: c.id } }),
+        prisma.transaction.aggregate({
+          where: { courseId: c.id, status: 'approved' },
+          _sum: { amount: true },
+          _count: { _all: true },
+        }),
+      ]);
+      out.push({
+        ...c,
+        students,
+        sales: revenue._count._all,
+        revenue: revenue._sum.amount || 0,
+        yourSharePct: req.coproducer!.sharePct,
+      });
+    }
+    res.json({ courses: out });
+  } catch (error) {
+    console.error('[COPRODUCER] /courses error:', error);
+    res.status(500).json({ error: 'Erro ao carregar cursos' });
+  }
+});
+
+/**
+ * GET /api/coproducer/courses/:id/students?page=1
+ * Alunos do curso (só cursos deste coprodutor), mais recentes primeiro.
+ */
+router.get('/courses/:id/students', async (req: AuthRequest, res: Response) => {
+  try {
+    const course = await ownCourse(req.coproducer!.id, String(req.params.id));
+    if (!course) return res.status(404).json({ error: 'Curso não encontrado' });
+
+    const page = Math.max(1, parseInt(String(req.query.page || '1')) || 1);
+    const perPage = 25;
+    const [total, rows] = await Promise.all([
+      prisma.courseAccess.count({ where: { courseId: course.id } }),
+      prisma.courseAccess.findMany({
+        where: { courseId: course.id },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+        select: {
+          id: true,
+          source: true,
+          expiresAt: true,
+          createdAt: true,
+          user: { select: { name: true, email: true, phone: true } },
+        },
+      }),
+    ]);
+    res.json({
+      course: { id: course.id, name: course.name },
+      total,
+      page,
+      perPage,
+      students: rows.map((r) => ({
+        id: r.id,
+        name: r.user.name,
+        email: r.user.email,
+        phone: r.user.phone,
+        source: r.source,
+        lifetime: r.expiresAt === null,
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('[COPRODUCER] /courses/:id/students error:', error);
+    res.status(500).json({ error: 'Erro ao carregar alunos' });
+  }
+});
+
+/**
+ * POST /api/coproducer/courses/:id/students  { name, email?, phone? }
+ * Matricula UM aluno no curso (vitalício, sem acesso à plataforma além do
+ * curso). Credenciais saem pela fila citando o nome do curso. Cada adição
+ * gera push aos superadmins + linha no feed de Atividade do admin — o
+ * coprodutor adiciona, mas o dono fica sempre sabendo.
+ */
+router.post('/courses/:id/students', async (req: AuthRequest, res: Response) => {
+  try {
+    const course = await ownCourse(req.coproducer!.id, String(req.params.id));
+    if (!course) return res.status(404).json({ error: 'Curso não encontrado' });
+
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const phone = String(req.body?.phone || '').trim();
+    if (!email && !phone) return res.status(400).json({ error: 'Informe e-mail ou telefone do aluno' });
+
+    const { bulkEnroll } = await import('../services/bulkEnroll.service');
+    const result = await bulkEnroll({
+      entries: [{ name: name || 'Aluno', email, phone }],
+      platformDays: 0, // só o curso — plataforma é outra compra
+      courseId: course.id,
+      courseExpiresAt: null, // vitalício (decisão de produto)
+      grantedById: req.user!.id,
+      batch: `copro-${req.coproducer!.code}`,
+      courseSource: 'coproducer',
+    });
+    if (result.skipped.length) {
+      return res.status(400).json({ error: result.skipped[0]?.reason || 'Não foi possível matricular' });
+    }
+
+    const acct = await prisma.coproducerAccount.findUnique({
+      where: { id: req.coproducer!.id },
+      select: { displayName: true, user: { select: { name: true } } },
+    });
+    const coproName = acct?.displayName || acct?.user?.name || req.coproducer!.code;
+    const alunoLabel = name || email || phone;
+    void sendPushToSuperAdmins({
+      title: '👤 Coprodutor matriculou aluno',
+      body: `${coproName} adicionou ${alunoLabel} em "${course.name}"`,
+      url: '/admin/atividade',
+    });
+    void logAdminEvent({
+      type: 'copro_enroll',
+      title: `Matrícula por coprodutor: ${course.name}`,
+      body: `${coproName} adicionou ${alunoLabel} (${email || phone}) em "${course.name}"`,
+      meta: { courseId: course.id, coproducerId: req.coproducer!.id, email, phone },
+    });
+
+    res.json({ success: true, created: result.created, reused: result.reused });
+  } catch (error) {
+    console.error('[COPRODUCER] add student error:', error);
+    res.status(500).json({ error: 'Erro ao matricular aluno' });
   }
 });
 

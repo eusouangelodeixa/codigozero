@@ -387,12 +387,16 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
       user = await prisma.user.findFirst({ where: { OR: [{ phone: norm }, { phone: digits }] } });
     }
 
-    // Must be a real customer: role=member AND a paid status. Leads (never-paid
-    // form signups) are also role=member with isActive=true, so WITHOUT the
-    // isPaidSubscriber gate this endpoint would reset+reveal a working password
-    // to them — letting a non-customer into the app (blocked only later at the
-    // paywall). Same generic message so we don't disclose that a lead exists.
-    if (!user || user.role !== 'member' || !isPaidSubscriber(user.subscriptionStatus)) {
+    // Must be a real customer: role=member AND (a paid subscription OR access
+    // to at least one course). Leads (never-paid form signups) are also
+    // role=member with isActive=true, so WITHOUT this gate the endpoint would
+    // reset+reveal a working password to them. Quem comprou um CURSO avulso
+    // não tem assinatura (subscriptionStatus 'lead') mas tem CourseAccess —
+    // o resgate vale para ele também (mesmo predicado que o login já usa).
+    // Same generic message so we don't disclose that a lead exists.
+    const assinantePago = !!user && user.role === 'member' && isPaidSubscriber(user.subscriptionStatus);
+    const temCurso = !!user && user.role === 'member' && (await hasAnyCourseAccess(user.id));
+    if (!user || user.role !== 'member' || (!assinantePago && !temCurso)) {
       return res.status(404).json({
         error: 'Não encontramos uma compra com esses dados. Confira o telefone ou e-mail que usou na compra.',
       });
@@ -410,6 +414,20 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
       });
     }
 
+    // O que a compra desta pessoa inclui — a página mostra isto para deixar
+    // claro O QUE está sendo resgatado (assinatura, curso avulso, ou ambos).
+    const acessos = await prisma.courseAccess.findMany({
+      where: {
+        userId: user.id,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { course: { select: { name: true } } },
+    });
+    const products: string[] = [
+      ...(assinantePago ? ['Código Zero (assinatura)'] : []),
+      ...acessos.map((a) => a.course.name),
+    ];
+
     const { raw, hash } = await generateUserPassword();
     await prisma.user.update({
       where: { id: user.id },
@@ -419,7 +437,9 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
     console.log(`[AUTH] 🔓 Access revealed on /resgate for user=${user.id}`);
 
     // Also e-mail the recovered credentials (Resend) so the buyer keeps a copy.
-    sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw }).catch((e) =>
+    // Compra de UM curso sem assinatura → o e-mail cita o curso.
+    const productName = !assinantePago && acessos.length === 1 ? acessos[0].course.name : undefined;
+    sendCredentialsEmail({ name: user.name, email: user.email, rawPassword: raw, productName }).catch((e) =>
       console.error('[AUTH] recover-access e-mail failed (non-blocking):', e?.message || e),
     );
 
@@ -427,6 +447,7 @@ router.post('/recover-access', recoverLimiter, async (req: Request, res: Respons
       name: user.name,
       email: user.email,
       password: raw,
+      products,
       loginUrl: `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`,
     });
   } catch (error) {

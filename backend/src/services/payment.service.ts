@@ -59,18 +59,26 @@ export async function sendCredentialsViaWhatsApp(opts: {
   phone: string;
   email: string;
   rawPassword: string;
+  /** Nome do produto comprado (ex.: "Curso COD do Zero"). Quando presente, a
+   *  mensagem diz explicitamente O QUE foi desbloqueado — pedido do produto:
+   *  quem compra um curso avulso não pode receber um "bem-vindo" genérico. */
+  productName?: string;
+  /** URL de acesso específica do produto (ex.: members.czero.sbs/{slug}). */
+  accessUrl?: string;
 }): Promise<CredentialDelivery> {
   const { phone, email, rawPassword } = opts;
 
+  const accessUrl = opts.accessUrl || `${env.FRONTEND_URL}/login`;
   const message = [
-    `🎉 *Bem-vindo ao Código Zero!*`,
+    opts.productName ? `🎉 *Compra confirmada!*` : `🎉 *Bem-vindo ao Código Zero!*`,
     ``,
+    ...(opts.productName ? [`📦 *Produto:* ${opts.productName}`, ``] : []),
     `Sua conta foi criada com sucesso.`,
     ``,
     `📧 *Email:* ${email}`,
     `🔑 *Senha:* ${rawPassword}`,
     ``,
-    `🔗 *Acesse:* ${env.FRONTEND_URL}/login`,
+    `🔗 *Acesse:* ${accessUrl}`,
     ``,
     `Guarde essas informações em local seguro. 💬`,
   ].join('\n');
@@ -93,8 +101,11 @@ export async function sendCredentialsViaWhatsApp(opts: {
 }
 
 /** Branded HTML for the access-credentials e-mail. */
-function credentialsEmailHtml(opts: { name: string; email: string; password: string; loginUrl: string }): string {
+function credentialsEmailHtml(opts: { name: string; email: string; password: string; loginUrl: string; productName?: string }): string {
   const first = (opts.name || '').split(' ')[0] || 'membro';
+  const introHtml = opts.productName
+    ? `Sua compra de <strong style="color:#ffffff;">${opts.productName}</strong> foi confirmada. Aqui estão os seus dados de acesso:`
+    : `Sua conta no <strong style="color:#ffffff;">Código Zero</strong> está pronta. Aqui estão os seus dados de acesso:`;
   return `<!doctype html>
 <html lang="pt"><head>
 <meta charset="utf-8">
@@ -112,7 +123,7 @@ function credentialsEmailHtml(opts: { name: string; email: string; password: str
         </td></tr>
         <tr><td style="padding:30px 30px 6px;">
           <h1 style="margin:0 0 8px;font-size:23px;font-weight:800;letter-spacing:-0.02em;color:#ffffff;">Bem-vindo, ${first}! 🎉</h1>
-          <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#A1A1AA;">Sua conta no <strong style="color:#ffffff;">Código Zero</strong> está pronta. Aqui estão os seus dados de acesso:</p>
+          <p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#A1A1AA;">${introHtml}</p>
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#5b7a73;font-weight:700;margin:0 0 6px;">E-mail</div>
           <div style="background:#0c1c17;border:1px solid #213029;border-radius:10px;padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;color:#ffffff;word-break:break-all;">${opts.email}</div>
           <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:#5b7a73;font-weight:700;margin:14px 0 6px;">Senha</div>
@@ -166,11 +177,20 @@ export async function sendCredentialsEmail(opts: {
   email: string;
   rawPassword: string;
   loginUrl?: string;
+  /** Nome do produto comprado — entra no assunto e no corpo para o comprador
+   *  saber exatamente o que desbloqueou (curso avulso vs assinatura). */
+  productName?: string;
 }): Promise<EmailSendResult> {
   const loginUrl = opts.loginUrl || `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`;
-  const html = credentialsEmailHtml({ name: opts.name, email: opts.email, password: opts.rawPassword, loginUrl });
+  const html = credentialsEmailHtml({
+    name: opts.name,
+    email: opts.email,
+    password: opts.rawPassword,
+    loginUrl,
+    productName: opts.productName,
+  });
   const text = [
-    `Bem-vindo ao Código Zero!`,
+    opts.productName ? `Compra confirmada: ${opts.productName}` : `Bem-vindo ao Código Zero!`,
     ``,
     `Email: ${opts.email}`,
     `Senha: ${opts.rawPassword}`,
@@ -179,7 +199,52 @@ export async function sendCredentialsEmail(opts: {
     ``,
     `Guarde esses dados em local seguro.`,
   ].join('\n');
-  return sendEmail({ to: opts.email, subject: '🎉 Seu acesso ao Código Zero', html, text });
+  const subject = opts.productName ? `🎉 Seu acesso: ${opts.productName}` : '🎉 Seu acesso ao Código Zero';
+  return sendEmail({ to: opts.email, subject, html, text });
+}
+
+/**
+ * Confirmação de compra para quem JÁ TEM conta (não há senha nova a entregar):
+ * diz o produto comprado e onde acessar, nos dois canais. Usada quando um
+ * assinante/aluno existente compra um curso avulso.
+ */
+export async function sendPurchaseConfirmation(opts: {
+  name: string;
+  email: string;
+  phone?: string | null;
+  productName: string;
+  accessUrl?: string;
+}): Promise<void> {
+  const accessUrl = opts.accessUrl || `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login`;
+  const first = (opts.name || '').split(' ')[0] || 'membro';
+
+  const text = [
+    `Compra confirmada: ${opts.productName}`,
+    ``,
+    `${first}, o acesso já está liberado na sua conta de sempre (${opts.email}).`,
+    ``,
+    `Acesse: ${accessUrl}`,
+    ``,
+    `Esqueceu a senha? Recupere em ${env.FRONTEND_URL || 'https://app.czero.sbs'}/resgate`,
+  ].join('\n');
+  void sendEmail({
+    to: opts.email,
+    subject: `✅ Compra confirmada: ${opts.productName}`,
+    html: `<p>${text.replace(/\n/g, '<br>')}</p>`,
+    text,
+  }).catch(() => {});
+
+  if (opts.phone) {
+    const message = [
+      `✅ *Compra confirmada: ${opts.productName}*`,
+      ``,
+      `${first}, o acesso já está liberado na sua conta de sempre.`,
+      ``,
+      `📧 *Email:* ${opts.email}`,
+      `🔗 *Acesse:* ${accessUrl}`,
+    ].join('\n');
+    void sendWhatsAppMessage({ phone: opts.phone, content: message, normalize: false }).catch(() => {});
+  }
 }
 
 /** Branded HTML for the password-reset e-mail (same look as the credentials e-mail). */

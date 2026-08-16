@@ -217,6 +217,10 @@ router.get('/courses/:slug', ...memberGuards, async (req: AuthRequest, res: Resp
         // A UI mostra a estante inteira e põe cadeado no que está fechado —
         // ver o que se está a perder vende melhor do que não ver nada.
         locked: !fullAccess,
+        // CTA do cadeado: sem o link, o banner diz "abre depois da compra"
+        // e não dá caminho nenhum — o funil morria aqui. Só vai quando
+        // bloqueado (quem já tem acesso não precisa de botão de compra).
+        checkoutUrl: !fullAccess ? course.checkoutUrl || null : null,
       },
       modules: course.modules.map((m) => {
         const lessons = m.lessons.map((l) => {
@@ -261,7 +265,7 @@ router.get('/lessons/:id', ...memberGuards, async (req: AuthRequest, res: Respon
       where: { id: String(req.params.id) },
       include: {
         module: {
-          include: { course: { select: { id: true, slug: true, status: true, accessType: true } } },
+          include: { course: { select: { id: true, slug: true, status: true, accessType: true, checkoutUrl: true } } },
         },
       },
     });
@@ -280,6 +284,7 @@ router.get('/lessons/:id', ...memberGuards, async (req: AuthRequest, res: Respon
         locked: true,
         courseSlug: lesson.module.course.slug,
         accessType: lesson.module.course.accessType || 'subscription',
+        checkoutUrl: lesson.module.course.checkoutUrl || null,
       });
     }
 

@@ -66,6 +66,23 @@ export default function LessonPage({ params }: { params: Promise<{ slug: string;
               <br />
               As aulas de amostra continuam abertas — o resto liberta depois da compra.
             </div>
+            {course?.course.checkoutUrl && (
+              // Mesma aba de propósito (navegador embutido ignora _blank).
+              <a
+                href={course.course.checkoutUrl}
+                style={{
+                  padding: "11px 22px",
+                  borderRadius: 10,
+                  background: "var(--accent, #2DD4BF)",
+                  color: "#001412",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  textDecoration: "none",
+                }}
+              >
+                Comprar o curso →
+              </a>
+            )}
             <button type="button" className={k.courseBtn} onClick={() => memberGo(`/${slug}`)}>
               Voltar ao curso
             </button>

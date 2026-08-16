@@ -1,14 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import { grantCourseAccess } from '../services/courseAccess.service';
-import { normalizeMzPhone } from '../lib/whatsapp';
-import {
-  generateUserPassword,
-  sendCredentialsEmail,
-  sendCredentialsViaWhatsApp,
-} from '../services/payment.service';
-import { sendPushToSuperAdmins } from '../services/push.service';
+import { processCourseSale, lojouPayloadPid } from '../services/courseSale.service';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 const router = Router();
@@ -16,28 +9,18 @@ const router = Router();
 /**
  * Webhook de VENDA DE UM CURSO avulso — uma rota por curso.
  *
- * Porque não se reaproveita o webhook principal: aquele **não valida produto
- * nenhum**. Qualquer venda aprovada que lá chegue com o segredo certo vira
- * assinatura completa do Código Zero (cria conta, provisiona Komunika, credita
- * afiliado e sócios). Apontar o produto de um curso para ele daria a plataforma
- * inteira a quem comprou só o curso.
+ * Porque não se reaproveita o webhook principal: aquele historicamente não
+ * validava produto nenhum (hoje valida e ROTEIA por pid — ver
+ * webhook.routes.ts —, mas esta rota continua a ser o caminho recomendado por
+ * ter a dupla tranca: token opaco na URL + pid do curso).
  *
- * Aqui a autenticação é o token opaco na URL — mesmo padrão já usado para os
- * coprodutores — e há ainda uma segunda tranca: o `pid` do payload tem de
- * bater com o `productPid` configurado no curso. Sem isso, o webhook de um
- * curso barato libertaria um curso caro.
- *
- * O que esta rota faz é deliberadamente pouco: garante a conta e concede o
- * acesso ao curso. Não mexe em assinatura, não provisiona Komunika e não entra
- * no rateio de sócios — comprar um curso não é assinar a plataforma.
+ * O processamento em si (conta, acesso vitalício, Transaction no faturamento,
+ * credenciais citando o curso, push + feed pro admin) vive em
+ * services/courseSale.service.ts, partilhado com o roteamento do webhook
+ * principal. Nada aqui entra no rateio de sócios.
  */
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-
-/** Extrai o pid do produto nos formatos que a Lojou usa. */
-function payloadPid(data: any): string {
-  return str(data?.product?.product_pid) || str(data?.product?.pid) || str(data?.product_pid);
-}
 
 router.post('/course/:token', async (req: Request, res: Response) => {
   try {
@@ -46,7 +29,7 @@ router.post('/course/:token', async (req: Request, res: Response) => {
 
     const course = await prisma.course.findUnique({
       where: { webhookToken: token },
-      select: { id: true, name: true, slug: true, productPid: true },
+      select: { id: true, name: true, slug: true, productPid: true, coproducerId: true },
     });
     if (!course) return res.status(404).json({ error: 'not found' });
 
@@ -60,7 +43,7 @@ router.post('/course/:token', async (req: Request, res: Response) => {
       }
     }
 
-    const event = str(body?.event) || str(body?.type);
+    const event = str(body?.event) || str(body?.type) || str(body?.order_type);
     const data = body?.data || body;
 
     // Só a aprovação liberta. "Checkout iniciado" e cancelamento não são venda.
@@ -69,7 +52,7 @@ router.post('/course/:token', async (req: Request, res: Response) => {
     }
 
     // Segunda tranca: o produto tem de ser o do curso.
-    const pid = payloadPid(data);
+    const pid = lojouPayloadPid(data);
     if (course.productPid && pid && pid !== course.productPid) {
       console.warn(`[CURSO-WEBHOOK] pid ${pid} não é o de "${course.name}" (${course.productPid}) — ignorado`);
       return res.status(202).json({ status: 'ignored', reason: 'pid mismatch' });
@@ -79,67 +62,14 @@ router.post('/course/:token', async (req: Request, res: Response) => {
       return res.status(202).json({ status: 'ignored', reason: 'no pid' });
     }
 
-    const email = str(data?.customer?.email).toLowerCase();
-    const rawPhone = str(data?.customer?.mobile_number) || str(data?.customer?.phone) || str(data?.customer?.cellphone);
-    const name = str(data?.customer?.name) || 'Aluno';
     const orderId = str(data?.order_number) || str(data?.id) || null;
-    if (!email && !rawPhone) {
+    const result = await processCourseSale({ course, data, orderId });
+
+    return res.json({ status: 'ok', courseId: course.id, userId: result.userId, created: result.created });
+  } catch (error: any) {
+    if (/sem e-mail nem telefone/.test(String(error?.message))) {
       return res.status(400).json({ error: 'sem e-mail nem telefone do comprador' });
     }
-    const phone = rawPhone ? normalizeMzPhone(rawPhone) : '';
-
-    // Conta: reaproveita por e-mail ou telefone (o comprador pode já ser
-    // assinante — nesse caso ganha só o direito ao curso, sem tocar no resto).
-    let user = await prisma.user.findFirst({
-      where: { OR: [...(email ? [{ email }] : []), ...(phone ? [{ phone }] : [])] },
-    });
-
-    let rawPassword: string | null = null;
-    if (!user) {
-      const gen = await generateUserPassword();
-      rawPassword = gen.raw;
-      user = await prisma.user.create({
-        data: {
-          name,
-          email: email || `curso_${Date.now()}@lead.czero.sbs`,
-          phone: phone || `sem_telefone_${Date.now()}`,
-          passwordHash: gen.hash,
-          // Sem assinatura de propósito: ele comprou um curso, não o plano.
-          // O login deixa-o entrar por causa do CourseAccess (auth.routes.ts).
-          subscriptionStatus: 'lead',
-          isActive: true,
-        },
-      });
-    }
-
-    await grantCourseAccess({
-      userId: user.id,
-      courseId: course.id,
-      source: 'purchase',
-      expiresAt: null, // compra de curso é vitalícia
-      orderId,
-    });
-
-    if (rawPassword) {
-      void sendCredentialsEmail({ name: user.name, email: user.email, rawPassword }).catch((e) =>
-        console.error('[CURSO-WEBHOOK] e-mail falhou:', e?.message || e),
-      );
-      if (phone) {
-        void sendCredentialsViaWhatsApp({ phone, email: user.email, rawPassword }).catch((e) =>
-          console.error('[CURSO-WEBHOOK] whatsapp falhou:', e?.message || e),
-        );
-      }
-    }
-
-    console.log(`[CURSO-WEBHOOK] ✅ "${course.name}" libertado para ${user.email} (pedido ${orderId || 'n/d'})`);
-    void sendPushToSuperAdmins({
-      title: '🎓 Venda de curso',
-      body: `${user.name} comprou "${course.name}"`,
-      url: '/admin/cursos',
-    });
-
-    return res.json({ status: 'ok', courseId: course.id, userId: user.id, created: !!rawPassword });
-  } catch (error: any) {
     console.error('[CURSO-WEBHOOK] falhou:', error?.message || error);
     return res.status(500).json({ error: 'erro interno' });
   }

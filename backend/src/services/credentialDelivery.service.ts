@@ -64,12 +64,17 @@ export async function markEmailQuotaExhausted(): Promise<void> {
   console.warn('[ENTREGA] quota de e-mail esgotada — o resto da fila passa para WhatsApp');
 }
 
-/** Põe alguém na fila (idempotente por utilizador). */
-export async function enqueueCredentialDelivery(userId: string, batch?: string): Promise<void> {
+/** Põe alguém na fila (idempotente por utilizador). `productName` entra na
+ *  mensagem para o aluno saber O QUE foi desbloqueado (ex.: o curso da turma). */
+export async function enqueueCredentialDelivery(
+  userId: string,
+  batch?: string,
+  productName?: string,
+): Promise<void> {
   await prisma.credentialDelivery.upsert({
     where: { userId },
-    update: {},
-    create: { userId, batch: batch ?? null },
+    update: { ...(productName ? { productName } : {}) },
+    create: { userId, batch: batch ?? null, productName: productName ?? null },
   });
 }
 
@@ -134,6 +139,7 @@ export async function processCredentialDeliveries(): Promise<{ sent: number; cha
       name: proximo.user.name,
       email: proximo.user.email,
       rawPassword: raw,
+      productName: proximo.productName ?? undefined,
     }).catch((e: any) => ({ ok: false, status: e?.message || 'erro' }) as any);
     ok = !!r?.ok;
     if (ok) await bumpQuota();
@@ -143,6 +149,7 @@ export async function processCredentialDeliveries(): Promise<{ sent: number; cha
       phone: proximo.user.phone,
       email: proximo.user.email,
       rawPassword: raw,
+      productName: proximo.productName ?? undefined,
     }).catch((e: any) => ({ ok: false, status: e?.message || 'erro' }) as any);
     ok = !!r?.ok;
     if (!ok) erro = `whatsapp: ${r?.status ?? 'falhou'}`;

@@ -42,7 +42,10 @@ type Course = {
   id: string; name: string; slug: string; status: string; modules: Mod[];
   accessType?: string; productPid?: string | null; webhookToken?: string | null;
   includedTools?: string[] | null;
+  coproducerId?: string | null; checkoutUrl?: string | null;
 };
+
+type CoproOption = { id: string; code: string; displayName?: string | null; user?: { name?: string } };
 
 function UploadBtn({
   label,
@@ -130,6 +133,15 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
   };
 
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+  const [copros, setCopros] = useState<CoproOption[]>([]);
+
+  // Lista de coprodutores para o seletor (um coprodutor por curso).
+  useEffect(() => {
+    fetch(`${API}/api/admin/coproducers?pageSize=100`, { headers: hdr() })
+      .then((r) => r.json())
+      .then((d) => setCopros(d.coproducers || d.items || []))
+      .catch(() => {});
+  }, []);
 
   // Guarda tipo de acesso / pid. Recarrega para o ecrã reflectir o que ficou.
   const saveAccess = async (patch: Record<string, unknown>) => {
@@ -306,6 +318,43 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
               </p>
             </div>
           )}
+
+          {(course.accessType || "subscription") === "paid" && (
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>Link de compra (checkout)</label>
+              <input
+                className={styles.formInput}
+                defaultValue={course.checkoutUrl || ""}
+                placeholder="https://pay.lojou.app/p/..."
+                onBlur={(e) => saveAccess({ checkoutUrl: e.target.value.trim() })}
+              />
+              <p className={styles.formHint}>
+                Vira o botão &quot;Comprar o curso&quot; no cadeado da área de membros. Use o link /p/ permanente da
+                Lojou (o /token/ expira em horas).
+              </p>
+            </div>
+          )}
+
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Coprodutor deste curso</label>
+            <select
+              className={styles.formInput}
+              value={course.coproducerId || ""}
+              onChange={(e) => saveAccess({ coproducerId: e.target.value || null })}
+            >
+              <option value="">— Nenhum —</option>
+              {copros.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.displayName || c.user?.name || c.code}
+                </option>
+              ))}
+            </select>
+            <p className={styles.formHint}>
+              O coprodutor passa a ver alunos e faturamento deste curso no painel dele, e pode matricular alunos
+              (cada matrícula te avisa por push e fica no feed de Atividade). O acerto é por fora — nada entra no
+              rateio de sócios.
+            </p>
+          </div>
         </div>
 
         <div className={styles.formGroup} style={{ marginTop: 4 }}>

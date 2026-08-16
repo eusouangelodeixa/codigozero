@@ -18,6 +18,7 @@ import {
 import { detectOrderBump } from '../lib/orderBump';
 import { getActivePrice } from '../lib/pricing';
 import { resolveCoproducerForOrder, notifyCoproducer } from '../services/coproducer.service';
+import { processCourseSale, lojouPayloadPid } from '../services/courseSale.service';
 import { computeFees } from '../lib/fees';
 import { isStripeConfigured, verifyStripeWebhook, retrieveCustomer, getStripe } from '../services/stripe.service';
 import { sendCancellationMessage } from '../services/lifecycle.service';
@@ -453,14 +454,41 @@ async function handleLojouWebhook(
           select: { referredByCoproducer: true },
         });
         // Rota por coprodução → atribuição forçada; senão resolve por pid/código.
+        // O pid é lido nos formatos que a Lojou usa (product_pid OU pid — o
+        // handler antigo só lia `pid` e a atribuição falhava em silêncio
+        // quando vinha `product_pid`).
+        const orderPid = lojouPayloadPid(data);
         const coproducer =
           opts.forcedCoproducer ??
           (await resolveCoproducerForOrder({
-            productPid: data.product?.pid || null,
+            productPid: orderPid || null,
             buyerReferralCode: preBuyerForCoproducer?.referredByCoproducer || null,
           }));
         if (coproducer) {
           console.log(`[WEBHOOK] 🤝 Attributed to coproducer ${coproducer.code} (id=${coproducer.id})`);
+        }
+
+        // ── Validação do produto (a conta Lojou é PARTILHADA) ────────────
+        // Sem isto, QUALQUER venda aprovada da conta virava assinatura
+        // completa da plataforma — inclusive a compra de um curso avulso ou
+        // um produto de outro negócio. Regra: produto principal e vendas de
+        // coprodutor seguem o fluxo normal; pid de um CURSO roteia para a
+        // venda de curso (que nunca toca em sócios/afiliados); pid
+        // desconhecido é reconhecido e ignorado. Payload SEM pid segue o
+        // fluxo normal — formatos antigos da Lojou não traziam o campo e não
+        // se descarta um pagamento real por causa disso.
+        if (!coproducer && orderPid && env.LOJOU_PRODUCT_PID && orderPid !== env.LOJOU_PRODUCT_PID) {
+          const course = await prisma.course.findFirst({
+            where: { productPid: orderPid },
+            select: { id: true, name: true, slug: true, coproducerId: true },
+          });
+          if (course) {
+            console.log(`[WEBHOOK] 🎓 pid ${orderPid} é o curso "${course.name}" — roteando para venda de curso`);
+            const r = await processCourseSale({ course, data, orderId: orderId ? String(orderId) : null });
+            return res.json({ status: 'course_sale', courseId: course.id, userId: r.userId });
+          }
+          console.warn(`[WEBHOOK] ⛔ pid ${orderPid} não é o produto principal, nem coprodução, nem curso — ignorado`);
+          return res.status(202).json({ status: 'ignored', reason: 'unknown product pid' });
         }
 
         // ── Close Friends / bump detection ───────────────────────────────
@@ -657,6 +685,8 @@ async function handleLojouWebhook(
             lojouFee: fees.lojouFee,
             coproducerFee: fees.coproducerFee,
             netAmount: fees.netAmount,
+            productPid: orderPid || null,
+            productName,
           },
           create: {
             orderId: String(orderId),
@@ -676,6 +706,8 @@ async function handleLojouWebhook(
             lojouFee: fees.lojouFee,
             coproducerFee: fees.coproducerFee,
             netAmount: fees.netAmount,
+            productPid: orderPid || null,
+            productName,
           },
         });
 
@@ -779,7 +811,7 @@ async function handleLojouWebhook(
 
             // Also deliver the credentials by e-mail (Resend) — independent of
             // WhatsApp, so the buyer has a durable copy even if Komunika fails.
-            sendCredentialsEmail({ name: user.name, email: user.email, rawPassword }).catch((e) =>
+            sendCredentialsEmail({ name: user.name, email: user.email, rawPassword, productName }).catch((e) =>
               console.error('[WEBHOOK] credentials e-mail failed (non-blocking):', e?.message || e),
             );
 
@@ -798,6 +830,7 @@ async function handleLojouWebhook(
               const credentialMsg = [
                 `🎉 *Bem-vindo ao Código Zero!*`,
                 ``,
+                `📦 *Produto:* ${productName}`,
                 `Sua conta foi criada com sucesso.`,
                 ``,
                 `📧 *Email:* ${user.email}`,
@@ -956,6 +989,40 @@ async function handleLojouWebhook(
       }
 
       case 'order.refunded': {
+        // ── Reembolso de VENDA DE CURSO: caminho próprio ─────────────────
+        // O fluxo abaixo é de assinatura (desativa o usuário, corta Komunika,
+        // decrementa contador) — nada disso pode rodar para quem comprou um
+        // curso avulso (que pode inclusive ser assinante em dia). Aqui só se
+        // revoga o acesso ao curso e se marca a transação.
+        if (existingTransaction?.courseId) {
+          if (existingTransaction.status !== 'refunded') {
+            await prisma.transaction.update({
+              where: { orderId: String(orderId) },
+              data: { status: 'refunded', metadata: data },
+            });
+            const buyer = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  ...(existingTransaction.userEmail ? [{ email: existingTransaction.userEmail }] : []),
+                  ...(existingTransaction.userPhone ? [{ phone: existingTransaction.userPhone }] : []),
+                ],
+              },
+              select: { id: true, name: true },
+            });
+            if (buyer) {
+              await prisma.courseAccess.deleteMany({
+                where: { userId: buyer.id, courseId: existingTransaction.courseId },
+              });
+            }
+            sendPushToSuperAdmins({
+              title: '🔄 Reembolso de curso',
+              body: `Pedido ${orderId} (curso) reembolsado${buyer ? ` — ${buyer.name}` : ''}`,
+              url: '/admin/cursos',
+            }).catch(() => {});
+          }
+          return res.json({ status: 'course_refund_processed' });
+        }
+
         // Find user by order and deactivate. Idempotente: só roda os efeitos
         // (desativar usuário, decrementar contador, marcar tx, notificar) se a
         // transação ainda NÃO estava reembolsada — assim uma re-entrega do

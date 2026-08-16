@@ -532,6 +532,9 @@ router.get('/finance', async (req: AuthRequest, res: Response) => {
           orderBumpAmount: true,
           coproducerId: true,
           coproducer: { select: { id: true, code: true, displayName: true, user: { select: { name: true } } } },
+          productName: true,
+          courseId: true,
+          course: { select: { id: true, name: true } },
           gateway: true,
           stripePaymentIntentId: true,
         },
@@ -3623,6 +3626,34 @@ router.get('/finance/export', async (req: AuthRequest, res: Response) => {
     }
     console.error('[ADMIN] Finance export error:', error);
     res.status(500).json({ error: 'Erro ao exportar transações' });
+  }
+});
+
+/**
+ * GET /api/admin/events?page=1&type=copro_enroll
+ * Feed de Atividade do admin: eventos operacionais (venda de curso, aluno
+ * matriculado por coprodutor, …) gravados por logAdminEvent. O push já avisa
+ * na hora; isto é o registro pra quem não estava com o telefone na mão.
+ */
+router.get('/events', async (req: AuthRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || '1')) || 1);
+    const perPage = 30;
+    const type = String(req.query.type || '').trim();
+    const where = type ? { type } : {};
+    const [total, events] = await Promise.all([
+      prisma.adminEvent.count({ where }),
+      prisma.adminEvent.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+    ]);
+    res.json({ total, page, perPage, events });
+  } catch (error) {
+    console.error('[ADMIN] events feed error:', error);
+    res.status(500).json({ error: 'Erro ao carregar atividade' });
   }
 });
 

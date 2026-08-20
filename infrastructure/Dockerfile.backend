@@ -10,8 +10,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install Playwright dependencies for the scraper
-RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
+# Playwright (scraper) + ffmpeg/ffprobe (transcodificação de vídeo → HLS)
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont ffmpeg
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 

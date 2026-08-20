@@ -8,6 +8,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as r2 from './r2.service';
+import { kickWorker as kickTranscodeWorker } from './transcode.service';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -188,6 +189,8 @@ export function serializeVideoMeta(l: {
   videoMimeType: string | null;
   videoType: string | null;
   videoUploadedAt: Date | null;
+  transcodeStatus?: string | null;
+  transcodeError?: string | null;
 }) {
   return {
     hasVideo: l.storageProvider === 'r2' && !!l.videoKey,
@@ -198,6 +201,8 @@ export function serializeVideoMeta(l: {
     videoMimeType: l.videoMimeType,
     videoType: l.videoType,
     videoUploadedAt: l.videoUploadedAt,
+    transcodeStatus: l.transcodeStatus ?? null,
+    transcodeError: l.transcodeError ?? null,
   };
 }
 
@@ -300,10 +305,15 @@ export async function completeVideoUpload(lessonId: string, input: Record<string
       videoType,
       storageProvider: 'r2',
       videoUploadedAt: new Date(),
+      // MP4 entra na fila de transcodificação p/ gerar as faixas HLS de qualidade;
+      // .m3u8 já veio como HLS, não transcodifica.
+      transcodeStatus: videoType === 'mp4' ? 'pending' : null,
+      transcodeError: null,
       ...(durationInt && !existing?.duration ? { duration: durationInt } : {}),
       ...(thumbnailUrl && !existing?.thumbnailUrl ? { thumbnailUrl } : {}),
     },
   });
+  if (videoType === 'mp4') kickTranscodeWorker();
   return serializeVideoMeta(updated);
 }
 
@@ -342,6 +352,7 @@ export async function deleteVideo(lessonId: string) {
     data: {
       videoKey: null, videoSize: null, videoDuration: null, videoMimeType: null,
       videoType: null, storageProvider: 'embed', videoUploadedAt: null,
+      transcodeStatus: null, transcodeError: null,
     },
   });
   return serializeVideoMeta(updated);

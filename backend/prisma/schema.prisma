@@ -414,6 +414,11 @@ model Lesson {
   videoType       String?   // 'mp4' | 'hls'
   storageProvider String    @default("embed") // 'embed' | 'r2'
   videoUploadedAt DateTime?
+  // Transcodificação MP4 → HLS multi-bitrate (ffmpeg, fila 1-por-vez no backend).
+  // null = não se aplica (embed / ainda MP4 puro); 'pending'|'processing'|'ready'|'failed'.
+  // O MP4 toca na hora; quando 'ready', videoType vira 'hls' e o player oferece qualidade.
+  transcodeStatus String?
+  transcodeError  String?
 
   progress LessonProgress[]
 

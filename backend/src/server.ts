@@ -269,6 +269,9 @@ app.listen(env.PORT, () => {
     // Disparos de broadcast interrompidos por restart/deploy retomam de onde
     // pararam (o job e cada destinatário vivem no banco).
     void import('./services/broadcast.service').then((m) => m.resumeInterruptedBroadcasts());
+    // Fila de transcodificação de vídeo (MP4 → HLS): destrava jobs presos por
+    // restart e processa os pendentes (1 por vez, ffmpeg com prioridade baixa).
+    void import('./services/transcode.service').then((m) => m.initTranscodeWorker());
   }
 });
 

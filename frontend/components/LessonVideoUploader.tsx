@@ -28,6 +28,8 @@ type VideoMeta = {
   videoMimeType: string | null;
   videoType: string | null;
   videoUploadedAt: string | null;
+  transcodeStatus?: string | null; // pending | processing | ready | failed
+  transcodeError?: string | null;
 };
 
 type Phase = "idle" | "preparing" | "uploading" | "finalizing" | "done" | "error";
@@ -155,6 +157,14 @@ export default function LessonVideoUploader({
   }, [lessonId, apiBase]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
+
+  // Enquanto a transcodificação HLS roda, atualiza o status sozinho (12s).
+  useEffect(() => {
+    const st = meta?.transcodeStatus;
+    if (st !== "pending" && st !== "processing") return;
+    const t = setInterval(() => { loadMeta(); }, 12000);
+    return () => clearInterval(t);
+  }, [meta?.transcodeStatus, loadMeta]);
 
   const reset = () => {
     setPhase("idle"); setPct(0); setSpeed(0); setEta(0); setFileName(""); setFileSize(0);
@@ -349,9 +359,18 @@ export default function LessonVideoUploader({
       {meta?.hasVideo && !busy && phase !== "error" && (
         <div style={card}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={badge("var(--accent-dim)", "var(--accent)")}>R2 · {meta.videoType?.toUpperCase() || "MP4"}</span>
               <span style={badge("rgba(34,197,94,0.15)", "var(--color-success)")}>✓ Pronto</span>
+              {(meta.transcodeStatus === "pending" || meta.transcodeStatus === "processing") && (
+                <span style={badge("rgba(251,191,36,0.15)", "#fbbf24")}>⏳ Gerando qualidades…</span>
+              )}
+              {meta.transcodeStatus === "ready" && (
+                <span style={badge("rgba(45,212,191,0.15)", "var(--accent)")}>◆ Qualidades HD</span>
+              )}
+              {meta.transcodeStatus === "failed" && (
+                <span style={badge("rgba(248,113,113,0.15)", "#f87171")} title={meta.transcodeError || ""}>⚠ Conversão falhou</span>
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <label style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 600 }}>
@@ -361,7 +380,7 @@ export default function LessonVideoUploader({
               <button type="button" onClick={removeVideo} style={{ fontSize: 13, color: "#f87171", fontWeight: 600 }}>Remover</button>
             </div>
           </div>
-          {previewUrl && meta.videoType !== "hls" && (
+          {previewUrl && (
             <video src={previewUrl} controls preload="metadata" style={{ width: "100%", maxHeight: 220, borderRadius: "var(--radius-md)", background: "#000", marginBottom: 10 }} />
           )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, fontSize: 12.5 }}>

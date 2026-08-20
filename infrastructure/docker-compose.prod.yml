@@ -70,6 +70,8 @@ services:
       - R2_BUCKET=${R2_BUCKET:-}
       - R2_ENDPOINT=${R2_ENDPOINT:-}
       - R2_REGION=${R2_REGION:-auto}
+      # Emergência de CPU: TRANSCODE_DISABLED=1 pausa a transcodificação HLS.
+      - TRANSCODE_DISABLED=${TRANSCODE_DISABLED:-}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@czero.sbs}

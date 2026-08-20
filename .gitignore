@@ -39,3 +39,6 @@ npm-debug.log*
 
 # Prints de referência (material de sessão, não é código)
 members/
+# ...mas os componentes da área de membros NÃO são prints — não ignorar.
+!frontend/components/members/
+!frontend/components/members/**

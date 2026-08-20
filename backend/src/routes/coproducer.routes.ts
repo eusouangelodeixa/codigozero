@@ -7,6 +7,8 @@ import { resolveWindow, InvalidPeriodError } from '../lib/period';
 import { sendPushToSuperAdmins } from '../services/push.service';
 import { logAdminEvent } from '../services/adminEvents.service';
 import { sanitizeMetaPixelId, sanitizeGa4Id, sanitizeTiktokPixelId } from '../lib/pixelSnippets';
+import { handleCourseMediaUpload } from '../lib/coursesMediaUpload';
+import * as content from '../services/courseContent.service';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -594,6 +596,172 @@ router.post('/courses/:id/students', async (req: AuthRequest, res: Response) => 
     console.error('[COPRODUCER] add student error:', error);
     res.status(500).json({ error: 'Erro ao matricular aluno' });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// GESTÃO DE CONTEÚDO — módulos, aulas e vídeo do(s) curso(s) que ele coproduz.
+//
+// Reusa 100% a lógica do admin (services/courseContent.service) — a diferença é
+// só a AUTORIZAÇÃO: cada operação é travada ao curso do coprodutor (o guard
+// resolve o curso a partir de course/module/lesson e confere coproducerId).
+// ══════════════════════════════════════════════════════════════════════════
+
+/** ContentError → HTTP; erro genérico → 500. */
+function handleContentError(res: Response, error: unknown, ctx: string): void {
+  if (error instanceof content.ContentError) {
+    res.status(error.status).json({ error: error.message });
+    return;
+  }
+  console.error(`[COPRODUCER] ${ctx} failed:`, error);
+  res.status(500).json({ error: 'Erro no servidor' });
+}
+
+/** O coprodutor é dono do curso do parâmetro :id? Envia 404 e retorna false se não. */
+async function guardCourseParam(req: AuthRequest, res: Response): Promise<boolean> {
+  const course = await ownCourse(req.coproducer!.id, String(req.params.id));
+  if (!course) { res.status(404).json({ error: 'Curso não encontrado' }); return false; }
+  return true;
+}
+/** O :id é um módulo de um curso dele? */
+async function guardModuleParam(req: AuthRequest, res: Response): Promise<boolean> {
+  const courseId = await content.courseIdOfModule(String(req.params.id));
+  const course = courseId ? await ownCourse(req.coproducer!.id, courseId) : null;
+  if (!course) { res.status(404).json({ error: 'Módulo não encontrado' }); return false; }
+  return true;
+}
+/** O :id é uma aula de um curso dele? */
+async function guardLessonParam(req: AuthRequest, res: Response): Promise<boolean> {
+  const courseId = await content.courseIdOfLesson(String(req.params.id));
+  const course = courseId ? await ownCourse(req.coproducer!.id, courseId) : null;
+  if (!course) { res.status(404).json({ error: 'Aula não encontrada' }); return false; }
+  return true;
+}
+
+// GET /api/coproducer/courses/:id — curso completo (módulos + aulas) para o editor.
+router.get('/courses/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardCourseParam(req, res))) return;
+    res.json({ course: await content.getCourseForEditor(String(req.params.id)) });
+  } catch (e) { handleContentError(res, e, 'get course'); }
+});
+
+// PATCH /api/coproducer/courses/:id — SÓ campos de conteúdo/apresentação.
+// Campos comerciais (accessType, preço, coprodutor, webhook) continuam do admin.
+router.patch('/courses/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardCourseParam(req, res))) return;
+    const { name, coverUrl, status, config } = req.body || {};
+    const data: Record<string, unknown> = {};
+    if (typeof name === 'string' && name.trim()) data.name = name.trim();
+    if (coverUrl !== undefined) data.coverUrl = coverUrl || null;
+    if (status === 'draft' || status === 'published') data.status = status;
+    if (config !== undefined) data.config = config;
+    const course = await prisma.course.update({ where: { id: String(req.params.id) }, data });
+    res.json({ course });
+  } catch (e) { handleContentError(res, e, 'patch course'); }
+});
+
+// POST /api/coproducer/upload — mesma pipeline de mídia do admin (webp/PDF).
+router.post('/upload', handleCourseMediaUpload);
+
+// ── Módulos ──
+router.post('/courses/:id/modules', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardCourseParam(req, res))) return;
+    res.json({ module: await content.createModule(String(req.params.id), req.body || {}) });
+  } catch (e) { handleContentError(res, e, 'create module'); }
+});
+router.post('/courses/:id/modules/reorder', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardCourseParam(req, res))) return;
+    await content.reorderModules(String(req.params.id), req.body?.ids || []);
+    res.json({ success: true });
+  } catch (e) { handleContentError(res, e, 'reorder modules'); }
+});
+router.patch('/modules/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardModuleParam(req, res))) return;
+    res.json({ module: await content.updateModule(String(req.params.id), req.body || {}) });
+  } catch (e) { handleContentError(res, e, 'patch module'); }
+});
+router.delete('/modules/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardModuleParam(req, res))) return;
+    await content.deleteModule(String(req.params.id));
+    res.json({ success: true });
+  } catch (e) { handleContentError(res, e, 'delete module'); }
+});
+
+// ── Aulas ──
+router.post('/modules/:id/lessons', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardModuleParam(req, res))) return;
+    res.json({ lesson: await content.createLesson(String(req.params.id), req.body || {}) });
+  } catch (e) { handleContentError(res, e, 'create lesson'); }
+});
+router.post('/modules/:id/lessons/reorder', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardModuleParam(req, res))) return;
+    await content.reorderLessons(String(req.params.id), req.body?.ids || []);
+    res.json({ success: true });
+  } catch (e) { handleContentError(res, e, 'reorder lessons'); }
+});
+router.patch('/lessons/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    // Mover de módulo: o módulo destino também precisa ser de um curso dele.
+    if (typeof req.body?.moduleId === 'string' && req.body.moduleId) {
+      const targetCourseId = await content.courseIdOfModule(req.body.moduleId);
+      const targetOwned = targetCourseId ? await ownCourse(req.coproducer!.id, targetCourseId) : null;
+      if (!targetOwned) return res.status(403).json({ error: 'Módulo destino não é seu.' });
+    }
+    res.json({ lesson: await content.updateLesson(String(req.params.id), req.body || {}) });
+  } catch (e) { handleContentError(res, e, 'patch lesson'); }
+});
+router.delete('/lessons/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    await content.deleteLesson(String(req.params.id));
+    res.json({ success: true });
+  } catch (e) { handleContentError(res, e, 'delete lesson'); }
+});
+
+// ── Vídeo (R2) — mesmo fluxo/segurança do admin, travado ao curso dele ──
+router.post('/lessons/:id/video/init', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    res.json(await content.initVideoUpload(String(req.params.id), req.body || {}));
+  } catch (e) { handleContentError(res, e, 'video/init'); }
+});
+router.post('/lessons/:id/video/sign-part', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    res.json(await content.signVideoPart(String(req.params.id), req.body || {}));
+  } catch (e) { handleContentError(res, e, 'video/sign-part'); }
+});
+router.post('/lessons/:id/video/complete', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    res.json({ video: await content.completeVideoUpload(String(req.params.id), req.body || {}) });
+  } catch (e) { handleContentError(res, e, 'video/complete'); }
+});
+router.post('/lessons/:id/video/abort', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    res.json(await content.abortVideoUpload(String(req.params.id), req.body || {}));
+  } catch (e) { handleContentError(res, e, 'video/abort'); }
+});
+router.get('/lessons/:id/video', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    res.json(await content.getVideoMeta(String(req.params.id)));
+  } catch (e) { handleContentError(res, e, 'get video'); }
+});
+router.delete('/lessons/:id/video', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!(await guardLessonParam(req, res))) return;
+    res.json({ video: await content.deleteVideo(String(req.params.id)) });
+  } catch (e) { handleContentError(res, e, 'delete video'); }
 });
 
 export default router;

@@ -1,51 +1,37 @@
-import { isAllowedUpload } from '../lib/uploadGuards';
 /**
  * Admin da área de membros multi-curso. Mounted em /api/admin/members.
  *
  * Cursos CRUD (o PATCH de curso recebe `config` — é o botão Salvar do editor
- * WYSIWYG), gestor de conteúdo (módulos/aulas com reorder transacional e
- * mover aula de módulo) e upload de mídia (uploads/courses, webp ≤1920 —
- * o bg da página de login é 1920x1080; o cap padrão de 1600 encolheria).
- * Substitui o CRUD antigo de módulos/aulas do admin.routes (removido na
- * fase de limpeza da Forja).
+ * WYSIWYG) + comerciais (acesso/venda/coprodutor). O CONTEÚDO em si (módulos,
+ * aulas, vídeo R2) e o upload de mídia vivem em serviços COMPARTILHADOS com o
+ * coprodutor (services/courseContent.service + lib/coursesMediaUpload) — os
+ * handlers aqui são finos. Substitui o CRUD antigo do admin.routes (Forja).
  */
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { authMiddleware, AuthRequest } from '../middlewares/auth.middleware';
 import { adminMiddleware } from '../middlewares/admin.middleware';
-import { optimizeImage } from '../lib/image';
-import { sendPushBroadcast } from './auth.routes';
 import { newCourseWebhookToken } from './courseWebhook.routes';
 import { env } from '../config/env';
 import { bulkEnroll, parseBulkList } from '../services/bulkEnroll.service';
-import * as r2 from '../services/r2.service';
+import { handleCourseMediaUpload } from '../lib/coursesMediaUpload';
+import * as content from '../services/courseContent.service';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
-const coursesMediaDir = path.join(__dirname, '..', '..', 'uploads', 'courses');
-fs.mkdirSync(coursesMediaDir, { recursive: true });
-
-const coursesUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, coursesMediaDir),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || '';
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
-    },
-  }),
-  limits: { fileSize: 25 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (isAllowedUpload(file.mimetype, { pdf: true })) cb(null, true);
-    else cb(new Error('Apenas imagens ou PDF são permitidos'));
-  },
-});
-
 router.use(authMiddleware);
 router.use(adminMiddleware);
+
+/** Converte ContentError → resposta HTTP; erro genérico → 500. */
+function handleContentError(res: Response, error: unknown, ctx: string): void {
+  if (error instanceof content.ContentError) {
+    res.status(error.status).json({ error: error.message });
+    return;
+  }
+  console.error(`[ADMIN-MEMBERS] ${ctx} failed:`, error);
+  res.status(500).json({ error: 'Erro no servidor' });
+}
 
 // Slugs que colidem com rotas fixas do app members (app/members/{login,sso}
 // e a raiz de cursos do admin).
@@ -77,27 +63,7 @@ async function uniqueCourseSlug(base: string, ignoreId?: string): Promise<string
 // ── Upload ──────────────────────────────────────────────────────────────────
 
 // POST /api/admin/members/upload — capas, posters, logos, bg de login, thumbs.
-router.post('/upload', (req: AuthRequest, res: Response) => {
-  coursesUpload.single('file')(req, res, async (err: any) => {
-    if (err) return res.status(400).json({ error: err.message || 'Falha no upload' });
-    if (!req.file) return res.status(400).json({ error: 'Arquivo ausente' });
-
-    const isPdf = req.file.mimetype === 'application/pdf';
-    let filename = req.file.filename;
-    if (!isPdf) {
-      const optimized = await optimizeImage(req.file.path, { maxDim: 1920, format: 'webp' });
-      if (optimized) filename = optimized.filename;
-    }
-    // URL absoluta: members.czero.sbs é outra origem; /uploads é servido pelo
-    // host do backend (app.czero.sbs) — mesmo racional do upload de conteúdo.
-    const base = `${req.protocol}://${req.get('host')}`;
-    return res.json({
-      url: `${base}/uploads/courses/${filename}`,
-      name: req.file.originalname,
-      type: isPdf ? 'file' : 'image',
-    });
-  });
-});
+router.post('/upload', handleCourseMediaUpload);
 
 // ── Cursos ──────────────────────────────────────────────────────────────────
 
@@ -395,477 +361,84 @@ router.delete('/courses/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ── Módulos ─────────────────────────────────────────────────────────────────
+// ── Módulos ──────────────────────────────────────────────────────────────────
+// Lógica compartilhada em services/courseContent.service (mesma do coprodutor).
 
-// POST /api/admin/members/courses/:id/modules { title, description?, coverUrl? }
 router.post('/courses/:id/modules', async (req: AuthRequest, res: Response) => {
-  try {
-    const courseId = String(req.params.id);
-    const { title, description, coverUrl } = req.body || {};
-    if (!title || !String(title).trim()) return res.status(400).json({ error: 'Informe o título' });
-    const last = await prisma.module.findFirst({
-      where: { courseId },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
-    });
-    const mod = await prisma.module.create({
-      data: {
-        courseId,
-        title: String(title).trim(),
-        description: description || null,
-        coverUrl: coverUrl || null,
-        sortOrder: (last?.sortOrder ?? -1) + 1,
-      },
-    });
-    return res.json({ module: mod });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] create module failed:', error);
-    return res.status(500).json({ error: 'Erro ao criar módulo' });
-  }
+  try { res.json({ module: await content.createModule(String(req.params.id), req.body || {}) }); }
+  catch (e) { handleContentError(res, e, 'create module'); }
 });
 
-// PATCH /api/admin/members/modules/:id { title?, description?, coverUrl?, sortOrder? }
 router.patch('/modules/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    const { title, description, coverUrl, sortOrder, isFree } = req.body || {};
-    const data: Record<string, unknown> = {};
-    if (typeof isFree === 'boolean') data.isFree = isFree;
-    if (typeof title === 'string' && title.trim()) data.title = title.trim();
-    if (description !== undefined) data.description = description || null;
-    if (coverUrl !== undefined) data.coverUrl = coverUrl || null;
-    if (Number.isInteger(sortOrder)) data.sortOrder = sortOrder;
-    const mod = await prisma.module.update({ where: { id: String(req.params.id) }, data });
-    return res.json({ module: mod });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] patch module failed:', error);
-    return res.status(500).json({ error: 'Erro ao salvar módulo' });
-  }
+  try { res.json({ module: await content.updateModule(String(req.params.id), req.body || {}) }); }
+  catch (e) { handleContentError(res, e, 'patch module'); }
 });
 
-// DELETE /api/admin/members/modules/:id
 router.delete('/modules/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    await prisma.module.delete({ where: { id: String(req.params.id) } });
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] delete module failed:', error);
-    return res.status(500).json({ error: 'Erro ao excluir módulo' });
-  }
+  try { await content.deleteModule(String(req.params.id)); res.json({ success: true }); }
+  catch (e) { handleContentError(res, e, 'delete module'); }
 });
 
-// POST /api/admin/members/courses/:id/modules/reorder { ids: [] } — ordem nova
-// completa, transacional (padrão drag-and-drop do gestor).
 router.post('/courses/:id/modules/reorder', async (req: AuthRequest, res: Response) => {
-  try {
-    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
-    if (!ids.length) return res.status(400).json({ error: 'ids é obrigatório' });
-    await prisma.$transaction(
-      ids.map((id, i) => prisma.module.update({ where: { id }, data: { sortOrder: i } })),
-    );
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] reorder modules failed:', error);
-    return res.status(500).json({ error: 'Erro ao reordenar módulos' });
-  }
+  try { await content.reorderModules(String(req.params.id), req.body?.ids || []); res.json({ success: true }); }
+  catch (e) { handleContentError(res, e, 'reorder modules'); }
 });
 
-// ── Aulas ───────────────────────────────────────────────────────────────────
+// ── Aulas ────────────────────────────────────────────────────────────────────
 
-// POST /api/admin/members/modules/:id/lessons — mantém o push broadcast de
-// aula nova do CRUD antigo, agora apontando para a área de membros.
 router.post('/modules/:id/lessons', async (req: AuthRequest, res: Response) => {
-  try {
-    const moduleId = String(req.params.id);
-    const { title, description, videoUrl, duration, thumbnailUrl, content, materials, tools } = req.body || {};
-    if (!title || !String(title).trim()) return res.status(400).json({ error: 'Informe o título' });
-
-    const mod = await prisma.module.findUnique({
-      where: { id: moduleId },
-      include: { course: { select: { slug: true, status: true } } },
-    });
-    if (!mod) return res.status(404).json({ error: 'Módulo não encontrado' });
-
-    const last = await prisma.lesson.findFirst({
-      where: { moduleId },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
-    });
-    const lesson = await prisma.lesson.create({
-      data: {
-        moduleId,
-        title: String(title).trim(),
-        description: description || null,
-        videoUrl: videoUrl || '',
-        duration: Number.isInteger(duration) ? duration : null,
-        thumbnailUrl: thumbnailUrl || null,
-        content: content || null,
-        materials: materials ?? undefined,
-        tools: tools ?? undefined,
-        sortOrder: (last?.sortOrder ?? -1) + 1,
-      },
-    });
-
-    // 🔔 Aula nova → push pros alunos (só quando o curso já está publicado).
-    if (mod.course.status === 'published') {
-      sendPushBroadcast(
-        {
-          title: '🎓 Nova Aula Disponível!',
-          body: `${lesson.title} — ${mod.title}`,
-          url: `https://members.czero.sbs/${mod.course.slug}`,
-        },
-        'system',
-      ).catch(() => {});
-    }
-
-    return res.json({ lesson });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] create lesson failed:', error);
-    return res.status(500).json({ error: 'Erro ao criar aula' });
-  }
+  try { res.json({ lesson: await content.createLesson(String(req.params.id), req.body || {}) }); }
+  catch (e) { handleContentError(res, e, 'create lesson'); }
 });
 
-// PATCH /api/admin/members/lessons/:id — todos os campos + moduleId (mover
-// de módulo: entra no fim do módulo destino).
 router.patch('/lessons/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    const id = String(req.params.id);
-    const { title, description, videoUrl, duration, thumbnailUrl, content, materials, tools, sortOrder, moduleId } =
-      req.body || {};
-    const data: Record<string, unknown> = {};
-    if (typeof title === 'string' && title.trim()) data.title = title.trim();
-    if (description !== undefined) data.description = description || null;
-    if (videoUrl !== undefined) data.videoUrl = videoUrl || '';
-    if (duration !== undefined) data.duration = Number.isInteger(duration) ? duration : null;
-    if (thumbnailUrl !== undefined) data.thumbnailUrl = thumbnailUrl || null;
-    if (content !== undefined) data.content = content || null;
-    if (materials !== undefined) data.materials = materials;
-    if (tools !== undefined) data.tools = tools;
-    if (Number.isInteger(sortOrder)) data.sortOrder = sortOrder;
-    if (typeof moduleId === 'string' && moduleId) {
-      const target = await prisma.module.findUnique({ where: { id: moduleId }, select: { id: true } });
-      if (!target) return res.status(404).json({ error: 'Módulo destino não encontrado' });
-      const last = await prisma.lesson.findFirst({
-        where: { moduleId },
-        orderBy: { sortOrder: 'desc' },
-        select: { sortOrder: true },
-      });
-      data.moduleId = moduleId;
-      data.sortOrder = (last?.sortOrder ?? -1) + 1;
-    }
-    const lesson = await prisma.lesson.update({ where: { id }, data });
-    return res.json({ lesson });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] patch lesson failed:', error);
-    return res.status(500).json({ error: 'Erro ao salvar aula' });
-  }
+  try { res.json({ lesson: await content.updateLesson(String(req.params.id), req.body || {}) }); }
+  catch (e) { handleContentError(res, e, 'patch lesson'); }
 });
 
-// DELETE /api/admin/members/lessons/:id
 router.delete('/lessons/:id', async (req: AuthRequest, res: Response) => {
-  try {
-    await prisma.lesson.delete({ where: { id: String(req.params.id) } });
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] delete lesson failed:', error);
-    return res.status(500).json({ error: 'Erro ao excluir aula' });
-  }
+  try { await content.deleteLesson(String(req.params.id)); res.json({ success: true }); }
+  catch (e) { handleContentError(res, e, 'delete lesson'); }
+});
+
+router.post('/modules/:id/lessons/reorder', async (req: AuthRequest, res: Response) => {
+  try { await content.reorderLessons(String(req.params.id), req.body?.ids || []); res.json({ success: true }); }
+  catch (e) { handleContentError(res, e, 'reorder lessons'); }
 });
 
 // ── Vídeo da aula no Cloudflare R2 (bucket privado) ──────────────────────────
-//
-// Fluxo de upload (arquivos até 20 GB, sem passar pela memória do backend):
-//   1. POST /lessons/:id/video/init      → abre o multipart no R2, devolve uploadId+key
-//   2. POST /lessons/:id/video/sign-part → assina o PUT de cada parte (browser → R2 direto)
-//   3. POST /lessons/:id/video/complete  → finaliza o multipart e grava a KEY na aula
-//   (cancelar)  POST /lessons/:id/video/abort
-//   (ver)       GET  /lessons/:id/video      → metadados + preview assinado (admin)
-//   (remover)   DELETE /lessons/:id/video
-//
-// Nunca gravamos URL pública — só a KEY. O player recebe URL assinada de 5 min
-// (ver GET /api/members/video/:lessonId).
+// Fluxo: init → sign-part (browser→R2 direto) → complete; abort/get/delete.
+// Nunca gravamos URL pública — só a KEY. Player recebe URL assinada de 5 min.
+// Toda a lógica em services/courseContent.service (compartilhada c/ coprodutor).
 
-const MAX_VIDEO_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB por arquivo
-const ALLOWED_VIDEO_EXT = new Set(['mp4', 'mov', 'mkv', 'webm', 'm3u8']);
-const ALLOWED_VIDEO_MIME = new Set([
-  'video/mp4',
-  'video/quicktime', // .mov
-  'video/x-matroska', // .mkv
-  'video/webm',
-  'application/x-mpegurl', // .m3u8
-  'application/vnd.apple.mpegurl', // .m3u8
-]);
-
-/** Carrega a aula + o id do curso (necessário pro prefixo no R2). */
-async function loadLessonWithCourse(lessonId: string) {
-  return prisma.lesson.findUnique({
-    where: { id: lessonId },
-    include: { module: { select: { courseId: true } } },
-  });
-}
-
-/** Metadados de vídeo prontos pro JSON (BigInt → Number; 20 GB cabe em Number). */
-function serializeVideoMeta(l: {
-  storageProvider: string;
-  videoKey: string | null;
-  videoSize: bigint | null;
-  videoDuration: number | null;
-  videoMimeType: string | null;
-  videoType: string | null;
-  videoUploadedAt: Date | null;
-}) {
-  return {
-    hasVideo: l.storageProvider === 'r2' && !!l.videoKey,
-    storageProvider: l.storageProvider,
-    videoKey: l.videoKey,
-    videoSize: l.videoSize == null ? null : Number(l.videoSize),
-    videoDuration: l.videoDuration,
-    videoMimeType: l.videoMimeType,
-    videoType: l.videoType,
-    videoUploadedAt: l.videoUploadedAt,
-  };
-}
-
-/** 503 amigável quando o R2 ainda não foi configurado (env ausente). */
-function ensureR2(res: Response): boolean {
-  if (r2.isR2Configured()) return true;
-  res.status(503).json({
-    error: 'Armazenamento de vídeo (R2) não está configurado no servidor. Defina as variáveis R2_* e reinicie o backend.',
-  });
-  return false;
-}
-
-// POST /api/admin/members/lessons/:id/video/init { filename, size, mimeType }
 router.post('/lessons/:id/video/init', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!ensureR2(res)) return;
-    const lessonId = String(req.params.id);
-    const filename = String(req.body?.filename || '').trim();
-    const size = Number(req.body?.size || 0);
-    const mimeType = String(req.body?.mimeType || '').toLowerCase().trim();
-
-    const lesson = await loadLessonWithCourse(lessonId);
-    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
-
-    if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'Tamanho de arquivo inválido.' });
-    if (size > MAX_VIDEO_BYTES) {
-      return res.status(400).json({ error: 'Arquivo acima do limite de 20 GB. Comprima ou divida o vídeo.' });
-    }
-
-    const ext = r2.extFor(filename, mimeType);
-    const extOk = ALLOWED_VIDEO_EXT.has(ext);
-    // MIME nem sempre vem (alguns navegadores mandam vazio pra .mkv). Se a
-    // extensão é válida, aceitamos; se veio MIME, ele também precisa bater.
-    const mimeOk = !mimeType || ALLOWED_VIDEO_MIME.has(mimeType) || mimeType.startsWith('video/');
-    if (!extOk || !mimeOk) {
-      return res.status(400).json({ error: 'Formato não suportado. Use MP4, MOV, MKV, WEBM ou M3U8 (HLS).' });
-    }
-
-    const videoType = ext === 'm3u8' ? 'hls' : 'mp4';
-    const key = r2.videoKeyFor(lesson.module.courseId, lessonId, ext);
-    const contentType = mimeType || (videoType === 'hls' ? 'application/x-mpegurl' : 'video/mp4');
-    const { uploadId } = await r2.createMultipart({ key, contentType });
-
-    return res.json({
-      uploadId,
-      key,
-      videoType,
-      // Parte recomendada: 64 MB. Mín. do S3/R2 é 5 MB (exceto a última). Com
-      // 64 MB, 20 GB ≈ 320 partes — bem abaixo do teto de 10.000.
-      partSize: 64 * 1024 * 1024,
-      maxParts: 10000,
-    });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] video/init failed:', error);
-    return res.status(500).json({ error: 'Erro ao iniciar o upload do vídeo.' });
-  }
+  try { res.json(await content.initVideoUpload(String(req.params.id), req.body || {})); }
+  catch (e) { handleContentError(res, e, 'video/init'); }
 });
 
-// POST /api/admin/members/lessons/:id/video/sign-part { key, uploadId, partNumber }
 router.post('/lessons/:id/video/sign-part', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!ensureR2(res)) return;
-    const lessonId = String(req.params.id);
-    const key = String(req.body?.key || '');
-    const uploadId = String(req.body?.uploadId || '');
-    const partNumber = Number(req.body?.partNumber || 0);
-
-    const lesson = await loadLessonWithCourse(lessonId);
-    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
-
-    // A key TEM de pertencer a esta aula — impede assinar escrita em qualquer
-    // outro caminho do bucket.
-    const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
-    if (!key.startsWith(prefix)) return res.status(400).json({ error: 'Key inválida para esta aula.' });
-    if (!uploadId) return res.status(400).json({ error: 'uploadId ausente.' });
-    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
-      return res.status(400).json({ error: 'partNumber inválido.' });
-    }
-
-    const url = await r2.signUploadPart({ key, uploadId, partNumber });
-    return res.json({ url });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] video/sign-part failed:', error);
-    return res.status(500).json({ error: 'Erro ao assinar parte do upload.' });
-  }
+  try { res.json(await content.signVideoPart(String(req.params.id), req.body || {})); }
+  catch (e) { handleContentError(res, e, 'video/sign-part'); }
 });
 
-// POST /api/admin/members/lessons/:id/video/complete
-// { key, uploadId, parts:[{partNumber,etag}], duration?, mimeType?, videoType?, thumbnailUrl? }
 router.post('/lessons/:id/video/complete', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!ensureR2(res)) return;
-    const lessonId = String(req.params.id);
-    const key = String(req.body?.key || '');
-    const uploadId = String(req.body?.uploadId || '');
-    const parts = Array.isArray(req.body?.parts) ? req.body.parts : [];
-    const duration = Number(req.body?.duration);
-    const mimeType = String(req.body?.mimeType || '').trim() || null;
-    const videoType = req.body?.videoType === 'hls' ? 'hls' : 'mp4';
-    const thumbnailUrl = req.body?.thumbnailUrl ? String(req.body.thumbnailUrl) : null;
-
-    const lesson = await loadLessonWithCourse(lessonId);
-    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
-
-    const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
-    if (!key.startsWith(prefix)) return res.status(400).json({ error: 'Key inválida para esta aula.' });
-    if (!uploadId) return res.status(400).json({ error: 'uploadId ausente.' });
-    const normParts = parts
-      .map((p: any) => ({ partNumber: Number(p?.partNumber), etag: String(p?.etag || '') }))
-      .filter((p: any) => Number.isInteger(p.partNumber) && p.etag);
-    if (!normParts.length) return res.status(400).json({ error: 'Nenhuma parte enviada.' });
-
-    await r2.completeMultipart({ key, uploadId, parts: normParts });
-
-    // Tamanho autoritativo vem do próprio objeto no R2.
-    const head = await r2.headObject(key);
-    const size = head?.size ?? 0;
-
-    // Substituição: apaga qualquer vídeo antigo com OUTRA extensão que tenha
-    // ficado na pasta (o novo objeto já existe, então é seguro limpar o resto).
-    try {
-      const siblings = await r2.listPrefix(prefix);
-      const stale = siblings.filter(
-        (o) => o.key !== key && /\/video\.[a-z0-9]+$/i.test(o.key),
-      );
-      for (const s of stale) await r2.deleteObject(s.key);
-    } catch (e) {
-      console.warn('[ADMIN-MEMBERS] limpeza de vídeo antigo falhou (ignorado):', (e as Error).message);
-    }
-
-    const durationInt = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
-    const updated = await prisma.lesson.update({
-      where: { id: lessonId },
-      data: {
-        videoKey: key,
-        videoSize: BigInt(Math.max(0, Math.round(size))),
-        videoDuration: durationInt,
-        videoMimeType: mimeType,
-        videoType,
-        storageProvider: 'r2',
-        videoUploadedAt: new Date(),
-        // Preenche os campos legados só quando ainda vazios, pra UI antiga
-        // (lista/drawer) continuar mostrando duração e miniatura.
-        ...(durationInt && !lesson.duration ? { duration: durationInt } : {}),
-        ...(thumbnailUrl && !lesson.thumbnailUrl ? { thumbnailUrl } : {}),
-      },
-    });
-
-    return res.json({ video: serializeVideoMeta(updated) });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] video/complete failed:', error);
-    return res.status(500).json({ error: 'Erro ao finalizar o vídeo.' });
-  }
+  try { res.json({ video: await content.completeVideoUpload(String(req.params.id), req.body || {}) }); }
+  catch (e) { handleContentError(res, e, 'video/complete'); }
 });
 
-// POST /api/admin/members/lessons/:id/video/abort { key, uploadId }
 router.post('/lessons/:id/video/abort', async (req: AuthRequest, res: Response) => {
-  try {
-    if (!ensureR2(res)) return;
-    const lessonId = String(req.params.id);
-    const key = String(req.body?.key || '');
-    const uploadId = String(req.body?.uploadId || '');
-    const lesson = await loadLessonWithCourse(lessonId);
-    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
-    const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
-    if (key.startsWith(prefix) && uploadId) await r2.abortMultipart({ key, uploadId });
-    return res.json({ ok: true });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] video/abort failed:', error);
-    return res.status(500).json({ error: 'Erro ao cancelar o upload.' });
-  }
+  try { res.json(await content.abortVideoUpload(String(req.params.id), req.body || {})); }
+  catch (e) { handleContentError(res, e, 'video/abort'); }
 });
 
-// GET /api/admin/members/lessons/:id/video — metadados + preview assinado (admin).
 router.get('/lessons/:id/video', async (req: AuthRequest, res: Response) => {
-  try {
-    const lessonId = String(req.params.id);
-    const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } });
-    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
-
-    let previewUrl: string | null = null;
-    if (lesson.storageProvider === 'r2' && lesson.videoKey && r2.isR2Configured()) {
-      try {
-        previewUrl = (await r2.getSignedDownloadUrl(lesson.videoKey, { expiresIn: 300 })).url;
-      } catch (e) {
-        console.warn('[ADMIN-MEMBERS] preview URL falhou:', (e as Error).message);
-      }
-    }
-
-    return res.json({
-      video: serializeVideoMeta(lesson),
-      previewUrl,
-      // Vídeo legado por embed (iframe) — continua editável no campo videoUrl.
-      legacyEmbed: lesson.storageProvider !== 'r2' ? lesson.videoUrl || null : null,
-    });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] get video failed:', error);
-    return res.status(500).json({ error: 'Erro ao carregar o vídeo.' });
-  }
+  try { res.json(await content.getVideoMeta(String(req.params.id))); }
+  catch (e) { handleContentError(res, e, 'get video'); }
 });
 
-// DELETE /api/admin/members/lessons/:id/video — remove do R2 e limpa a aula.
 router.delete('/lessons/:id/video', async (req: AuthRequest, res: Response) => {
-  try {
-    const lessonId = String(req.params.id);
-    const lesson = await loadLessonWithCourse(lessonId);
-    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
-
-    if (lesson.storageProvider === 'r2' && r2.isR2Configured()) {
-      const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
-      await r2.deletePrefix(prefix);
-    }
-    const updated = await prisma.lesson.update({
-      where: { id: lessonId },
-      data: {
-        videoKey: null,
-        videoSize: null,
-        videoDuration: null,
-        videoMimeType: null,
-        videoType: null,
-        storageProvider: 'embed',
-        videoUploadedAt: null,
-      },
-    });
-    return res.json({ video: serializeVideoMeta(updated) });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] delete video failed:', error);
-    return res.status(500).json({ error: 'Erro ao remover o vídeo.' });
-  }
-});
-
-// POST /api/admin/members/modules/:id/lessons/reorder { ids: [] }
-router.post('/modules/:id/lessons/reorder', async (req: AuthRequest, res: Response) => {
-  try {
-    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
-    if (!ids.length) return res.status(400).json({ error: 'ids é obrigatório' });
-    await prisma.$transaction(
-      ids.map((id, i) => prisma.lesson.update({ where: { id }, data: { sortOrder: i } })),
-    );
-    return res.json({ success: true });
-  } catch (error) {
-    console.error('[ADMIN-MEMBERS] reorder lessons failed:', error);
-    return res.status(500).json({ error: 'Erro ao reordenar aulas' });
-  }
+  try { res.json({ video: await content.deleteVideo(String(req.params.id)) }); }
+  catch (e) { handleContentError(res, e, 'delete video'); }
 });
 
 export default router;

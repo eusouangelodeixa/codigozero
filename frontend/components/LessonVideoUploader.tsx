@@ -118,10 +118,15 @@ export default function LessonVideoUploader({
   lessonId,
   onDuration,
   onThumbnail,
+  apiBase = "/api/admin/members",
+  uploadPath = "/api/admin/members/upload",
 }: {
   lessonId: string;
   onDuration?: (seconds: number) => void;
   onThumbnail?: (url: string) => void;
+  // Base das rotas de vídeo (admin ou coprodutor) e caminho do upload de mídia.
+  apiBase?: string;
+  uploadPath?: string;
 }) {
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -143,11 +148,11 @@ export default function LessonVideoUploader({
 
   const loadMeta = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/admin/members/lessons/${lessonId}/video`, { headers: { Authorization: `Bearer ${token()}` } });
+      const r = await fetch(`${API}${apiBase}/lessons/${lessonId}/video`, { headers: { Authorization: `Bearer ${token()}` } });
       const d = await r.json();
       if (r.ok) { setMeta(d.video); setPreviewUrl(d.previewUrl || null); }
     } catch { /* silencioso — mostra estado vazio */ }
-  }, [lessonId]);
+  }, [lessonId, apiBase]);
 
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
@@ -162,13 +167,13 @@ export default function LessonVideoUploader({
     for (const x of c.xhrs) { try { x.abort(); } catch { /* noop */ } }
     if (c.upload) {
       try {
-        await fetch(`${API}/api/admin/members/lessons/${lessonId}/video/abort`, {
+        await fetch(`${API}${apiBase}/lessons/${lessonId}/video/abort`, {
           method: "POST", headers: jsonHdr(), body: JSON.stringify(c.upload),
         });
       } catch { /* noop */ }
     }
     reset();
-  }, [lessonId, jsonHdr]);
+  }, [lessonId, apiBase, jsonHdr]);
 
   const doUpload = useCallback(async (file: File) => {
     setError(null);
@@ -192,7 +197,7 @@ export default function LessonVideoUploader({
       const { duration, thumb } = await captureDurationAndThumb(file);
 
       // 2) init — abre o multipart no R2.
-      const initRes = await fetch(`${API}/api/admin/members/lessons/${lessonId}/video/init`, {
+      const initRes = await fetch(`${API}${apiBase}/lessons/${lessonId}/video/init`, {
         method: "POST", headers: jsonHdr(),
         body: JSON.stringify({ filename: file.name, size: file.size, mimeType: file.type }),
       });
@@ -231,7 +236,7 @@ export default function LessonVideoUploader({
         if (c.aborted) throw new Error("__cancel__");
         const start = (partNumber - 1) * partSize;
         const blob = file.slice(start, Math.min(start + partSize, file.size));
-        const signRes = await fetch(`${API}/api/admin/members/lessons/${lessonId}/video/sign-part`, {
+        const signRes = await fetch(`${API}${apiBase}/lessons/${lessonId}/video/sign-part`, {
           method: "POST", headers: jsonHdr(), body: JSON.stringify({ key, uploadId, partNumber }),
         });
         const signData = await signRes.json();
@@ -276,7 +281,7 @@ export default function LessonVideoUploader({
         try {
           const fd = new FormData();
           fd.append("file", dataUrlToBlob(thumb), "thumb.jpg");
-          const tr = await fetch(`${API}/api/admin/members/upload`, {
+          const tr = await fetch(`${API}${uploadPath}`, {
             method: "POST", headers: { Authorization: `Bearer ${token()}` }, body: fd,
           });
           const td = await tr.json();
@@ -285,7 +290,7 @@ export default function LessonVideoUploader({
       }
 
       // 5) complete — finaliza o multipart e grava a KEY na aula.
-      const compRes = await fetch(`${API}/api/admin/members/lessons/${lessonId}/video/complete`, {
+      const compRes = await fetch(`${API}${apiBase}/lessons/${lessonId}/video/complete`, {
         method: "POST", headers: jsonHdr(),
         body: JSON.stringify({ key, uploadId, parts: etags, duration, mimeType: file.type, videoType, thumbnailUrl }),
       });
@@ -306,25 +311,25 @@ export default function LessonVideoUploader({
       // Best-effort: aborta o multipart pendente pra não deixar partes órfãs.
       if (c.upload) {
         try {
-          await fetch(`${API}/api/admin/members/lessons/${lessonId}/video/abort`, {
+          await fetch(`${API}${apiBase}/lessons/${lessonId}/video/abort`, {
             method: "POST", headers: jsonHdr(), body: JSON.stringify(c.upload),
           });
         } catch { /* noop */ }
       }
     }
-  }, [lessonId, jsonHdr, loadMeta, onDuration, onThumbnail]);
+  }, [lessonId, apiBase, uploadPath, jsonHdr, loadMeta, onDuration, onThumbnail]);
 
   const removeVideo = useCallback(async () => {
     if (!confirm("Remover o vídeo desta aula? O arquivo será apagado do R2.")) return;
     try {
-      const r = await fetch(`${API}/api/admin/members/lessons/${lessonId}/video`, { method: "DELETE", headers: jsonHdr() });
+      const r = await fetch(`${API}${apiBase}/lessons/${lessonId}/video`, { method: "DELETE", headers: jsonHdr() });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setMeta(d.video); setPreviewUrl(null); reset();
     } catch (e: any) {
       setError(e?.message || "Falha ao remover");
     }
-  }, [lessonId, jsonHdr]);
+  }, [lessonId, apiBase, jsonHdr]);
 
   const busy = phase === "preparing" || phase === "uploading" || phase === "finalizing";
   const onPick = (f?: File | null) => { if (f && !busy) doUpload(f); };

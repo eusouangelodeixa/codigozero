@@ -4,6 +4,7 @@
 // superadmin por push e entra no feed de Atividade do admin — transparência
 // total entre coprodutor e dono.
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import styles from "../coproducer.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -42,6 +43,7 @@ const SOURCE_LABEL: Record<string, string> = {
 const fmtMZN = (v: number) => `${(v || 0).toLocaleString("pt-MZ", { maximumFractionDigits: 0 })} MT`;
 
 export default function CoproducerCourses() {
+  const router = useRouter();
   const [courses, setCourses] = useState<CoproCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
@@ -125,14 +127,26 @@ export default function CoproducerCourses() {
       ) : (
         courses.map((c) => (
           <div key={c.id} className={styles.tableCard} style={{ marginBottom: 16 }}>
-            <div className={styles.tableHead} style={{ cursor: "pointer" }} onClick={() => toggle(c.id)}>
-              <span className={styles.tableTitle}>
+            <div className={styles.tableHead}>
+              <span className={styles.tableTitle} style={{ cursor: "pointer" }} onClick={() => toggle(c.id)}>
                 {c.name}{" "}
                 <span style={{ opacity: 0.6, fontWeight: 400, fontSize: 12 }}>
                   {c.status === "published" ? "publicado" : "rascunho"}
                 </span>
               </span>
-              <span className={styles.tableHint}>{open === c.id ? "▲ fechar" : "▼ abrir"}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <button
+                  type="button"
+                  className={styles.linkHeroBtnPrimary}
+                  style={{ padding: "6px 14px", fontSize: 13 }}
+                  onClick={() => router.push(`/coproducer/cursos/${c.id}`)}
+                >
+                  Gerir conteúdo →
+                </button>
+                <span className={styles.tableHint} style={{ cursor: "pointer" }} onClick={() => toggle(c.id)}>
+                  {open === c.id ? "▲ alunos" : "▼ alunos"}
+                </span>
+              </span>
             </div>
 
             <div className={styles.statsGrid} style={{ padding: "14px 16px" }}>

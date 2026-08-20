@@ -11,6 +11,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env';
+import { getTwilioConfig, templateSidFor, sendTwilioWhatsAppTemplate, type TwilioTemplateType } from './twilio';
 
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
 
@@ -32,9 +33,19 @@ export function normalizeMzPhone(raw: string): string {
 }
 
 /**
- * Send a plain-text WhatsApp message through the Komunika admin instance.
- * Retries up to `retries` times with linear backoff. Never throws — returns
- * a result the caller can branch on.
+ * Envia uma mensagem de WhatsApp.
+ *
+ * CANAL: Twilio oficial PRIMEIRO (quando ativado E houver um template para
+ * `template.type`), com fallback automático para o Komunika usando o `content`
+ * de texto livre. Sem `template`, ou com Twilio desligado, vai direto pro
+ * Komunika — comportamento histórico, zero regressão.
+ *
+ * Por que os dois: o WhatsApp oficial só entrega mensagem iniciada pela empresa
+ * via TEMPLATE aprovado; então cada tipo migra para o Twilio assim que o seu
+ * Content SID for cadastrado no /admin/config. Enquanto não for, segue no
+ * Komunika. O `content` é sempre necessário (é o corpo do fallback).
+ *
+ * Nunca lança — devolve {ok,status} para o chamador ramificar.
  */
 export async function sendWhatsAppMessage(opts: {
   phone: string;
@@ -42,11 +53,34 @@ export async function sendWhatsAppMessage(opts: {
   retries?: number;
   /** When true, run the MZ normalization on `phone`. Default true. */
   normalize?: boolean;
+  /** Descreve o template do Twilio para este envio. Sem isto (ou Twilio off),
+   *  usa o Komunika com `content`. `variables` = {"1":"…","2":"…"} do template. */
+  template?: { type: TwilioTemplateType; variables?: Record<string, string> };
 }): Promise<WhatsAppSendResult> {
   const retries = opts.retries ?? 3;
   const phone = opts.normalize === false ? opts.phone : normalizeMzPhone(opts.phone);
 
   if (!phone) return { ok: false, status: 'invalid-phone' };
+
+  // ── Canal primário: Twilio oficial (se ativado e com template do tipo) ──
+  if (opts.template) {
+    try {
+      const tw = await getTwilioConfig();
+      const sid = tw ? templateSidFor(tw, opts.template.type) : null;
+      if (tw && sid) {
+        const r = await sendTwilioWhatsAppTemplate({
+          config: tw,
+          toDigits: phone,
+          contentSid: sid,
+          variables: opts.template.variables,
+        });
+        if (r.ok) return { ok: true, status: r.status };
+        console.warn(`[WHATSAPP] Twilio falhou (${r.status}) — fallback Komunika`);
+      }
+    } catch (e: any) {
+      console.warn('[WHATSAPP] Twilio erro inesperado — fallback Komunika:', e?.message || e);
+    }
+  }
 
   const sysConfig = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
   const apiKey = sysConfig?.komunikaAdminApiKey || env.KOMUNIKA_ADMIN_API_KEY;

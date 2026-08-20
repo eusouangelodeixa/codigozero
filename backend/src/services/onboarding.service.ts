@@ -132,7 +132,12 @@ export async function processSaveContactReminders(): Promise<number> {
   });
   if (claim.count === 0) return 0;
 
-  const r = await sendWhatsAppMessage({ phone: u.phone, content: saveContactMessage(u.name) });
+  // Template 'save_contact' (Twilio): {{1}} = primeiro nome. Fallback = content.
+  const r = await sendWhatsAppMessage({
+    phone: u.phone,
+    content: saveContactMessage(u.name),
+    template: { type: 'save_contact', variables: { '1': firstName(u.name) } },
+  });
   if (r.ok) {
     await prisma.user.update({ where: { id: u.id }, data: { saveContactSentAt: new Date() } });
     console.log(`[ONBOARDING] 📇 Save-contact reminder sent to ${u.phone} (${sentToday + 1}/${SAVE_CONTACT_DAILY_CAP} hoje)`);

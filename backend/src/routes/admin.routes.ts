@@ -1411,6 +1411,19 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
       metaTestEventCode: req.body?.metaTestEventCode,
     };
 
+    // Twilio WhatsApp (canal oficial). Guardado no banco pra ligar sem deploy.
+    const twilio = {
+      twilioEnabled: typeof req.body?.twilioEnabled === 'boolean' ? req.body.twilioEnabled : undefined,
+      twilioAccountSid: req.body?.twilioAccountSid,
+      twilioAuthToken: req.body?.twilioAuthToken,
+      twilioWhatsappFrom: req.body?.twilioWhatsappFrom,
+      twilioMessagingServiceSid: req.body?.twilioMessagingServiceSid,
+      twilioTemplateSids:
+        req.body?.twilioTemplateSids && typeof req.body.twilioTemplateSids === 'object'
+          ? req.body.twilioTemplateSids
+          : undefined,
+    };
+
     const support = {
       supportHoursEnabled:
         typeof req.body?.supportHoursEnabled === 'boolean' ? req.body.supportHoursEnabled : undefined,
@@ -1423,8 +1436,8 @@ router.patch('/system', async (req: AuthRequest, res: Response) => {
 
     const config = await prisma.systemConfig.upsert({
       where: { id: 'singleton' },
-      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support, ...meta },
-      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support, ...meta },
+      update: { maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support, ...meta, ...twilio },
+      create: { id: 'singleton', maxUsers, communityLink, mentoriaSchedule, mentoriaLink, komunikaVisitorAssistantId, komunikaCheckoutAssistantId, komunikaAdminApiKey, komunikaInstanceId, milestoneAlertPhone, milestoneAlertName, resendApiKey, resendFrom, resendWebhookSecret, newsletterWelcomeEnabled, newsletterWelcomeMessage, feedbackEnabled, komunikaWebhookSecret, dashboardBanners, membersGroupId, membersGroupName, membersGroupInviteLink, ...support, ...meta, ...twilio },
     });
     // O serviço do Meta cacheia a config por 60s; sem isto o token novo só
     // valeria no minuto seguinte, e quem acabou de o colar acharia que falhou.

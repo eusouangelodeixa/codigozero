@@ -78,6 +78,12 @@ export const env = {
   // Komunika side. Never sent to the browser.
   KOMUNIKA_HMAC_SECRET: process.env.KOMUNIKA_HMAC_SECRET || '',
   KOMUNIKA_SSO_JWT_SECRET: process.env.KOMUNIKA_SSO_JWT_SECRET || '',
+  // ── Twilio WhatsApp (canal oficial; config normalmente vem do /admin/config,
+  //    estes são fallback de env) ────────────────────────────────────────
+  TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
+  TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
+  TWILIO_WHATSAPP_FROM: process.env.TWILIO_WHATSAPP_FROM || '',
+  TWILIO_MESSAGING_SERVICE_SID: process.env.TWILIO_MESSAGING_SERVICE_SID || '',
   // ── Stripe (international card payments — non-MZ leads) ────────────
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',

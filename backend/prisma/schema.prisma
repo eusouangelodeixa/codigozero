@@ -526,6 +526,23 @@ model SystemConfig {
   // HMAC secret (whsec_…) of the CZ endpoint registered in the Komunika
   // dashboard → Webhooks. Verifies X-Komunika-Signature on inbound events.
   komunikaWebhookSecret    String?
+
+  // ── Twilio WhatsApp Business (canal OFICIAL) ─────────────────────────
+  // Quando ativado, é o canal PRIMÁRIO de WhatsApp; o Komunika vira reserva
+  // (fallback automático em sendWhatsAppMessage). Mensagem iniciada pela
+  // empresa exige TEMPLATE aprovado pela Meta — twilioTemplateSids mapeia o
+  // tipo de mensagem → Content SID (HX…). Sem SID para um tipo, esse tipo
+  // continua no Komunika (migração gradual, sem risco).
+  twilioEnabled             Boolean @default(false)
+  twilioAccountSid          String?
+  twilioAuthToken           String?
+  // Remetente: um dos dois. From = "whatsapp:+2588…"; Messaging Service agrupa
+  // remetentes e é o recomendado em escala.
+  twilioWhatsappFrom        String?
+  twilioMessagingServiceSid String?
+  // { "credentials": "HX…", "otp": "HX…", "save_contact": "HX…",
+  //   "expiration": "HX…", "broadcast": "HX…" }
+  twilioTemplateSids        Json?
   // Banners rotativos da tela inicial do app do aluno (máx. 5) — mesmo formato
   // dos slides da área de membros: [{ id, imageUrl, mobileImageUrl?, linkUrl? }].
   dashboardBanners         Json?

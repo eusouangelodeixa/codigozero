@@ -65,7 +65,13 @@ export async function createAndSendOtp(opts: {
       : `Se você não pediu para alterar a senha, ignore esta mensagem.`,
   ].join('\n');
 
-  const r = await sendWhatsAppMessage({ phone, content: message, normalize: false });
+  // Template 'otp' (Twilio): {{1}} = código. Fallback Komunika usa `content`.
+  const r = await sendWhatsAppMessage({
+    phone,
+    content: message,
+    normalize: false,
+    template: { type: 'otp', variables: { '1': code } },
+  });
   return { sent: r.ok };
 }
 

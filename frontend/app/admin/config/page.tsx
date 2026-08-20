@@ -45,7 +45,22 @@ interface SystemConfig {
   metaPixelId?: string;
   metaCapiToken?: string;
   metaTestEventCode?: string;
+  twilioEnabled?: boolean;
+  twilioAccountSid?: string;
+  twilioAuthToken?: string;
+  twilioWhatsappFrom?: string;
+  twilioMessagingServiceSid?: string;
+  twilioTemplateSids?: Record<string, string> | null;
 }
+
+// Tipos de mensagem que viram template no Twilio + o texto a submeter na Meta.
+const TWILIO_TEMPLATES: { key: string; label: string; body: string }[] = [
+  { key: "credentials", label: "Credenciais de acesso", body: "🎉 Seu acesso ao {{1}} está liberado.\n\n📧 E-mail: {{2}}\n🔑 Senha: {{3}}\n\n🔗 Acesse: {{4}}" },
+  { key: "otp", label: "Código de verificação (OTP)", body: "🔐 Código Zero — seu código é {{1}}. Expira em 10 minutos. Não compartilhe." },
+  { key: "save_contact", label: "Guardar o contato", body: "⚠️ {{1}}, salve este contato como Código Zero para não perder avisos e o suporte." },
+  { key: "expiration", label: "Aviso de expiração", body: "Olá {{1}}! Sua assinatura do Código Zero expira em breve. Renove aqui: {{2}}" },
+  { key: "broadcast", label: "Broadcast (marketing)", body: "Template de marketing — variáveis conforme a campanha. Requer aprovação de categoria MARKETING na Meta." },
+];
 
 interface KomunikaInstance { id?: string; instanceId?: string; instanceName?: string; name?: string; status?: string; }
 interface KomunikaAssistant { id?: string; assistantId?: string; _id?: string; name?: string; title?: string; mode?: string; }
@@ -897,6 +912,55 @@ export default function AdminConfig() {
             onChange={(e) => setField("metaTestEventCode", e.target.value)}
           />
         </Field>
+      </Section>
+
+      {/* ── Twilio WhatsApp (canal oficial) ── */}
+      <Section
+        title="Twilio WhatsApp (oficial)"
+        subtitle="Canal oficial do WhatsApp Business. Quando ligado, é o PRIMÁRIO; o Komunika vira reserva (fallback automático). Cada tipo de mensagem só usa o Twilio quando o Content SID do seu template estiver preenchido — senão continua no Komunika."
+        icon={<IconKomunika />}
+        defaultOpen={false}
+        actions={
+          <span className={config.twilioEnabled ? styles.statusOk : styles.statusEmpty}>
+            {config.twilioEnabled ? "Ligado" : "Desligado"}
+          </span>
+        }
+      >
+        <Field label="Ativar Twilio como canal primário" hint="Desligado = tudo continua no Komunika (nada muda). Ligado = usa o Twilio nos tipos que tiverem Content SID, com Komunika de reserva.">
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!config.twilioEnabled} onChange={(e) => setField("twilioEnabled", e.target.checked)} />
+            <span>{config.twilioEnabled ? "Ligado" : "Desligado"}</span>
+          </label>
+        </Field>
+
+        <Field label="Account SID" hint="Twilio Console → Account Info.">
+          <input className={styles.input} placeholder="AC..." value={config.twilioAccountSid || ""} onChange={(e) => setField("twilioAccountSid", e.target.value)} />
+        </Field>
+        <SecretField label="Auth Token" value={config.twilioAuthToken || ""} onChange={(v) => setField("twilioAuthToken", v)} placeholder="••••••••" hint="Twilio Console → Account Info. Guardado com segurança; nunca vai ao navegador depois de salvo." />
+        <Field label="Número do WhatsApp (From)" hint='O sender aprovado, no formato "whatsapp:+2588…". Use isto OU o Messaging Service abaixo.'>
+          <input className={styles.input} placeholder="whatsapp:+2588XXXXXXX" value={config.twilioWhatsappFrom || ""} onChange={(e) => setField("twilioWhatsappFrom", e.target.value)} />
+        </Field>
+        <Field label="Messaging Service SID (opcional)" hint="Recomendado em escala. Se preenchido, tem prioridade sobre o número acima.">
+          <input className={styles.input} placeholder="MG..." value={config.twilioMessagingServiceSid || ""} onChange={(e) => setField("twilioMessagingServiceSid", e.target.value)} />
+        </Field>
+
+        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8, lineHeight: 1.5 }}>
+          <strong>Templates aprovados (Content SID por tipo).</strong> Crie cada template no Twilio (Content Template Builder), aprove na Meta e cole o <code>HX…</code> aqui. Sem o SID, o tipo continua no Komunika.
+        </div>
+        {TWILIO_TEMPLATES.map((t) => (
+          <Field
+            key={t.key}
+            label={`Content SID — ${t.label}`}
+            hint={<>Texto sugerido do template:<br /><span style={{ fontFamily: "monospace", whiteSpace: "pre-wrap", opacity: 0.85 }}>{t.body}</span></>}
+          >
+            <input
+              className={styles.input}
+              placeholder="HX..."
+              value={config.twilioTemplateSids?.[t.key] || ""}
+              onChange={(e) => setField("twilioTemplateSids", { ...(config.twilioTemplateSids || {}), [t.key]: e.target.value })}
+            />
+          </Field>
+        ))}
       </Section>
 
       {/* ── Suporte: horário de atendimento + aviso da primeira mensagem ── */}

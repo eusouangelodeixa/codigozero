@@ -56,6 +56,11 @@ services:
       # Komunika embedded module (provision + SSO)
       - KOMUNIKA_HMAC_SECRET=${KOMUNIKA_HMAC_SECRET:-}
       - KOMUNIKA_SSO_JWT_SECRET=${KOMUNIKA_SSO_JWT_SECRET:-}
+      # Twilio WhatsApp (canal oficial; normalmente vem do /admin/config, env é fallback)
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_WHATSAPP_FROM=${TWILIO_WHATSAPP_FROM:-}
+      - TWILIO_MESSAGING_SERVICE_SID=${TWILIO_MESSAGING_SERVICE_SID:-}
       # Resend (e-mail delivery of access credentials)
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - RESEND_FROM=${RESEND_FROM:-Código Zero <acesso@czero.sbs>}

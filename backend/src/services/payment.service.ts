@@ -87,7 +87,22 @@ export async function sendCredentialsViaWhatsApp(opts: {
 
   // `phone` is already normalized by the caller (Lojou/Stripe webhooks carry
   // international numbers), so skip the MZ-specific normalization here.
-  const r = await sendWhatsAppMessage({ phone, content: message, normalize: false });
+  // Template 'credentials' (Twilio): {{1}} produto · {{2}} e-mail · {{3}} senha
+  // · {{4}} link. O `content` acima é o corpo do fallback (Komunika).
+  const r = await sendWhatsAppMessage({
+    phone,
+    content: message,
+    normalize: false,
+    template: {
+      type: 'credentials',
+      variables: {
+        '1': opts.productName || 'Código Zero',
+        '2': email,
+        '3': rawPassword,
+        '4': accessUrl,
+      },
+    },
+  });
   if (r.ok) {
     console.log(`[PAYMENT/CREDS] ✅ Delivered to ${phone} (status=${r.status})`);
     return { delivered: true, status: r.status };

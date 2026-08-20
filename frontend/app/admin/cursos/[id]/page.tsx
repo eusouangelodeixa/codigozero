@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { AdminPage } from "@/components/admin";
 import { Modal, useToast } from "@/components/ui";
 import { mdToHtml } from "@/lib/md";
+import LessonVideoUploader from "@/components/LessonVideoUploader";
 import styles from "../../admin.module.css";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -28,6 +29,8 @@ type Lesson = {
   content?: string | null;
   materials?: Material[] | null;
   sortOrder: number;
+  storageProvider?: string | null; // 'embed' | 'r2'
+  videoType?: string | null;
 };
 type Mod = {
   id: string;
@@ -551,7 +554,7 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
                   <div style={{ fontWeight: 600, fontSize: 13.5 }}>{l.title}</div>
                   <div style={{ fontSize: 11.5, color: "var(--text-tertiary)" }}>
                     {l.duration ? `${Math.round(l.duration / 60)} min` : "sem duração"} ·{" "}
-                    {l.videoUrl ? "vídeo ok" : "SEM VÍDEO"} · {(l.materials as Material[] | null)?.length || 0} materiais
+                    {l.storageProvider === "r2" ? "vídeo R2 ✓" : l.videoUrl ? "vídeo ok" : "SEM VÍDEO"} · {(l.materials as Material[] | null)?.length || 0} materiais
                   </div>
                 </div>
                 <button
@@ -632,16 +635,37 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
               <input className={styles.formInput} value={lesEdit.title || ""} onChange={(e) => setLesEdit((l) => ({ ...l, title: e.target.value }))} />
             </div>
             <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Vídeo (embed completo ou URL — Kilax/YouTube/Vimeo)</label>
-              <textarea
-                className={styles.formTextarea}
-                rows={3}
-                style={{ fontFamily: "ui-monospace, monospace", fontSize: 12.5 }}
-                placeholder='<iframe src="https://…" …></iframe>'
-                value={lesEdit.videoUrl || ""}
-                onChange={(e) => setLesEdit((l) => ({ ...l, videoUrl: e.target.value }))}
-              />
+              <label className={styles.formLabel}>Vídeo da Aula</label>
+              {lesEdit.id ? (
+                <LessonVideoUploader
+                  lessonId={lesEdit.id}
+                  onDuration={(s) => setLesEdit((l) => (l.duration ? l : { ...l, duration: s }))}
+                  onThumbnail={(url) => setLesEdit((l) => (l.thumbnailUrl ? l : { ...l, thumbnailUrl: url }))}
+                />
+              ) : (
+                <p className={styles.formHint}>
+                  Salve a aula primeiro (botão abaixo) para liberar o envio do vídeo.
+                </p>
+              )}
             </div>
+            <details style={{ marginBottom: 4 }}>
+              <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--text-secondary)" }}>
+                Usar embed externo (Kilax/YouTube/Vimeo) — avançado
+              </summary>
+              <div className={styles.formGroup} style={{ marginTop: 8 }}>
+                <textarea
+                  className={styles.formTextarea}
+                  rows={3}
+                  style={{ fontFamily: "ui-monospace, monospace", fontSize: 12.5 }}
+                  placeholder='<iframe src="https://…" …></iframe>'
+                  value={lesEdit.videoUrl || ""}
+                  onChange={(e) => setLesEdit((l) => ({ ...l, videoUrl: e.target.value }))}
+                />
+                <p className={styles.formHint}>
+                  Só é usado quando a aula NÃO tem vídeo no R2. O vídeo do R2 sempre tem prioridade.
+                </p>
+              </div>
+            </details>
             <div className={styles.formGrid}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Duração (segundos)</label>

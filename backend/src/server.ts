@@ -46,6 +46,13 @@ if (process.env.DISABLE_SCRAPER_WORKER !== '1') {
 // SENTRY_DSN is set, so behavior is unchanged when it's absent.
 initSentry();
 
+// Serialização global de BigInt em JSON. O Postgres devolve BIGINT como BigInt
+// (ex.: Lesson.videoSize, bytes do vídeo) e JSON.stringify lança em BigInt sem
+// isto. Bytes de vídeo cabem folgado em Number (< 2^53); acima disso, string.
+(BigInt.prototype as any).toJSON = function () {
+  return this <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(this) : this.toString();
+};
+
 const app = express();
 
 // Behind nginx (one hop): trust the first proxy so req.ip / X-Forwarded-For

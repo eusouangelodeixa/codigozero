@@ -21,6 +21,7 @@ import { sendPushBroadcast } from './auth.routes';
 import { newCourseWebhookToken } from './courseWebhook.routes';
 import { env } from '../config/env';
 import { bulkEnroll, parseBulkList } from '../services/bulkEnroll.service';
+import * as r2 from '../services/r2.service';
 
 const router = Router();
 const prisma = (((globalThis as any).__czPrisma ??= new PrismaClient()) as PrismaClient);
@@ -567,6 +568,288 @@ router.delete('/lessons/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('[ADMIN-MEMBERS] delete lesson failed:', error);
     return res.status(500).json({ error: 'Erro ao excluir aula' });
+  }
+});
+
+// ── Vídeo da aula no Cloudflare R2 (bucket privado) ──────────────────────────
+//
+// Fluxo de upload (arquivos até 20 GB, sem passar pela memória do backend):
+//   1. POST /lessons/:id/video/init      → abre o multipart no R2, devolve uploadId+key
+//   2. POST /lessons/:id/video/sign-part → assina o PUT de cada parte (browser → R2 direto)
+//   3. POST /lessons/:id/video/complete  → finaliza o multipart e grava a KEY na aula
+//   (cancelar)  POST /lessons/:id/video/abort
+//   (ver)       GET  /lessons/:id/video      → metadados + preview assinado (admin)
+//   (remover)   DELETE /lessons/:id/video
+//
+// Nunca gravamos URL pública — só a KEY. O player recebe URL assinada de 5 min
+// (ver GET /api/members/video/:lessonId).
+
+const MAX_VIDEO_BYTES = 20 * 1024 * 1024 * 1024; // 20 GB por arquivo
+const ALLOWED_VIDEO_EXT = new Set(['mp4', 'mov', 'mkv', 'webm', 'm3u8']);
+const ALLOWED_VIDEO_MIME = new Set([
+  'video/mp4',
+  'video/quicktime', // .mov
+  'video/x-matroska', // .mkv
+  'video/webm',
+  'application/x-mpegurl', // .m3u8
+  'application/vnd.apple.mpegurl', // .m3u8
+]);
+
+/** Carrega a aula + o id do curso (necessário pro prefixo no R2). */
+async function loadLessonWithCourse(lessonId: string) {
+  return prisma.lesson.findUnique({
+    where: { id: lessonId },
+    include: { module: { select: { courseId: true } } },
+  });
+}
+
+/** Metadados de vídeo prontos pro JSON (BigInt → Number; 20 GB cabe em Number). */
+function serializeVideoMeta(l: {
+  storageProvider: string;
+  videoKey: string | null;
+  videoSize: bigint | null;
+  videoDuration: number | null;
+  videoMimeType: string | null;
+  videoType: string | null;
+  videoUploadedAt: Date | null;
+}) {
+  return {
+    hasVideo: l.storageProvider === 'r2' && !!l.videoKey,
+    storageProvider: l.storageProvider,
+    videoKey: l.videoKey,
+    videoSize: l.videoSize == null ? null : Number(l.videoSize),
+    videoDuration: l.videoDuration,
+    videoMimeType: l.videoMimeType,
+    videoType: l.videoType,
+    videoUploadedAt: l.videoUploadedAt,
+  };
+}
+
+/** 503 amigável quando o R2 ainda não foi configurado (env ausente). */
+function ensureR2(res: Response): boolean {
+  if (r2.isR2Configured()) return true;
+  res.status(503).json({
+    error: 'Armazenamento de vídeo (R2) não está configurado no servidor. Defina as variáveis R2_* e reinicie o backend.',
+  });
+  return false;
+}
+
+// POST /api/admin/members/lessons/:id/video/init { filename, size, mimeType }
+router.post('/lessons/:id/video/init', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!ensureR2(res)) return;
+    const lessonId = String(req.params.id);
+    const filename = String(req.body?.filename || '').trim();
+    const size = Number(req.body?.size || 0);
+    const mimeType = String(req.body?.mimeType || '').toLowerCase().trim();
+
+    const lesson = await loadLessonWithCourse(lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+
+    if (!Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'Tamanho de arquivo inválido.' });
+    if (size > MAX_VIDEO_BYTES) {
+      return res.status(400).json({ error: 'Arquivo acima do limite de 20 GB. Comprima ou divida o vídeo.' });
+    }
+
+    const ext = r2.extFor(filename, mimeType);
+    const extOk = ALLOWED_VIDEO_EXT.has(ext);
+    // MIME nem sempre vem (alguns navegadores mandam vazio pra .mkv). Se a
+    // extensão é válida, aceitamos; se veio MIME, ele também precisa bater.
+    const mimeOk = !mimeType || ALLOWED_VIDEO_MIME.has(mimeType) || mimeType.startsWith('video/');
+    if (!extOk || !mimeOk) {
+      return res.status(400).json({ error: 'Formato não suportado. Use MP4, MOV, MKV, WEBM ou M3U8 (HLS).' });
+    }
+
+    const videoType = ext === 'm3u8' ? 'hls' : 'mp4';
+    const key = r2.videoKeyFor(lesson.module.courseId, lessonId, ext);
+    const contentType = mimeType || (videoType === 'hls' ? 'application/x-mpegurl' : 'video/mp4');
+    const { uploadId } = await r2.createMultipart({ key, contentType });
+
+    return res.json({
+      uploadId,
+      key,
+      videoType,
+      // Parte recomendada: 64 MB. Mín. do S3/R2 é 5 MB (exceto a última). Com
+      // 64 MB, 20 GB ≈ 320 partes — bem abaixo do teto de 10.000.
+      partSize: 64 * 1024 * 1024,
+      maxParts: 10000,
+    });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] video/init failed:', error);
+    return res.status(500).json({ error: 'Erro ao iniciar o upload do vídeo.' });
+  }
+});
+
+// POST /api/admin/members/lessons/:id/video/sign-part { key, uploadId, partNumber }
+router.post('/lessons/:id/video/sign-part', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!ensureR2(res)) return;
+    const lessonId = String(req.params.id);
+    const key = String(req.body?.key || '');
+    const uploadId = String(req.body?.uploadId || '');
+    const partNumber = Number(req.body?.partNumber || 0);
+
+    const lesson = await loadLessonWithCourse(lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+
+    // A key TEM de pertencer a esta aula — impede assinar escrita em qualquer
+    // outro caminho do bucket.
+    const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
+    if (!key.startsWith(prefix)) return res.status(400).json({ error: 'Key inválida para esta aula.' });
+    if (!uploadId) return res.status(400).json({ error: 'uploadId ausente.' });
+    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+      return res.status(400).json({ error: 'partNumber inválido.' });
+    }
+
+    const url = await r2.signUploadPart({ key, uploadId, partNumber });
+    return res.json({ url });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] video/sign-part failed:', error);
+    return res.status(500).json({ error: 'Erro ao assinar parte do upload.' });
+  }
+});
+
+// POST /api/admin/members/lessons/:id/video/complete
+// { key, uploadId, parts:[{partNumber,etag}], duration?, mimeType?, videoType?, thumbnailUrl? }
+router.post('/lessons/:id/video/complete', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!ensureR2(res)) return;
+    const lessonId = String(req.params.id);
+    const key = String(req.body?.key || '');
+    const uploadId = String(req.body?.uploadId || '');
+    const parts = Array.isArray(req.body?.parts) ? req.body.parts : [];
+    const duration = Number(req.body?.duration);
+    const mimeType = String(req.body?.mimeType || '').trim() || null;
+    const videoType = req.body?.videoType === 'hls' ? 'hls' : 'mp4';
+    const thumbnailUrl = req.body?.thumbnailUrl ? String(req.body.thumbnailUrl) : null;
+
+    const lesson = await loadLessonWithCourse(lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+
+    const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
+    if (!key.startsWith(prefix)) return res.status(400).json({ error: 'Key inválida para esta aula.' });
+    if (!uploadId) return res.status(400).json({ error: 'uploadId ausente.' });
+    const normParts = parts
+      .map((p: any) => ({ partNumber: Number(p?.partNumber), etag: String(p?.etag || '') }))
+      .filter((p: any) => Number.isInteger(p.partNumber) && p.etag);
+    if (!normParts.length) return res.status(400).json({ error: 'Nenhuma parte enviada.' });
+
+    await r2.completeMultipart({ key, uploadId, parts: normParts });
+
+    // Tamanho autoritativo vem do próprio objeto no R2.
+    const head = await r2.headObject(key);
+    const size = head?.size ?? 0;
+
+    // Substituição: apaga qualquer vídeo antigo com OUTRA extensão que tenha
+    // ficado na pasta (o novo objeto já existe, então é seguro limpar o resto).
+    try {
+      const siblings = await r2.listPrefix(prefix);
+      const stale = siblings.filter(
+        (o) => o.key !== key && /\/video\.[a-z0-9]+$/i.test(o.key),
+      );
+      for (const s of stale) await r2.deleteObject(s.key);
+    } catch (e) {
+      console.warn('[ADMIN-MEMBERS] limpeza de vídeo antigo falhou (ignorado):', (e as Error).message);
+    }
+
+    const durationInt = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
+    const updated = await prisma.lesson.update({
+      where: { id: lessonId },
+      data: {
+        videoKey: key,
+        videoSize: BigInt(Math.max(0, Math.round(size))),
+        videoDuration: durationInt,
+        videoMimeType: mimeType,
+        videoType,
+        storageProvider: 'r2',
+        videoUploadedAt: new Date(),
+        // Preenche os campos legados só quando ainda vazios, pra UI antiga
+        // (lista/drawer) continuar mostrando duração e miniatura.
+        ...(durationInt && !lesson.duration ? { duration: durationInt } : {}),
+        ...(thumbnailUrl && !lesson.thumbnailUrl ? { thumbnailUrl } : {}),
+      },
+    });
+
+    return res.json({ video: serializeVideoMeta(updated) });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] video/complete failed:', error);
+    return res.status(500).json({ error: 'Erro ao finalizar o vídeo.' });
+  }
+});
+
+// POST /api/admin/members/lessons/:id/video/abort { key, uploadId }
+router.post('/lessons/:id/video/abort', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!ensureR2(res)) return;
+    const lessonId = String(req.params.id);
+    const key = String(req.body?.key || '');
+    const uploadId = String(req.body?.uploadId || '');
+    const lesson = await loadLessonWithCourse(lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+    const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
+    if (key.startsWith(prefix) && uploadId) await r2.abortMultipart({ key, uploadId });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] video/abort failed:', error);
+    return res.status(500).json({ error: 'Erro ao cancelar o upload.' });
+  }
+});
+
+// GET /api/admin/members/lessons/:id/video — metadados + preview assinado (admin).
+router.get('/lessons/:id/video', async (req: AuthRequest, res: Response) => {
+  try {
+    const lessonId = String(req.params.id);
+    const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+
+    let previewUrl: string | null = null;
+    if (lesson.storageProvider === 'r2' && lesson.videoKey && r2.isR2Configured()) {
+      try {
+        previewUrl = (await r2.getSignedDownloadUrl(lesson.videoKey, { expiresIn: 300 })).url;
+      } catch (e) {
+        console.warn('[ADMIN-MEMBERS] preview URL falhou:', (e as Error).message);
+      }
+    }
+
+    return res.json({
+      video: serializeVideoMeta(lesson),
+      previewUrl,
+      // Vídeo legado por embed (iframe) — continua editável no campo videoUrl.
+      legacyEmbed: lesson.storageProvider !== 'r2' ? lesson.videoUrl || null : null,
+    });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] get video failed:', error);
+    return res.status(500).json({ error: 'Erro ao carregar o vídeo.' });
+  }
+});
+
+// DELETE /api/admin/members/lessons/:id/video — remove do R2 e limpa a aula.
+router.delete('/lessons/:id/video', async (req: AuthRequest, res: Response) => {
+  try {
+    const lessonId = String(req.params.id);
+    const lesson = await loadLessonWithCourse(lessonId);
+    if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+
+    if (lesson.storageProvider === 'r2' && r2.isR2Configured()) {
+      const prefix = r2.lessonPrefix(lesson.module.courseId, lessonId);
+      await r2.deletePrefix(prefix);
+    }
+    const updated = await prisma.lesson.update({
+      where: { id: lessonId },
+      data: {
+        videoKey: null,
+        videoSize: null,
+        videoDuration: null,
+        videoMimeType: null,
+        videoType: null,
+        storageProvider: 'embed',
+        videoUploadedAt: null,
+      },
+    });
+    return res.json({ video: serializeVideoMeta(updated) });
+  } catch (error) {
+    console.error('[ADMIN-MEMBERS] delete video failed:', error);
+    return res.status(500).json({ error: 'Erro ao remover o vídeo.' });
   }
 });
 

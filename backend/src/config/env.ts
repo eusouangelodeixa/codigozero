@@ -99,4 +99,17 @@ export const env = {
   // (e.g. https://buy.stripe.com/...). The webhook still uses the
   // PRICE_ID + SECRET_KEY to verify and reconcile incoming payments.
   STRIPE_CHECKOUT_URL: process.env.STRIPE_CHECKOUT_URL || '',
+  // ── Cloudflare R2 (vídeos das aulas — bucket PRIVADO, S3-compatível) ──────
+  // O bucket é SEMPRE privado; nada é servido direto do R2. O backend assina
+  // URLs temporárias (5 min) para o player e URLs de multipart para o upload
+  // direto do navegador. Segredos NUNCA vão ao browser. Se qualquer um faltar,
+  // as features de vídeo R2 ficam inativas (o embed legado continua a funcionar).
+  // Estas vars PRECISAM estar no allowlist de infrastructure/docker-compose.prod.yml
+  // (bloco backend `environment:`) ou nunca chegam ao container.
+  R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID || '',
+  R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || '',
+  R2_BUCKET: process.env.R2_BUCKET || '',
+  // Endpoint S3 do R2: https://<account_id>.r2.cloudflarestorage.com (sem bucket).
+  R2_ENDPOINT: process.env.R2_ENDPOINT || '',
+  R2_REGION: process.env.R2_REGION || 'auto',
 };

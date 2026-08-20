@@ -27,6 +27,7 @@ import {
 import { blockWithdrawOnly } from '../middlewares/withdrawOnly.guard';
 import { consumeMembersSsoCode } from '../lib/membersSso';
 import { signAuthToken } from '../lib/authToken';
+import * as r2 from '../services/r2.service';
 
 const router = Router();
 
@@ -323,7 +324,11 @@ router.get('/lessons/:id', ...memberGuards, async (req: AuthRequest, res: Respon
         title: lesson.title,
         description: lesson.description,
         videoUrl: lesson.videoUrl,
-        duration: lesson.duration,
+        // R2: o player pede a URL assinada em GET /api/members/video/:id.
+        // 'embed' = vídeo legado por iframe (usa videoUrl direto).
+        storageProvider: lesson.storageProvider,
+        videoType: lesson.videoType,
+        duration: lesson.videoDuration ?? lesson.duration,
         thumbnailUrl: lesson.thumbnailUrl,
         content: lesson.content,
         materials: lesson.materials,
@@ -337,6 +342,127 @@ router.get('/lessons/:id', ...memberGuards, async (req: AuthRequest, res: Respon
   } catch (error) {
     console.error('[MEMBERS] lesson failed:', error);
     return res.status(500).json({ error: 'Erro ao carregar aula' });
+  }
+});
+
+// ── Playback do vídeo privado (R2) ───────────────────────────────────────────
+//
+// O front NUNCA recebe URL pública nem a KEY. Aqui verificamos, na ordem:
+// aula existe → curso publicado → utilizador tem acesso (mesmo gate do /lessons)
+// e SÓ ENTÃO assinamos uma URL temporária de 5 min. O player renova sozinho
+// antes de expirar (ver frontend). HLS é servido por proxy autenticado.
+
+/** Carrega a aula com o curso e aplica o gate de acesso. Devolve a aula ou
+ *  envia a resposta de erro (404/403) e retorna null. */
+async function loadPlayableLesson(req: AuthRequest, res: Response) {
+  const userId = req.user!.id;
+  const lesson = await prisma.lesson.findUnique({
+    where: { id: String(req.params.lessonId) },
+    include: {
+      module: {
+        include: {
+          course: {
+            select: { id: true, slug: true, status: true, accessType: true, includedInSubscription: true, checkoutUrl: true },
+          },
+        },
+      },
+    },
+  });
+  if (!lesson || lesson.module.course.status !== 'published') {
+    res.status(404).json({ error: 'Aula não encontrada' });
+    return null;
+  }
+  const owned = await activeCourseAccessIds(userId);
+  const viewer = { id: userId, role: req.user!.role, subscriptionStatus: req.user!.subscriptionStatus };
+  const fullAccess = hasFullAccess(viewer, lesson.module.course, owned);
+  if (!moduleUnlocked(fullAccess, lesson.module)) {
+    res.status(403).json({
+      error: 'Aula bloqueada',
+      locked: true,
+      courseSlug: lesson.module.course.slug,
+      accessType: lesson.module.course.accessType || 'subscription',
+      checkoutUrl: lesson.module.course.checkoutUrl || null,
+    });
+    return null;
+  }
+  return lesson;
+}
+
+// GET /api/members/video/:lessonId — devolve a URL temporária do vídeo.
+router.get('/video/:lessonId', ...memberGuards, async (req: AuthRequest, res: Response) => {
+  try {
+    const lesson = await loadPlayableLesson(req, res);
+    if (!lesson) return;
+
+    // Aula ainda no modelo antigo (embed por iframe): devolve o embed.
+    if (lesson.storageProvider !== 'r2' || !lesson.videoKey) {
+      return res.json({ type: 'embed', embed: lesson.videoUrl || null, url: null });
+    }
+    if (!r2.isR2Configured()) {
+      return res.status(503).json({ error: 'Armazenamento de vídeo indisponível.' });
+    }
+
+    if (lesson.videoType === 'hls') {
+      // HLS: o player carrega o master pelo proxy autenticado (cada segmento
+      // volta a passar pelo gate). Não é URL assinada — é a nossa rota.
+      const base = `${req.protocol}://${req.get('host')}`;
+      return res.json({
+        type: 'hls',
+        url: `${base}/api/members/video/${lesson.id}/hls/master.m3u8`,
+        mimeType: 'application/vnd.apple.mpegurl',
+      });
+    }
+
+    const signed = await r2.getSignedDownloadUrl(lesson.videoKey, {
+      expiresIn: 300, // 5 min
+      responseContentType: lesson.videoMimeType || 'video/mp4',
+    });
+    return res.json({
+      type: 'mp4',
+      url: signed.url,
+      expiresAt: signed.expiresAt,
+      expiresIn: signed.expiresIn,
+      mimeType: lesson.videoMimeType || 'video/mp4',
+    });
+  } catch (error) {
+    console.error('[MEMBERS] video url failed:', error);
+    return res.status(500).json({ error: 'Erro ao carregar o vídeo.' });
+  }
+});
+
+// GET /api/members/video/:lessonId/hls/* — proxy autenticado dos arquivos HLS
+// (master.m3u8, playlists e segmentos .ts). Cada requisição repassa pelo gate
+// e faz stream do objeto privado do R2 — o segmento nunca fica público.
+router.get('/video/:lessonId/hls/*', ...memberGuards, async (req: AuthRequest, res: Response) => {
+  try {
+    const lesson = await loadPlayableLesson(req, res);
+    if (!lesson) return;
+    if (lesson.storageProvider !== 'r2' || lesson.videoType !== 'hls' || !r2.isR2Configured()) {
+      return res.status(404).json({ error: 'HLS indisponível.' });
+    }
+    // Caminho relativo pedido (depois de /hls/). Sanitizado: sem traversal.
+    const rel = String((req.params as any)[0] || '').replace(/\\/g, '/');
+    if (!rel || rel.includes('..') || rel.startsWith('/')) {
+      return res.status(400).json({ error: 'Caminho inválido.' });
+    }
+    const key = `${r2.lessonPrefix(lesson.module.courseId, lesson.id)}hls/${rel}`;
+    const obj = await r2.getObjectStream(key);
+    if (!obj) return res.status(404).json({ error: 'Segmento não encontrado.' });
+
+    const ct = rel.endsWith('.m3u8')
+      ? 'application/vnd.apple.mpegurl'
+      : rel.endsWith('.ts')
+        ? 'video/mp2t'
+        : obj.contentType || 'application/octet-stream';
+    res.setHeader('Content-Type', ct);
+    if (obj.contentLength) res.setHeader('Content-Length', String(obj.contentLength));
+    // Playlists nunca em cache (URLs mudam); segmentos podem cachear no cliente.
+    res.setHeader('Cache-Control', rel.endsWith('.m3u8') ? 'no-store' : 'private, max-age=60');
+    obj.body.on('error', () => { if (!res.headersSent) res.status(502).end(); });
+    obj.body.pipe(res);
+  } catch (error) {
+    console.error('[MEMBERS] hls proxy failed:', error);
+    if (!res.headersSent) return res.status(500).json({ error: 'Erro no HLS.' });
   }
 });
 

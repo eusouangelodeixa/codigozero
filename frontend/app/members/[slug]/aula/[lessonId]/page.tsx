@@ -9,8 +9,9 @@ import k from "@/components/members/kit.module.css";
 import { ThemeVars } from "@/components/members/ThemeVars";
 import { LessonDrawer, MaterialList, StarRating, fmtDur } from "@/components/members/widgets";
 import { useCourse } from "@/lib/members/useCourse";
-import { membersFetch } from "@/lib/members/api";
+import { membersFetch, absMediaUrl } from "@/lib/members/api";
 import { memberGo } from "@/lib/members/nav";
+import MembersVideoPlayer from "@/components/members/VideoPlayer";
 import { mdToHtml } from "@/lib/md";
 
 type LessonPayload = {
@@ -21,6 +22,9 @@ type LessonPayload = {
     title: string;
     description?: string | null;
     videoUrl: string;
+    storageProvider?: string | null; // 'embed' | 'r2'
+    videoType?: string | null;
+    thumbnailUrl?: string | null;
     duration?: number | null;
     content?: string | null;
     materials?: { name: string; url: string; type?: string }[] | null;
@@ -142,11 +146,12 @@ export default function LessonPage({ params }: { params: Promise<{ slug: string;
           </div>
 
           <div className={k.videoFrame} style={{ marginTop: 12 }}>
-            {embedHtml ? (
-              <div style={{ position: "absolute", inset: 0 }} dangerouslySetInnerHTML={{ __html: embedHtml }} />
-            ) : (
-              <div className={k.videoEmpty}>Vídeo em breve</div>
-            )}
+            <MembersVideoPlayer
+              lessonId={lesson.id}
+              storageProvider={lesson.storageProvider}
+              embedHtml={embedHtml}
+              poster={lesson.thumbnailUrl ? absMediaUrl(lesson.thumbnailUrl) : undefined}
+            />
           </div>
 
           <div className={k.playerInfo}>

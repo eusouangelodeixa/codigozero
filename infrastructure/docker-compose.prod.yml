@@ -64,6 +64,12 @@ services:
       # Resend (e-mail delivery of access credentials)
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - RESEND_FROM=${RESEND_FROM:-Código Zero <acesso@czero.sbs>}
+      # Cloudflare R2 (vídeos das aulas — bucket PRIVADO, S3-compatível)
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - R2_BUCKET=${R2_BUCKET:-}
+      - R2_ENDPOINT=${R2_ENDPOINT:-}
+      - R2_REGION=${R2_REGION:-auto}
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:admin@czero.sbs}

@@ -402,6 +402,19 @@ model Lesson {
   materials    Json?    // [{name, url, type}] — links, PDFs, resources
   createdAt    DateTime @default(now())
 
+  // ── Vídeo hospedado no Cloudflare R2 (bucket PRIVADO) ────────────────────
+  // `videoUrl` acima segue existindo para o vídeo LEGADO por embed (iframe do
+  // Kilax/YouTube/Vimeo). Quando `storageProvider = 'r2'`, o vídeo vive no R2 e
+  // o player recebe apenas uma URL ASSINADA temporária — nunca guardamos URL
+  // pública, só a KEY do objeto. Os dois modos convivem: migração aula a aula.
+  videoKey        String?   // key do objeto no R2 (ex.: cursos/{c}/aulas/{a}/video.mp4)
+  videoSize       BigInt?   // tamanho em bytes (suporta > 2GB; sempre Number() ao serializar)
+  videoDuration   Int?      // duração em segundos (capturada no cliente no upload)
+  videoMimeType   String?   // ex.: video/mp4
+  videoType       String?   // 'mp4' | 'hls'
+  storageProvider String    @default("embed") // 'embed' | 'r2'
+  videoUploadedAt DateTime?
+
   progress LessonProgress[]
 
   @@index([moduleId])

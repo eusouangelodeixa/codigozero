@@ -172,12 +172,12 @@ export default function AdminCursoConteudo({ params }: { params: Promise<{ id: s
               <input
                 className={styles.formInput}
                 defaultValue={course.checkoutUrl || ""}
-                placeholder="https://pay.lojou.app/p/..."
+                placeholder="https://pay.lojou.app/{pid}"
                 onBlur={(e) => saveAccess({ checkoutUrl: e.target.value.trim() })}
               />
               <p className={styles.formHint}>
-                Vira o botão &quot;Comprar o curso&quot; no cadeado da área de membros. Use o link /p/ permanente da
-                Lojou (o /token/ expira em horas).
+                Vira o botão &quot;Comprar o curso&quot; no cadeado da área de membros. Use o link permanente do
+                produto na Lojou, pay.lojou.app/{"{pid}"} (o /token/ expira em horas).
               </p>
             </div>
           )}

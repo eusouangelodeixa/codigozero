@@ -111,7 +111,7 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
     // Coproducer + affiliate are mutually exclusive at the URL level
     // (/c/code vs /r/code), but if both arrive here, affiliate wins (the
     // affiliate flow uses its own product pid in Lojou).
-    let coproducerAccount: { id: string; code: string; productPid: string; publicCheckoutUrl: string | null; planId: string | null } | null = null;
+    let coproducerAccount: { id: string; code: string; productPid: string | null; publicCheckoutUrl: string | null; planId: string | null } | null = null;
     if (coproducerCode && typeof coproducerCode === 'string') {
       const code = coproducerCode.trim();
       const acc = await prisma.coproducerAccount.findUnique({
@@ -228,18 +228,22 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
       //   2. Pedido prefilled via Lojou Orders API (caminho do produto
       //      principal — pega nome/email/telefone).
       //   3. Página pública genérica pay.lojou.app/{pid} como último recurso.
+      // Coprodução sem pid próprio vende o produto PRINCIPAL pela landing —
+      // a atribuição fica garantida pelo referredByCoproducer estampado acima.
+      const coproPid = coproducerAccount.productPid || PRODUCT_PID;
+      const coproPlanId = coproducerAccount.productPid ? coproducerAccount.planId : PLAN_ID;
       if (coproducerAccount.publicCheckoutUrl) {
         checkoutUrl = normalizeLojouCheckoutUrl(coproducerAccount.publicCheckoutUrl);
         await prisma.user.update({ where: { id: user.id }, data: { checkoutUrl } });
       } else if (LOJOU_KEY) {
-        const fallback = lojouCheckoutUrl(coproducerAccount.productPid);
+        const fallback = lojouCheckoutUrl(coproPid);
         try {
           const orderRes = await fetch(`${LOJOU_API}/orders`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${LOJOU_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              product_pid: coproducerAccount.productPid,
-              ...(coproducerAccount.planId ? { plan_id: coproducerAccount.planId } : {}),
+              product_pid: coproPid,
+              ...(coproPlanId ? { plan_id: coproPlanId } : {}),
               amount: await getActivePrice(),
               customer: { name, email, mobile_number: contactPhone },
             }),
@@ -263,7 +267,7 @@ router.post('/lead', leadLimiter, async (req: Request, res: Response) => {
           console.warn('[Landing/Coproducer] Order API threw, using public fallback:', e);
         }
       } else {
-        checkoutUrl = lojouCheckoutUrl(coproducerAccount.productPid);
+        checkoutUrl = lojouCheckoutUrl(coproPid);
       }
     } else if (LOJOU_KEY) {
       try {
@@ -381,7 +385,7 @@ router.get('/resolve-coproducer/:code', async (req: Request, res: Response) => {
     }
     const checkoutUrl = acc.publicCheckoutUrl
       ? normalizeLojouCheckoutUrl(acc.publicCheckoutUrl)
-      : lojouCheckoutUrl(acc.productPid);
+      : lojouCheckoutUrl(acc.productPid || PRODUCT_PID);
     // headScripts (HTML cru) só existe quando um SUPERADMIN o definiu — o
     // coprodutor não escreve mais HTML. Aos pixels do coprodutor juntamos os
     // snippets renderizados pelo servidor a partir dos IDs validados.

@@ -207,7 +207,7 @@ export function startCronJobs() {
           if (cop && cop.enabled) {
             finalLink = cop.publicCheckoutUrl
               ? normalizeLojouCheckoutUrl(cop.publicCheckoutUrl)
-              : lojouCheckoutUrl(cop.productPid);
+              : lojouCheckoutUrl(cop.productPid || env.LOJOU_PRODUCT_PID);
           }
         }
 

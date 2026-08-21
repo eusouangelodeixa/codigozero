@@ -245,7 +245,7 @@ const CLOSE_FRIENDS_EXTRA_DAYS = 60; // +2 months on top of the base month
 interface ForcedCoproducer {
   id: string;
   code: string;
-  productPid: string;
+  productPid: string | null;
   bumpProductPid: string | null;
   bumpPrice: number | null;
   sharePct: number;

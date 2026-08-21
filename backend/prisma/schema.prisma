@@ -1126,8 +1126,10 @@ model CoproducerAccount {
   // Public code used in /c/{code} URLs. Short, copyable.
   code                String   @unique
   // Lojou product identifier owned by the coproducer. Webhook attribution
-  // matches `data.product.pid` to this column.
-  productPid          String   @unique
+  // matches `data.product.pid` to this column. Opcional: coproduções cuja
+  // venda entra SÓ pela URL de webhook própria (conta Lojou deles) não
+  // precisam de pid — a atribuição é pelo token ou pelo referredByCoproducer.
+  productPid          String?  @unique
   // Optional plan id (Lojou)
   planId              String?
   // Public Lojou checkout fallback (https://pay.lojou.app/p/...)

@@ -109,17 +109,21 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/admin/coproducers
- * Body: { userEmail, productPid, planId?, publicCheckoutUrl?, sharePct?, displayName?, notes? }
+ * Body: { userEmail, name?, phone?, sharePct?, productPid?, planId?,
+ *         publicCheckoutUrl?, displayName?, notes?, ... }
  *
- * Promotes an existing user account to coproducer (sets role + creates
- * CoproducerAccount). Auto-generates a /c/ code.
+ * O cadastro mínimo é email + WhatsApp + split: se o email ainda não tem
+ * conta, ela é CRIADA aqui (a senha sai no welcome). productPid é opcional —
+ * só é preciso quando a venda entra pelo webhook principal ou pela landing
+ * /c/{code}; coproduções que vendem na própria conta Lojou usam a URL de
+ * webhook por token, onde a atribuição já é forçada.
  */
 router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const { userEmail, productPid, planId, publicCheckoutUrl, sharePct, displayName, notes, bumpProductPid, bumpPrice, vslEmbedHtml, headScripts } = req.body || {};
+    const { userEmail, name, phone, productPid, planId, publicCheckoutUrl, sharePct, displayName, notes, bumpProductPid, bumpPrice, vslEmbedHtml, headScripts } = req.body || {};
 
-    if (!userEmail || !productPid) {
-      return res.status(400).json({ error: 'userEmail e productPid são obrigatórios' });
+    if (!userEmail) {
+      return res.status(400).json({ error: 'userEmail é obrigatório' });
     }
     if (sharePct != null && (sharePct < 0 || sharePct > 100)) {
       return res.status(400).json({ error: 'sharePct deve estar entre 0 e 100' });
@@ -128,14 +132,50 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
       return res.status(400).json({ error: 'bumpPrice não pode ser negativo' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email: userEmail.toLowerCase().trim() } });
-    if (!user) return res.status(404).json({ error: 'Usuário com esse email não encontrado' });
+    const email = String(userEmail).toLowerCase().trim();
+    // Mesma normalização de telefone dos outros fluxos (welcome/grant-trial):
+    // só dígitos; 9 dígitos começando em 8 ganham o 258 de Moçambique.
+    let cleanPhone = String(phone || '').replace(/\D/g, '');
+    if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
+
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      if (!cleanPhone) {
+        return res.status(400).json({ error: 'Informe o WhatsApp — é onde as credenciais do coprodutor serão entregues' });
+      }
+      const phoneTaken = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+      if (phoneTaken) {
+        return res.status(400).json({ error: `Este WhatsApp já pertence à conta ${phoneTaken.email} — use esse email ou outro número` });
+      }
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: String(name || '').trim() || email.split('@')[0],
+          phone: cleanPhone,
+          // Placeholder impossível de adivinhar — o welcome logo abaixo troca
+          // por uma senha real e a envia no WhatsApp.
+          passwordHash: crypto.randomBytes(32).toString('hex'),
+          role: 'coproducer',
+        },
+      });
+    } else if (cleanPhone && cleanPhone !== user.phone) {
+      // O admin digitou um WhatsApp diferente do da conta: atualiza, senão o
+      // welcome (que usa user.phone) iria para o número antigo.
+      const phoneTaken = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+      if (phoneTaken && phoneTaken.id !== user.id) {
+        return res.status(400).json({ error: `Este WhatsApp já pertence à conta ${phoneTaken.email}` });
+      }
+      user = await prisma.user.update({ where: { id: user.id }, data: { phone: cleanPhone } });
+    }
 
     const existing = await prisma.coproducerAccount.findUnique({ where: { userId: user.id } });
     if (existing) return res.status(400).json({ error: 'Este usuário já é coprodutor' });
 
-    const pidTaken = await prisma.coproducerAccount.findUnique({ where: { productPid } });
-    if (pidTaken) return res.status(400).json({ error: 'Este productPid já está em uso por outro coprodutor' });
+    const pid = typeof productPid === 'string' && productPid.trim() ? productPid.trim() : null;
+    if (pid) {
+      const pidTaken = await prisma.coproducerAccount.findUnique({ where: { productPid: pid } });
+      if (pidTaken) return res.status(400).json({ error: 'Este productPid já está em uso por outro coprodutor' });
+    }
 
     const code = await generateUniqueCoproducerCode();
 
@@ -146,7 +186,7 @@ router.post('/', superadminMiddleware, async (req: AuthRequest, res: Response) =
         data: {
           userId: user.id,
           code,
-          productPid: productPid.trim(),
+          productPid: pid,
           planId: planId?.trim() || null,
           publicCheckoutUrl: publicCheckoutUrl?.trim() || null,
           sharePct: sharePct != null ? Number(sharePct) : 50,
@@ -228,7 +268,8 @@ router.patch('/:id', superadminMiddleware, async (req: AuthRequest, res: Respons
     const updated = await prisma.coproducerAccount.update({
       where: { id: req.params.id },
       data: {
-        ...(productPid != null ? { productPid: String(productPid).trim() } : {}),
+        // "" limpa o pid (coprodução só-webhook); a atribuição fica pelo token/código.
+        ...(productPid != null ? { productPid: String(productPid).trim() || null } : {}),
         ...(planId != null ? { planId: String(planId).trim() || null } : {}),
         ...(publicCheckoutUrl != null ? { publicCheckoutUrl: String(publicCheckoutUrl).trim() || null } : {}),
         ...(sharePct != null ? { sharePct: Number(sharePct) } : {}),

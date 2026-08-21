@@ -9,7 +9,7 @@ declare module './auth.middleware' {
     coproducer?: {
       id: string;
       code: string;
-      productPid: string;
+      productPid: string | null;
       sharePct: number;
       enabled: boolean;
     };

@@ -19,7 +19,7 @@ const hdr = () => ({ Authorization: `Bearer ${localStorage.getItem("cz_token")}`
 interface Coproducer {
   id: string;
   code: string;
-  productPid: string;
+  productPid: string | null;
   planId: string | null;
   publicCheckoutUrl: string | null;
   sharePct: number;
@@ -55,6 +55,8 @@ export default function AdminCoproducers() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [formEmail, setFormEmail] = useState("");
+  const [formName, setFormName] = useState("");
+  const [formPhone, setFormPhone] = useState("");
   const [formPid, setFormPid] = useState("");
   const [formPlanId, setFormPlanId] = useState("");
   const [formCheckoutUrl, setFormCheckoutUrl] = useState("");
@@ -65,6 +67,9 @@ export default function AdminCoproducers() {
   const [formNotes, setFormNotes] = useState("");
   const [formVslEmbed, setFormVslEmbed] = useState("");
   const [formHeadScripts, setFormHeadScripts] = useState("");
+
+  // pós-criação: mostra a URL de webhook pra colar na Lojou do coprodutor
+  const [created, setCreated] = useState<{ code: string; webhookToken: string | null; welcomeDelivered: boolean } | null>(null);
 
   // edit modal state
   const [editing, setEditing] = useState<Coproducer | null>(null);
@@ -92,8 +97,8 @@ export default function AdminCoproducers() {
   useEffect(() => { load(); }, [load]);
 
   const create = async () => {
-    if (!formEmail.trim() || !formPid.trim()) {
-      showToast("Email e PID são obrigatórios");
+    if (!formEmail.trim() || !formPhone.trim()) {
+      showToast("Email e WhatsApp são obrigatórios");
       return;
     }
     setCreating(true);
@@ -102,10 +107,12 @@ export default function AdminCoproducers() {
         method: "POST", headers: hdr(),
         body: JSON.stringify({
           userEmail: formEmail.trim(),
-          productPid: formPid.trim(),
+          name: formName.trim() || undefined,
+          phone: formPhone.trim(),
+          sharePct: formSharePct,
+          productPid: formPid.trim() || undefined,
           planId: formPlanId.trim() || undefined,
           publicCheckoutUrl: formCheckoutUrl.trim() || undefined,
-          sharePct: formSharePct,
           bumpProductPid: formBumpPid.trim() || undefined,
           bumpPrice: formBumpPrice === "" ? undefined : formBumpPrice,
           displayName: formDisplayName.trim() || undefined,
@@ -116,9 +123,14 @@ export default function AdminCoproducers() {
       });
       const data = await r.json();
       if (r.ok) {
-        showToast(`Coprodutor criado (${data.code}) ✓`);
         setShowCreate(false);
-        setFormEmail(""); setFormPid(""); setFormPlanId(""); setFormCheckoutUrl(""); setFormSharePct(50);
+        setCreated({
+          code: data.code,
+          webhookToken: data.coproducer?.webhookToken || null,
+          welcomeDelivered: !!data.welcome?.delivered,
+        });
+        setFormEmail(""); setFormName(""); setFormPhone("");
+        setFormPid(""); setFormPlanId(""); setFormCheckoutUrl(""); setFormSharePct(50);
         setFormBumpPid(""); setFormBumpPrice("");
         setFormDisplayName(""); setFormNotes("");
         setFormVslEmbed(""); setFormHeadScripts("");
@@ -146,7 +158,8 @@ export default function AdminCoproducers() {
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
-        productPid: editing.productPid,
+        // "" limpa o PID (coprodução só-webhook) — null seria ignorado pelo PATCH.
+        productPid: editing.productPid ?? "",
         planId: editing.planId,
         publicCheckoutUrl: editing.publicCheckoutUrl,
         sharePct: editing.sharePct,
@@ -289,7 +302,7 @@ export default function AdminCoproducers() {
           loading={loading}
           empty={{
             title: "Nenhum coprodutor cadastrado",
-            desc: "O coprodutor precisa primeiro ter uma conta de membro no sistema (mesmo email).",
+            desc: "Clique em “Novo coprodutor” — basta email, WhatsApp e split.",
           }}
           rowActions={rowActions}
           pagination={{ page, totalPages, total, pageSize, onChange: setPage }}
@@ -302,16 +315,21 @@ export default function AdminCoproducers() {
           <div className={a.modal} onClick={(e) => e.stopPropagation()}>
             <h2 className={a.modalTitle}>Novo coprodutor</h2>
             <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "-6px 0 14px" }}>
-              O coprodutor precisa primeiro existir como membro no sistema (mesmo email).
+              Basta email, WhatsApp e split — a conta é criada na hora se não existir, e as credenciais vão por WhatsApp. O resto (produto, preço, divisão do dinheiro) fica na conta Lojou dele.
             </p>
             <div className={a.formGrid} style={{ gridTemplateColumns: "1fr" }}>
-              <Field label="Email do membro existente *" value={formEmail} onChange={setFormEmail} placeholder="email@example.com" />
-              <Field label="PID Lojou do produto dele *" value={formPid} onChange={setFormPid} placeholder="Ex: abc123" hint="O webhook usa este PID pra atribuir as vendas a ele." />
-              <Field label="Plan ID Lojou (opcional)" value={formPlanId} onChange={setFormPlanId} placeholder="Ex: nrUnJ" />
-              <Field label="URL pública do checkout (opcional)" value={formCheckoutUrl} onChange={setFormCheckoutUrl} placeholder="https://pay.lojou.app/abc123" hint="Usada como fallback quando a API do Lojou falhar." />
-              <NumberField label="Split do coprodutor (%) — documentação" value={formSharePct} min={0} max={100} onChange={(v) => setFormSharePct(v === "" ? 0 : v)} />
+              <Field label="Email *" value={formEmail} onChange={setFormEmail} placeholder="email@example.com" hint="Se já existir conta com este email, ela é promovida a coprodutor." />
+              <Field label="WhatsApp *" value={formPhone} onChange={setFormPhone} placeholder="84xxxxxxx" hint="Onde as credenciais e o resumo de boas-vindas serão entregues." />
+              <Field label="Nome (opcional)" value={formName} onChange={setFormName} placeholder="Nome do coprodutor" />
+              <NumberField label="Split do coprodutor (%)" value={formSharePct} min={0} max={100} onChange={(v) => setFormSharePct(v === "" ? 0 : v)} />
 
-              <SubBox title="Order bump (opcional)" desc="Se este coprodutor tem um bump próprio na Lojou (com pid separado), informe abaixo. Sem isso, ele usa o bump principal do sistema.">
+              <SubBox title="Integração Lojou (opcional)" desc="Só é preciso se ele vender pela SUA landing /c/{code} com produto próprio na tua conta Lojou. Se ele vende na conta Lojou dele, deixe em branco — a URL de webhook (mostrada após criar) faz a atribuição.">
+                <Field label="PID Lojou do produto dele" value={formPid} onChange={setFormPid} placeholder="Ex: abc123" hint="O webhook principal usa este PID pra atribuir as vendas a ele." />
+                <Field label="Plan ID Lojou" value={formPlanId} onChange={setFormPlanId} placeholder="Ex: nrUnJ" />
+                <Field label="URL pública do checkout" value={formCheckoutUrl} onChange={setFormCheckoutUrl} placeholder="https://pay.lojou.app/abc123" hint="Usada como fallback quando a API do Lojou falhar." />
+              </SubBox>
+
+              <SubBox title="Order bump (opcional)" desc="Se este coprodutor tem um bump próprio na Lojou (com pid separado), informe abaixo.">
                 <Field label="PID do bump na Lojou" value={formBumpPid} onChange={setFormBumpPid} placeholder="Ex: JQQWc" />
                 <NumberField label="Preço do bump (MZN)" value={formBumpPrice} min={0} step={1} onChange={setFormBumpPrice} placeholder="Ex: 1297" />
               </SubBox>
@@ -332,6 +350,46 @@ export default function AdminCoproducers() {
         </div>
       )}
 
+      {/* Created — entrega a URL de webhook pra colar na Lojou do coprodutor */}
+      {created && (
+        <div className={a.modalOverlay} onClick={() => setCreated(null)}>
+          <div className={a.modal} onClick={(e) => e.stopPropagation()}>
+            <h2 className={a.modalTitle}>Coprodutor criado ✓</h2>
+            <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "-6px 0 14px" }}>
+              {created.welcomeDelivered
+                ? "Credenciais enviadas por WhatsApp."
+                : "⚠️ O WhatsApp de boas-vindas NÃO foi entregue — use \"Editar → Reenviar\" ou verifique o número."}
+              {" "}Link de divulgação: /c/{created.code}
+            </p>
+            {created.webhookToken && (
+              <SubBox title="Webhook desta coprodução" desc="Cole esta URL no produto dele na Lojou (Configurações → Webhooks). Cada venda aprovada na conta DELE cria o acesso do aluno já atribuído a ele. (Ela também vai no WhatsApp de boas-vindas.)">
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    readOnly
+                    value={`https://app.czero.sbs/api/webhooks/lojou/copro/${created.webhookToken}`}
+                    onFocus={(e) => e.target.select()}
+                    style={{ flex: 1, background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)", borderRadius: 8, padding: "9px 11px", color: "var(--text-secondary)", fontSize: 12, fontFamily: "ui-monospace, monospace" }}
+                  />
+                  <button
+                    type="button"
+                    className={a.btnSecondary}
+                    onClick={() => {
+                      navigator.clipboard?.writeText(`https://app.czero.sbs/api/webhooks/lojou/copro/${created.webhookToken}`).catch(() => {});
+                      showToast("URL copiada");
+                    }}
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </SubBox>
+            )}
+            <div className={a.btnRow}>
+              <button className={a.btnPrimary} onClick={() => setCreated(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit modal */}
       {editing && (
         <div className={a.modalOverlay} onClick={() => !saving && setEditing(null)}>
@@ -339,7 +397,7 @@ export default function AdminCoproducers() {
             <h2 className={a.modalTitle}>Editar coprodutor</h2>
             <p style={{ color: "var(--text-tertiary)", fontSize: 13, margin: "-6px 0 14px" }}>{editing.user.email} · /c/{editing.code}</p>
             <div className={a.formGrid} style={{ gridTemplateColumns: "1fr" }}>
-              <Field label="PID Lojou" value={editing.productPid} onChange={(v) => setEditing({ ...editing, productPid: v })} />
+              <Field label="PID Lojou (opcional)" value={editing.productPid || ""} onChange={(v) => setEditing({ ...editing, productPid: v || null })} placeholder="Vazio = atribuição só pelo webhook/código" />
               <Field label="Plan ID Lojou" value={editing.planId || ""} onChange={(v) => setEditing({ ...editing, planId: v || null })} />
               <Field label="URL pública do checkout" value={editing.publicCheckoutUrl || ""} onChange={(v) => setEditing({ ...editing, publicCheckoutUrl: v || null })} />
               <NumberField label="Split (%)" value={editing.sharePct} min={0} max={100} onChange={(v) => setEditing({ ...editing, sharePct: v === "" ? 0 : v })} />

@@ -10,7 +10,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 interface MeData {
   id: string;
   code: string;
-  productPid: string;
+  productPid: string | null;
   sharePct: number;
   displayName: string;
   enabled: boolean;

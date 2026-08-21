@@ -22,7 +22,7 @@ interface Snapshot {
 
 interface Me {
   code: string;
-  productPid: string;
+  productPid: string | null;
   bumpProductPid: string | null;
   bumpPrice: number | null;
   sharePct: number;
@@ -75,7 +75,9 @@ export default function CoproducerOverview() {
             <span className={styles.linkHeroEyebrow}>Seu link de coprodução</span>
             <code className={styles.linkHeroValue}>{me.landingUrl}</code>
             <div className={styles.linkHeroChips}>
-              <span className={styles.linkHeroChip}>PID principal: <strong>{me.productPid}</strong></span>
+              {me.productPid && (
+                <span className={styles.linkHeroChip}>PID principal: <strong>{me.productPid}</strong></span>
+              )}
               {me.bumpProductPid ? (
                 <span className={`${styles.linkHeroChip} ${styles.linkHeroChipBump}`}>
                   Bump: <strong>{me.bumpProductPid}</strong>

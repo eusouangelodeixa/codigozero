@@ -151,7 +151,30 @@ export async function sendCoproducerWelcome(opts: {
   const dashboardUrl = `${env.FRONTEND_URL}/login`;
   const bumpLine = acc.bumpProductPid
     ? `\n• *Bump:* ${acc.bumpProductPid} (${acc.bumpPrice ?? '—'} MZN)`
-    : '\n• *Bump:* usa o bump principal do sistema';
+    : '';
+
+  // Coprodução SEM pid próprio vende pela conta Lojou dela: o que amarra as
+  // vendas ao Código Zero é a URL de webhook por token, que o próprio
+  // coprodutor cola nas configurações do produto na Lojou.
+  const configLines = acc.productPid
+    ? [
+        `*⚙️ Sua configuração*`,
+        `• *PID principal:* ${acc.productPid}${bumpLine}`,
+        `• *Split:* ${acc.sharePct}% (Lojou faz a divisão automaticamente)`,
+      ]
+    : [
+        `*⚙️ Sua configuração*`,
+        `• *Split:* ${acc.sharePct}%`,
+        ...(acc.webhookToken
+          ? [
+              ``,
+              `*🔌 Webhook das suas vendas*`,
+              `Cole esta URL no seu produto na Lojou (Configurações → Webhooks):`,
+              `https://app.czero.sbs/api/webhooks/lojou/copro/${acc.webhookToken}`,
+              `Com isso, cada venda aprovada na sua conta libera o acesso do aluno automaticamente e aparece no seu painel.`,
+            ]
+          : []),
+      ];
 
   const message = [
     `Olá ${firstName}! 🤝`,
@@ -165,11 +188,9 @@ export async function sendCoproducerWelcome(opts: {
     ``,
     `*🔗 Seu link de coprodução*`,
     landingUrl,
-    `(É uma cópia da landing principal — os pagamentos feitos por esse link caem no seu PID na Lojou.)`,
+    `(É uma cópia da landing principal — as vendas feitas por esse link ficam atribuídas a você.)`,
     ``,
-    `*⚙️ Sua configuração*`,
-    `• *PID principal:* ${acc.productPid}${bumpLine}`,
-    `• *Split:* ${acc.sharePct}% (Lojou faz a divisão automaticamente)`,
+    ...configLines,
     ``,
     `*📊 No painel você acompanha:*`,
     `• Vendas suas (com filtros por hoje / 7d / 30d / personalizado)`,
@@ -216,7 +237,7 @@ export async function sendCoproducerWelcome(opts: {
 export interface ResolvedCoproducer {
   id: string;
   code: string;
-  productPid: string;
+  productPid: string | null;
   bumpProductPid: string | null;
   bumpPrice: number | null;
   sharePct: number;

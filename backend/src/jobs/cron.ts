@@ -462,7 +462,7 @@ export function startCronJobs() {
         if (!checkoutUrl) {
           let cleanPhone = (lead.phone || '').replace(/\D/g, '');
           if (cleanPhone.length === 9 && cleanPhone.startsWith('8')) cleanPhone = `258${cleanPhone}`;
-          const pid = process.env.LOJOU_PRODUCT_PID || 'uoEHz';
+          const pid = process.env.LOJOU_PRODUCT_PID || 'sS5jr';
           checkoutUrl = lojouCheckoutUrl(pid, {
             name: lead.name,
             email: lead.email,

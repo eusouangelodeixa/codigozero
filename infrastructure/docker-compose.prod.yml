@@ -25,11 +25,13 @@ services:
       - REDIS_URL=redis://czero_redis:6379
       - LOJOU_API_KEY=${LOJOU_API_KEY}
       - LOJOU_API_URL=${LOJOU_API_URL:-https://api.lojou.app}
-      - LOJOU_PRODUCT_PID=${LOJOU_PRODUCT_PID:-uoEHz}
-      - LOJOU_PLAN_ID=${LOJOU_PLAN_ID:-tbo8f}
+      - LOJOU_PRODUCT_PID=${LOJOU_PRODUCT_PID:-sS5jr}
+      - LOJOU_PLAN_ID=${LOJOU_PLAN_ID:-u5YzV}
       - LOJOU_PRODUCT_ID=${LOJOU_PRODUCT_ID:-}
-      - LOJOU_CLOSE_FRIENDS_PID=${LOJOU_CLOSE_FRIENDS_PID:-JQQWc}
-      - LOJOU_BUMP_197_PID=${LOJOU_BUMP_197_PID:-MWZhQ}
+      # Bump/Close Friends da conta Lojou antiga foram descontinuados (2026-08-21):
+      # vazio desliga a detecção; o bump por coprodutor (bumpProductPid) continua.
+      - LOJOU_CLOSE_FRIENDS_PID=${LOJOU_CLOSE_FRIENDS_PID:-}
+      - LOJOU_BUMP_197_PID=${LOJOU_BUMP_197_PID:-}
       - LOJOU_BUMP_197_PRICE=${LOJOU_BUMP_197_PRICE:-197}
       - LOJOU_WEBHOOK_SECRET=${LOJOU_WEBHOOK_SECRET}
       # Stripe (international card payments). MUST be listed here — the backend

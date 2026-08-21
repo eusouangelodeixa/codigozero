@@ -2372,7 +2372,7 @@ router.get('/lojou/plan-subscribers', async (_req: AuthRequest, res: Response) =
   try {
     if (!LOJOU_KEY) return res.json({ subscribers: [] });
 
-    const planId = process.env.LOJOU_PLAN_ID || 'tbo8f';
+    const planId = process.env.LOJOU_PLAN_ID || 'u5YzV';
     const subRes = await fetch(`${LOJOU_API}/plans/${planId}/subscribers?per_page=100`, {
       headers: { 'Authorization': `Bearer ${LOJOU_KEY}` },
     });

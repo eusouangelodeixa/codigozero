@@ -32,20 +32,21 @@ export const env = {
   LOJOU_API_KEY: process.env.LOJOU_API_KEY || '',
   LOJOU_API_URL: process.env.LOJOU_API_URL || 'https://api.lojou.app',
   LOJOU_WEBHOOK_SECRET: process.env.LOJOU_WEBHOOK_SECRET || '',
-  LOJOU_PLAN_ID: process.env.LOJOU_PLAN_ID || 'tbo8f',
-  LOJOU_PRODUCT_PID: process.env.LOJOU_PRODUCT_PID || 'uoEHz',
+  LOJOU_PLAN_ID: process.env.LOJOU_PLAN_ID || 'u5YzV',
+  LOJOU_PRODUCT_PID: process.env.LOJOU_PRODUCT_PID || 'sS5jr',
   // Numeric product id from Lojou — used to scope coupons via discount.product_ids.
   // Left empty by default so coupons created in admin are unrestricted.
   LOJOU_PRODUCT_ID: process.env.LOJOU_PRODUCT_ID || '',
   // Close Friends order bump product — when this pid is detected in a webhook
   // payload alongside the main product, the buyer gets +2 months (3 total) and
-  // the closeFriends flag set on their account.
-  LOJOU_CLOSE_FRIENDS_PID: process.env.LOJOU_CLOSE_FRIENDS_PID || 'JQQWc',
+  // the closeFriends flag set on their account. Empty = detection off (the
+  // old-account product no longer exists); coproducer bumpProductPid still works.
+  LOJOU_CLOSE_FRIENDS_PID: process.env.LOJOU_CLOSE_FRIENDS_PID || '',
   // Secondary order bump (197 MZN upsell). Detected only to count items
   // exactly for the Lojou fee (10% + 10/item) in the partner revenue-share
   // base. The bump value is already inside data.amount, so it is split among
-  // the sócios regardless. Set the real pid in .env. Does NOT extend access.
-  LOJOU_BUMP_197_PID: process.env.LOJOU_BUMP_197_PID || 'MWZhQ', // "Cartão Virtual" — 197 MZN
+  // the sócios regardless. Empty = detection off. Does NOT extend access.
+  LOJOU_BUMP_197_PID: process.env.LOJOU_BUMP_197_PID || '',
   LOJOU_BUMP_197_PRICE: parseFloat(process.env.LOJOU_BUMP_197_PRICE || '197'),
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   NODE_ENV: process.env.NODE_ENV || 'development',

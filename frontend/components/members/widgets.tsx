@@ -14,6 +14,8 @@ export type MemberLesson = {
   duration?: number | null;
   completed: boolean;
   rating?: number | null;
+  /** Aula de módulo fechado (curso pago não comprado) — clique para no cadeado. */
+  locked?: boolean;
 };
 export type MemberModule = {
   /** Fechado para este aluno (curso pago que ele ainda não comprou). */
@@ -112,8 +114,12 @@ export function ModuleCarousel({
               key={m.id}
               type="button"
               className={k.posterCard}
-              onClick={() => !previewMode && onOpenModule?.(m.id)}
-              title={m.title}
+              // Cadeado que trava de verdade: módulo fechado não navega — o
+              // aluno vê a estante, mas o clique para no cadeado.
+              onClick={() => !previewMode && !m.locked && onOpenModule?.(m.id)}
+              aria-disabled={m.locked || undefined}
+              style={m.locked ? { cursor: "not-allowed" } : undefined}
+              title={m.locked ? `${m.title} — disponível após a compra` : m.title}
             >
               {m.coverUrl ? (
                 <img className={k.posterImg} src={m.coverUrl} alt={m.title} />
@@ -203,20 +209,30 @@ export function LessonList({
           className={`${k.lessonRow} ${l.id === activeLessonId ? k.lessonRowActive : ""}`}
           role="button"
           tabIndex={0}
-          onClick={() => !previewMode && onOpen?.(l.id)}
-          onKeyDown={(e) => e.key === "Enter" && !previewMode && onOpen?.(l.id)}
+          aria-disabled={l.locked || undefined}
+          style={l.locked ? { cursor: "not-allowed", opacity: 0.55 } : undefined}
+          // Aula de módulo fechado não abre — o servidor já recusa (403), mas
+          // o clique tem de parar aqui, no cadeado.
+          onClick={() => !previewMode && !l.locked && onOpen?.(l.id)}
+          onKeyDown={(e) => e.key === "Enter" && !previewMode && !l.locked && onOpen?.(l.id)}
         >
-          <button
-            type="button"
-            className={`${k.lessonCheck} ${l.completed ? k.lessonCheckDone : ""}`}
-            aria-label={l.completed ? "Marcar como não concluída" : "Marcar como concluída"}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!previewMode) onToggleComplete?.(l.id, !l.completed);
-            }}
-          >
-            <Check size={15} strokeWidth={3} />
-          </button>
+          {l.locked ? (
+            <span className={k.lessonCheck} aria-label="Bloqueada">
+              <Lock size={13} />
+            </span>
+          ) : (
+            <button
+              type="button"
+              className={`${k.lessonCheck} ${l.completed ? k.lessonCheckDone : ""}`}
+              aria-label={l.completed ? "Marcar como não concluída" : "Marcar como concluída"}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!previewMode) onToggleComplete?.(l.id, !l.completed);
+              }}
+            >
+              <Check size={15} strokeWidth={3} />
+            </button>
+          )}
           <div className={k.lessonThumbWrap}>
             {l.thumbnailUrl ? (
               <img className={k.lessonThumb} src={l.thumbnailUrl} alt="" />
@@ -230,7 +246,7 @@ export function LessonList({
           <div className={k.lessonTitle}>
             {numberOffset + i + 1}. {l.title}
           </div>
-          <div className={k.lessonDur}>{fmtDur(l.duration)}</div>
+          <div className={k.lessonDur}>{l.locked ? <Lock size={13} /> : fmtDur(l.duration)}</div>
         </div>
       ))}
     </div>

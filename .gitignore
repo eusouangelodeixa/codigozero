@@ -37,8 +37,6 @@ backend/prisma/seed*.d.ts.map
 *.log
 npm-debug.log*
 
-# Prints de referência (material de sessão, não é código)
-members/
-# ...mas os componentes da área de membros NÃO são prints — não ignorar.
-!frontend/components/members/
-!frontend/components/members/**
+# Prints de referência (material de sessão, não é código) — SÓ a pasta da
+# raiz; "members/" sem âncora engolia frontend/app/members e frontend/lib/members.
+/members/

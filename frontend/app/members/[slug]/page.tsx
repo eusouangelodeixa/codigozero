@@ -66,7 +66,9 @@ export default function CourseHome({ params }: { params: Promise<{ slug: string 
             <Lock size={18} />
             <div style={{ flex: 1, minWidth: 220, lineHeight: 1.6 }}>
               <strong>Curso bloqueado.</strong>{" "}
-              As aulas de amostra estão liberadas — o resto abre depois da compra.
+              {data.course.hasSamples
+                ? "As aulas de amostra estão liberadas — o resto abre depois da compra."
+                : "O conteúdo abre depois da compra."}
             </div>
             {data.course.checkoutUrl && (
               // Mesma aba de propósito (navegador embutido ignora _blank).

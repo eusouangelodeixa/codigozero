@@ -213,12 +213,15 @@ router.get('/courses/:slug', ...memberGuards, async (req: AuthRequest, res: Resp
     });
     const byLesson = new Map(progress.map((p) => [p.lessonId, p]));
 
+    // "Continuar assistindo" só aponta para aula que o aluno PODE abrir: sem
+    // acesso completo, restringe aos módulos de amostra — senão progresso
+    // antigo (acesso revogado/expirado) vira um botão que só dá 403.
     const cont = await prisma.lessonProgress.findFirst({
       where: {
         userId,
         completed: false,
         lastViewedAt: { not: null },
-        lesson: { module: { courseId: course.id } },
+        lesson: { module: { courseId: course.id, ...(fullAccess ? {} : { isFree: true }) } },
       },
       orderBy: { lastViewedAt: 'desc' },
       include: { lesson: { select: { id: true, moduleId: true, title: true, thumbnailUrl: true } } },
@@ -231,6 +234,8 @@ router.get('/courses/:slug', ...memberGuards, async (req: AuthRequest, res: Resp
         // A UI mostra a estante inteira e põe cadeado no que está fechado —
         // ver o que se está a perder vende melhor do que não ver nada.
         locked: !fullAccess,
+        // O banner do cadeado só fala de "aulas de amostra" quando existem.
+        hasSamples: course.modules.some((m) => !!m.isFree),
         // CTA do cadeado: sem o link, o banner diz "abre depois da compra"
         // e não dá caminho nenhum — o funil morria aqui. Só vai quando
         // bloqueado (quem já tem acesso não precisa de botão de compra).
@@ -480,8 +485,23 @@ router.post('/progress', ...memberGuards, async (req: AuthRequest, res: Response
       return res.status(400).json({ error: 'rating deve ser um inteiro de 1 a 5' });
     }
 
-    const lesson = await prisma.lesson.findUnique({ where: { id: lessonId }, select: { id: true } });
+    // Mesmo gate do player: progresso em aula de módulo fechado não existe —
+    // sem isto qualquer member gravava progresso (e alimentava "continuar
+    // assistindo") em curso pago que nunca comprou.
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: {
+        module: {
+          include: { course: { select: { id: true, accessType: true, includedInSubscription: true } } },
+        },
+      },
+    });
     if (!lesson) return res.status(404).json({ error: 'Aula não encontrada' });
+    const owned = await activeCourseAccessIds(userId);
+    const viewer = { id: userId, role: req.user!.role, subscriptionStatus: req.user!.subscriptionStatus };
+    if (!moduleUnlocked(hasFullAccess(viewer, lesson.module.course, owned), lesson.module)) {
+      return res.status(403).json({ error: 'Aula bloqueada' });
+    }
 
     const now = new Date();
     const patch: Record<string, unknown> = {};

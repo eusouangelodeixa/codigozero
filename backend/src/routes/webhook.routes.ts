@@ -473,27 +473,36 @@ async function handleLojouWebhook(
           console.log(`[WEBHOOK] 🤝 Attributed to coproducer ${coproducer.code} (id=${coproducer.id})`);
         }
 
-        // ── Validação do produto (a conta Lojou é PARTILHADA) ────────────
+        // ── Validação/roteamento do produto ──────────────────────────────
         // Sem isto, QUALQUER venda aprovada da conta virava assinatura
         // completa da plataforma — inclusive a compra de um curso avulso ou
         // um produto de outro negócio. Regra: produto principal e vendas de
         // coprodutor seguem o fluxo normal; pid de um CURSO roteia para a
-        // venda de curso (que nunca toca em sócios/afiliados); pid
-        // desconhecido é reconhecido e ignorado. Payload SEM pid segue o
+        // venda de curso (que nunca toca em sócios/afiliados) MESMO com
+        // atribuição de coprodução presente — o painel da Lojou aceita UMA
+        // URL de webhook por conta, então a URL /copro/{token} recebe também
+        // as vendas dos cursos do coprodutor (o split sai do coproducerId do
+        // CURSO, dentro do processCourseSale). Pid desconhecido sem
+        // coprodução é reconhecido e ignorado. Payload SEM pid segue o
         // fluxo normal — formatos antigos da Lojou não traziam o campo e não
         // se descarta um pagamento real por causa disso.
-        if (!coproducer && orderPid && env.LOJOU_PRODUCT_PID && orderPid !== env.LOJOU_PRODUCT_PID) {
+        if (orderPid && orderPid !== env.LOJOU_PRODUCT_PID) {
           const course = await prisma.course.findFirst({
             where: { productPid: orderPid },
             select: { id: true, name: true, slug: true, coproducerId: true },
           });
           if (course) {
+            if (coproducer && coproducer.productPid === orderPid) {
+              console.warn(`[WEBHOOK] ⚠️ pid ${orderPid} está no curso "${course.name}" E no coprodutor ${coproducer.code} — o curso vence; limpe o pid duplicado no cadastro do coprodutor`);
+            }
             console.log(`[WEBHOOK] 🎓 pid ${orderPid} é o curso "${course.name}" — roteando para venda de curso`);
             const r = await processCourseSale({ course, data, orderId: orderId ? String(orderId) : null });
             return res.json({ status: 'course_sale', courseId: course.id, userId: r.userId });
           }
-          console.warn(`[WEBHOOK] ⛔ pid ${orderPid} não é o produto principal, nem coprodução, nem curso — ignorado`);
-          return res.status(202).json({ status: 'ignored', reason: 'unknown product pid' });
+          if (!coproducer) {
+            console.warn(`[WEBHOOK] ⛔ pid ${orderPid} não é o produto principal, nem coprodução, nem curso — ignorado`);
+            return res.status(202).json({ status: 'ignored', reason: 'unknown product pid' });
+          }
         }
 
         // ── Close Friends / bump detection ───────────────────────────────
@@ -1064,6 +1073,24 @@ async function handleLojouWebhook(
       }
 
       case 'order.cancelled': {
+        // Desistência de checkout de CURSO: mesma política da rota por curso —
+        // sem transação pendente (não tem courseId e sujaria a métrica da
+        // assinatura) e sem funil de abandono (o SDR de checkout é do fluxo
+        // da assinatura, não do curso).
+        {
+          const cancelledPid = lojouPayloadPid(data);
+          if (cancelledPid && cancelledPid !== env.LOJOU_PRODUCT_PID) {
+            const cancelledCourse = await prisma.course.findFirst({
+              where: { productPid: cancelledPid },
+              select: { id: true, name: true },
+            });
+            if (cancelledCourse) {
+              console.log(`[WEBHOOK] 🎓 checkout do curso "${cancelledCourse.name}" não concluído (${orderId}) — sem ação`);
+              return res.json({ status: 'ignored', reason: 'course checkout cancel' });
+            }
+          }
+        }
+
         // "Pagamento iniciado": o cliente começou o checkout mas não concluiu.
         // Registramos como transação 'pending' pra aparecer no painel (métrica
         // separada de vendas/reembolsos). Nunca rebaixa um pedido já aprovado

@@ -118,12 +118,17 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
 export default function LessonVideoUploader({
   lessonId,
+  ensureLessonId,
   onDuration,
   onThumbnail,
   apiBase = "/api/admin/members",
   uploadPath = "/api/admin/members/upload",
 }: {
-  lessonId: string;
+  // Pode nascer sem id (aula ainda não salva): nesse caso `ensureLessonId`
+  // cria/salva a aula na hora em que o upload começa — exigir salvar→reabrir
+  // pra liberar o campo de vídeo era um passo chato e fácil de não descobrir.
+  lessonId?: string | null;
+  ensureLessonId?: () => Promise<string>;
   onDuration?: (seconds: number) => void;
   onThumbnail?: (url: string) => void;
   // Base das rotas de vídeo (admin ou coprodutor) e caminho do upload de mídia.
@@ -141,16 +146,18 @@ export default function LessonVideoUploader({
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const cancelRef = useRef<{ aborted: boolean; xhrs: Set<XMLHttpRequest>; upload?: { key: string; uploadId: string } }>(
+  const cancelRef = useRef<{ aborted: boolean; xhrs: Set<XMLHttpRequest>; upload?: { key: string; uploadId: string }; lessonId?: string }>(
     { aborted: false, xhrs: new Set() },
   );
 
   const token = () => (typeof window !== "undefined" ? localStorage.getItem("cz_token") : "") || "";
   const jsonHdr = useCallback(() => ({ Authorization: `Bearer ${token()}`, "Content-Type": "application/json" }), []);
 
-  const loadMeta = useCallback(async () => {
+  const loadMeta = useCallback(async (idOverride?: string) => {
+    const lid = idOverride || lessonId;
+    if (!lid) return; // aula ainda não salva — nada a carregar
     try {
-      const r = await fetch(`${API}${apiBase}/lessons/${lessonId}/video`, { headers: { Authorization: `Bearer ${token()}` } });
+      const r = await fetch(`${API}${apiBase}/lessons/${lid}/video`, { headers: { Authorization: `Bearer ${token()}` } });
       const d = await r.json();
       if (r.ok) { setMeta(d.video); setPreviewUrl(d.previewUrl || null); }
     } catch { /* silencioso — mostra estado vazio */ }
@@ -175,9 +182,10 @@ export default function LessonVideoUploader({
     const c = cancelRef.current;
     c.aborted = true;
     for (const x of c.xhrs) { try { x.abort(); } catch { /* noop */ } }
-    if (c.upload) {
+    const abortLessonId = c.lessonId || lessonId;
+    if (c.upload && abortLessonId) {
       try {
-        await fetch(`${API}${apiBase}/lessons/${lessonId}/video/abort`, {
+        await fetch(`${API}${apiBase}/lessons/${abortLessonId}/video/abort`, {
           method: "POST", headers: jsonHdr(), body: JSON.stringify(c.upload),
         });
       } catch { /* noop */ }
@@ -197,17 +205,32 @@ export default function LessonVideoUploader({
       return;
     }
 
-    const c = { aborted: false, xhrs: new Set<XMLHttpRequest>(), upload: undefined as any };
+    const c = { aborted: false, xhrs: new Set<XMLHttpRequest>(), upload: undefined as any, lessonId: undefined as string | undefined };
     cancelRef.current = c;
     setFileName(file.name); setFileSize(file.size); setPct(0); setSpeed(0); setEta(0);
     setPhase("preparing");
+
+    // 0) Garante que a aula existe: sem id, pede ao pai pra criar/salvar já —
+    // o upload precisa de uma aula no banco pra pendurar o vídeo.
+    let id = lessonId || null;
+    if (!id) {
+      if (!ensureLessonId) { setError("Salve a aula primeiro."); setPhase("error"); return; }
+      try {
+        id = await ensureLessonId();
+      } catch (e: any) {
+        setError(e?.message || "Falha ao salvar a aula");
+        setPhase("error");
+        return;
+      }
+    }
+    c.lessonId = id;
 
     try {
       // 1) Captura duração + miniatura no cliente (não bloqueia o upload em erro).
       const { duration, thumb } = await captureDurationAndThumb(file);
 
       // 2) init — abre o multipart no R2.
-      const initRes = await fetch(`${API}${apiBase}/lessons/${lessonId}/video/init`, {
+      const initRes = await fetch(`${API}${apiBase}/lessons/${id}/video/init`, {
         method: "POST", headers: jsonHdr(),
         body: JSON.stringify({ filename: file.name, size: file.size, mimeType: file.type }),
       });
@@ -246,7 +269,7 @@ export default function LessonVideoUploader({
         if (c.aborted) throw new Error("__cancel__");
         const start = (partNumber - 1) * partSize;
         const blob = file.slice(start, Math.min(start + partSize, file.size));
-        const signRes = await fetch(`${API}${apiBase}/lessons/${lessonId}/video/sign-part`, {
+        const signRes = await fetch(`${API}${apiBase}/lessons/${id}/video/sign-part`, {
           method: "POST", headers: jsonHdr(), body: JSON.stringify({ key, uploadId, partNumber }),
         });
         const signData = await signRes.json();
@@ -300,7 +323,7 @@ export default function LessonVideoUploader({
       }
 
       // 5) complete — finaliza o multipart e grava a KEY na aula.
-      const compRes = await fetch(`${API}${apiBase}/lessons/${lessonId}/video/complete`, {
+      const compRes = await fetch(`${API}${apiBase}/lessons/${id}/video/complete`, {
         method: "POST", headers: jsonHdr(),
         body: JSON.stringify({ key, uploadId, parts: etags, duration, mimeType: file.type, videoType, thumbnailUrl }),
       });
@@ -312,22 +335,22 @@ export default function LessonVideoUploader({
       setMeta(compData.video);
       if (duration && onDuration) onDuration(duration);
       if (thumbnailUrl && onThumbnail) onThumbnail(thumbnailUrl);
-      await loadMeta();
+      await loadMeta(id);
       setTimeout(() => setPhase("idle"), 1200);
     } catch (e: any) {
       if (e?.message === "__cancel__" || cancelRef.current.aborted) { reset(); return; }
       setError(e?.message || "Falha no upload");
       setPhase("error");
       // Best-effort: aborta o multipart pendente pra não deixar partes órfãs.
-      if (c.upload) {
+      if (c.upload && c.lessonId) {
         try {
-          await fetch(`${API}${apiBase}/lessons/${lessonId}/video/abort`, {
+          await fetch(`${API}${apiBase}/lessons/${c.lessonId}/video/abort`, {
             method: "POST", headers: jsonHdr(), body: JSON.stringify(c.upload),
           });
         } catch { /* noop */ }
       }
     }
-  }, [lessonId, apiBase, uploadPath, jsonHdr, loadMeta, onDuration, onThumbnail]);
+  }, [lessonId, ensureLessonId, apiBase, uploadPath, jsonHdr, loadMeta, onDuration, onThumbnail]);
 
   const removeVideo = useCallback(async () => {
     if (!confirm("Remover o vídeo desta aula? O arquivo será apagado do R2.")) return;

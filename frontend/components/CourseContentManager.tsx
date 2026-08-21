@@ -8,7 +8,7 @@
  * (`/api/coproducer`) — a única diferença é `apiBase`/`uploadPath`. Zero
  * duplicação: o backend também usa um serviço único (courseContent.service).
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Modal, useToast } from "@/components/ui";
 import { mdToHtml } from "@/lib/md";
 import LessonVideoUploader from "@/components/LessonVideoUploader";
@@ -178,6 +178,28 @@ export default function CourseContentManager({
       load();
     } catch (e: any) { toast.error(e.message); }
   };
+  // O upload de vídeo pode começar ANTES do "Salvar": cria a aula na hora e
+  // devolve o id pro uploader pendurar o vídeo. O ref deduplica cliques
+  // concorrentes (dois uploads/salvar em paralelo não podem criar duas aulas).
+  const creatingLessonRef = useRef<Promise<string> | null>(null);
+  const ensureLessonSaved = useCallback(async (): Promise<string> => {
+    if (lesEdit.id) return lesEdit.id;
+    if (creatingLessonRef.current) return creatingLessonRef.current;
+    const p = (async () => {
+      if (!selModId) throw new Error("Selecione um módulo antes de enviar o vídeo");
+      if (!(lesEdit.title || "").trim()) throw new Error("Dê um título à aula antes de enviar o vídeo");
+      const body = { ...lesEdit, duration: lesEdit.duration ? Number(lesEdit.duration) : null };
+      const d = await api(`/modules/${selModId}/lessons`, "POST", body);
+      const id: string = d.lesson.id;
+      setLesEdit((l) => ({ ...l, id }));
+      toast.success("Aula criada — enviando o vídeo…");
+      load();
+      return id;
+    })();
+    creatingLessonRef.current = p;
+    try { return await p; }
+    finally { creatingLessonRef.current = null; }
+  }, [lesEdit, selModId, api, load, toast]);
   const deleteLesson = async (l: Lesson) => {
     if (!confirm(`Excluir a aula "${l.title}"?`)) return;
     try {
@@ -341,16 +363,16 @@ export default function CourseContentManager({
             </div>
             <div className={styles.formGroup}>
               <label className={styles.formLabel}>Vídeo da Aula</label>
-              {lesEdit.id ? (
-                <LessonVideoUploader
-                  lessonId={lesEdit.id}
-                  apiBase={apiBase}
-                  uploadPath={uploadPath}
-                  onDuration={(s) => setLesEdit((l) => (l.duration ? l : { ...l, duration: s }))}
-                  onThumbnail={(url) => setLesEdit((l) => (l.thumbnailUrl ? l : { ...l, thumbnailUrl: url }))}
-                />
-              ) : (
-                <p className={styles.formHint}>Salve a aula primeiro (botão abaixo) para liberar o envio do vídeo.</p>
+              <LessonVideoUploader
+                lessonId={lesEdit.id || null}
+                ensureLessonId={ensureLessonSaved}
+                apiBase={apiBase}
+                uploadPath={uploadPath}
+                onDuration={(s) => setLesEdit((l) => (l.duration ? l : { ...l, duration: s }))}
+                onThumbnail={(url) => setLesEdit((l) => (l.thumbnailUrl ? l : { ...l, thumbnailUrl: url }))}
+              />
+              {!lesEdit.id && (
+                <p className={styles.formHint}>Ao enviar o vídeo, a aula é criada e salva automaticamente com o título acima.</p>
               )}
             </div>
             <details style={{ marginBottom: 4 }}>

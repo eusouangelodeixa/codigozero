@@ -231,6 +231,123 @@ router.post('/komunika', async (req: Request, res: Response) => {
   }
 });
 
+// ── Twilio (WhatsApp OFICIAL) ────────────────────────────────────────────────
+// A Twilio envia application/x-www-form-urlencoded e assina com
+// X-Twilio-Signature = base64(HMAC-SHA1(authToken, URL exata + params
+// ordenados por chave, concatenados chave+valor)). Atrás do nginx o protocolo
+// visto pelo Express pode divergir, então testamos os candidatos de URL.
+
+async function twilioAuthToken(): Promise<string | null> {
+  const cfg = await prisma.systemConfig.findFirst({ where: { id: 'singleton' } });
+  return cfg?.twilioAuthToken || env.TWILIO_AUTH_TOKEN || null;
+}
+
+function twilioUrlCandidates(req: Request): string[] {
+  const host = req.get('host') || 'app.czero.sbs';
+  return [`https://${host}${req.originalUrl}`, `http://${host}${req.originalUrl}`];
+}
+
+function verifyTwilioSignature(authToken: string, url: string, params: URLSearchParams, signature: string | undefined): boolean {
+  if (!signature) return false;
+  const keys = Array.from(params.keys()).sort();
+  let data = url;
+  for (const k of keys) data += k + (params.get(k) || '');
+  const expected = crypto.createHmac('sha1', authToken).update(Buffer.from(data, 'utf8')).digest('base64');
+  return safeSecretEqual(signature, expected);
+}
+
+/** Parse + assinatura. Devolve os params ou null (resposta de erro já enviada). */
+async function twilioGuard(req: Request, res: Response): Promise<URLSearchParams | null> {
+  const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : typeof req.body === 'string' ? req.body : '';
+  const params = new URLSearchParams(raw);
+  const authToken = await twilioAuthToken();
+  if (!authToken) {
+    // Misconfig visível no log de entregas da Twilio, não falha de auth.
+    console.error('[TWILIO-WEBHOOK] auth token não configurado — rejeitando');
+    res.status(503).json({ error: 'twilio not configured' });
+    return null;
+  }
+  const sig = req.header('x-twilio-signature');
+  if (!twilioUrlCandidates(req).some((u) => verifyTwilioSignature(authToken, u, params, sig))) {
+    console.warn('[TWILIO-WEBHOOK] 🚨 assinatura inválida — rejeitado');
+    res.status(401).json({ error: 'invalid signature' });
+    return null;
+  }
+  return params;
+}
+
+// POST /api/webhooks/twilio/inbound — resposta de cliente no canal oficial.
+// Alimenta o MESMO funil de feedback do Komunika (consentimento SIM/NÃO,
+// sondagens) e avisa os superadmins — a mensagem não pode morrer nos logs
+// da Twilio. Responde TwiML vazio (sem auto-reply).
+router.post('/twilio/inbound', async (req: Request, res: Response) => {
+  try {
+    const params = await twilioGuard(req, res);
+    if (!params) return;
+
+    const fromDigits = String(params.get('From') || '').replace(/\D/g, '');
+    const text = String(params.get('Body') || '').trim();
+    const profileName = String(params.get('ProfileName') || '').trim();
+    const messageSid = String(params.get('MessageSid') || params.get('SmsMessageSid') || '');
+
+    // ACK primeiro (Twilio tem timeout de 15s), processa depois.
+    res.type('text/xml').send('<Response></Response>');
+
+    setImmediate(async () => {
+      try {
+        if (text && fromDigits) {
+          await ingestInboundText({ phone: fromDigits, content: text, whatsappMessageId: messageSid });
+        }
+        const user = fromDigits
+          ? await prisma.user.findFirst({ where: { phone: fromDigits }, select: { name: true, email: true } })
+          : null;
+        const who = user ? `${user.name} (${user.email})` : profileName ? `${profileName} (+${fromDigits})` : `+${fromDigits}`;
+        await sendPushToSuperAdmins({
+          title: '💬 WhatsApp oficial (Twilio)',
+          body: `${who}: ${text || '[mídia/sem texto]'}`.slice(0, 180),
+          url: '/admin/users',
+        });
+      } catch (e: any) {
+        console.error('[TWILIO-WEBHOOK] inbound processing failed:', e?.message || e);
+      }
+    });
+    return;
+  } catch (error) {
+    console.error('[TWILIO-WEBHOOK] inbound error:', error);
+    if (!res.headersSent) return res.status(200).type('text/xml').send('<Response></Response>');
+  }
+});
+
+// POST /api/webhooks/twilio/status — status de entrega dos envios (queued →
+// sent → delivered/read | failed/undelivered). Loga sempre; falha vira push
+// pro superadmin com o código de erro — é como se descobre template quebrado.
+router.post('/twilio/status', async (req: Request, res: Response) => {
+  try {
+    const params = await twilioGuard(req, res);
+    if (!params) return;
+
+    const sid = String(params.get('MessageSid') || '');
+    const status = String(params.get('MessageStatus') || '');
+    const to = String(params.get('To') || '');
+    const errorCode = String(params.get('ErrorCode') || '');
+
+    res.status(204).end();
+
+    console.log(`[TWILIO-STATUS] ${sid} → ${status}${errorCode ? ` (err ${errorCode})` : ''} ${to}`);
+    if (status === 'failed' || status === 'undelivered') {
+      sendPushToSuperAdmins({
+        title: '⚠️ WhatsApp oficial falhou',
+        body: `Mensagem para ${to} → ${status}${errorCode ? ` (erro ${errorCode})` : ''}`,
+        url: '/admin/config',
+      }).catch(() => {});
+    }
+    return;
+  } catch (error) {
+    console.error('[TWILIO-WEBHOOK] status error:', error);
+    if (!res.headersSent) return res.status(204).end();
+  }
+});
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BASE_SUBSCRIPTION_DAYS = 30;
 const CLOSE_FRIENDS_EXTRA_DAYS = 60; // +2 months on top of the base month

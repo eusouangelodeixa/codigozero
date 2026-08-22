@@ -70,6 +70,23 @@ export async function sendCredentialsViaWhatsApp(opts: {
   const { phone, email, rawPassword } = opts;
 
   const accessUrl = opts.accessUrl || `${env.FRONTEND_URL}/login`;
+
+  // Auto-login com 1 toque — MESMO token do botão do e-mail (14d, morre na
+  // troca de senha). No template Twilio ele é o {{5}}: sufixo do botão de URL
+  // "login?al={{5}}". Falhar aqui não bloqueia a entrega — vira login normal.
+  let magicToken = '';
+  try {
+    const u = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true, tokenVersion: true },
+    });
+    if (u) magicToken = signAutoLoginToken(u.id, u.tokenVersion);
+  } catch (e: any) {
+    console.error('[PAYMENT/CREDS] auto-login token (whatsapp) falhou:', e?.message || e);
+  }
+  const magicUrl = magicToken
+    ? `${env.FRONTEND_URL || 'https://app.czero.sbs'}/login?al=${magicToken}`
+    : '';
   // Cabeçalho NEUTRO (serve compra e reenvio/resgate): nomeia o produto quando
   // houver, e não afirma "conta criada" — no resgate a conta não é nova.
   const message = [
@@ -81,6 +98,7 @@ export async function sendCredentialsViaWhatsApp(opts: {
     `🔑 *Senha:* ${rawPassword}`,
     ``,
     `🔗 *Acesse:* ${accessUrl}`,
+    ...(magicUrl ? [``, `⚡ *Entrar com 1 toque:* ${magicUrl}`] : []),
     ``,
     `Guarde essas informações em local seguro. 💬`,
   ].join('\n');
@@ -88,7 +106,9 @@ export async function sendCredentialsViaWhatsApp(opts: {
   // `phone` is already normalized by the caller (Lojou/Stripe webhooks carry
   // international numbers), so skip the MZ-specific normalization here.
   // Template 'credentials' (Twilio): {{1}} produto · {{2}} e-mail · {{3}} senha
-  // · {{4}} link. O `content` acima é o corpo do fallback (Komunika).
+  // · {{4}} link · {{5}} token de auto-login (sufixo do BOTÃO de URL do
+  // template: "https://app.czero.sbs/login?al={{5}}"). O `content` acima é o
+  // corpo do fallback (Komunika).
   const r = await sendWhatsAppMessage({
     phone,
     content: message,
@@ -100,6 +120,7 @@ export async function sendCredentialsViaWhatsApp(opts: {
         '2': email,
         '3': rawPassword,
         '4': accessUrl,
+        '5': magicToken,
       },
     },
   });

@@ -106,9 +106,10 @@ export async function sendCredentialsViaWhatsApp(opts: {
   // `phone` is already normalized by the caller (Lojou/Stripe webhooks carry
   // international numbers), so skip the MZ-specific normalization here.
   // Template 'credentials' (Twilio): {{1}} produto · {{2}} e-mail · {{3}} senha
-  // · {{4}} link · {{5}} token de auto-login (sufixo do BOTÃO de URL do
-  // template: "https://app.czero.sbs/login?al={{5}}"). O `content` acima é o
-  // corpo do fallback (Komunika).
+  // · {{4}} token de auto-login (sufixo do BOTÃO de URL do template:
+  // "https://app.czero.sbs/login?al={{4}}"). A Meta REJEITA variável que vira
+  // URL no corpo (anti-phishing) — por isso o link do corpo existe só no
+  // fallback Komunika (`content` acima); no template, o caminho é o botão.
   const r = await sendWhatsAppMessage({
     phone,
     content: message,
@@ -119,8 +120,7 @@ export async function sendCredentialsViaWhatsApp(opts: {
         '1': opts.productName || 'Código Zero',
         '2': email,
         '3': rawPassword,
-        '4': accessUrl,
-        '5': magicToken,
+        '4': magicToken,
       },
     },
   });

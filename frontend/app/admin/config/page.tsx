@@ -56,10 +56,11 @@ interface SystemConfig {
 // Tipos de mensagem que viram template no Twilio + o texto a submeter na Meta.
 const TWILIO_TEMPLATES: { key: string; label: string; body: string }[] = [
   // Tipo "Chamada à ação" no Content Builder: corpo abaixo + botão de URL
-  // dinâmica "Acessar agora" → https://app.czero.sbs/login?al={{4}} (o {{4}} é
+  // dinâmica "Acessar agora" → https://app.czero.sbs/login?al={{3}} (o {{3}} é
   // o token de auto-login que o backend envia — o botão já entra logado).
-  // NUNCA pôr variável que vira URL no CORPO: a Meta reprova (anti-phishing).
-  { key: "credentials", label: "Credenciais de acesso", body: "🎉 Seu acesso ao {{1}} está liberado.\n\n📧 E-mail: {{2}}\n🔑 Senha: {{3}}\n\nToque no botão abaixo para entrar direto. Guarde esta mensagem. 💬" },
+  // NUNCA pôr no template: variável que vira URL no corpo, nem SENHA (o filtro
+  // da Meta reprovou 3x senha+botão de login). A senha vai no e-mail/fallback.
+  { key: "credentials", label: "Credenciais de acesso", body: "🎉 Seu acesso ao {{1}} está liberado!\n\n📧 Conta: {{2}}\n\nToque no botão abaixo para entrar direto. Os dados completos de acesso foram enviados para o seu e-mail. Guarde esta mensagem. 💬" },
   { key: "otp", label: "Código de verificação (OTP)", body: "🔐 Código Zero — seu código é {{1}}. Expira em 10 minutos. Não compartilhe." },
   { key: "save_contact", label: "Guardar o contato", body: "⚠️ {{1}}, salve este contato como Código Zero para não perder avisos e o suporte." },
   { key: "expiration", label: "Aviso de expiração", body: "Olá {{1}}! Sua assinatura do Código Zero expira em breve. Renove aqui: {{2}}" },
